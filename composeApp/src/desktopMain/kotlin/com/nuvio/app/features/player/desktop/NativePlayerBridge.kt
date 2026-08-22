@@ -257,6 +257,11 @@ internal object NativePlayerBridge {
                 .replace("/* __NUVIO_PLAYER_FONT_FACES__ */", nativePlayerFontFaces())
                 .toByteArray(Charsets.UTF_8),
             "controls.js" to readResourceBytes("/player-ui/controls.js"),
+            // Clipper assets, kept in their own files so upstream merges of
+            // controls.css/controls.js stay clean. Loaded after their
+            // upstream counterparts (see controls.html).
+            "clip-controls.css" to readResourceBytes("/player-ui/clip-controls.css"),
+            "clip-controls.js" to readResourceBytes("/player-ui/clip-controls.js"),
             "fonts/jetbrains_sans_regular.ttf" to readResourceBytes(
                 "/composeResources/nuvio.composeapp.generated.resources/font/jetbrains_sans_regular.ttf",
             ),
