@@ -53,6 +53,18 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     abstract val sentryDsn: Property<String>
 
     @get:Input
+    abstract val forkAppName: Property<String>
+
+    @get:Input
+    abstract val forkVendor: Property<String>
+
+    @get:Input
+    abstract val forkBundleId: Property<String>
+
+    @get:Input
+    abstract val forkUrlScheme: Property<String>
+
+    @get:Input
     abstract val sentryDesktopDsn: Property<String>
 
     @get:Input
@@ -190,6 +202,30 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |    const val VERSION_CODE = ${appVersionCode.get()}
                 |    const val DESKTOP_VERSION_NAME = "${desktopAppVersionName.get()}"
                 |    const val DESKTOP_VERSION_CODE = ${desktopAppVersionCode.get()}
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/core/branding").apply {
+            mkdirs()
+            resolve("ForkBranding.kt").writeText(
+                """
+                |package com.nuvio.app.core.branding
+                |
+                |/**
+                | * This fork's user-facing identity. Generated from the fork.* values in
+                | * gradle.properties -- edit them there, never this file.
+                | *
+                | * UPSTREAM_NAME is kept so attribution and "based on" copy can still name
+                | * the project this is built from.
+                | */
+                |object ForkBranding {
+                |    const val APP_NAME = "${forkAppName.get()}"
+                |    const val VENDOR = "${forkVendor.get()}"
+                |    const val BUNDLE_ID = "${forkBundleId.get()}"
+                |    const val URL_SCHEME = "${forkUrlScheme.get()}"
+                |    const val UPSTREAM_NAME = "Nuvio"
                 |}
                 """.trimMargin()
             )
@@ -575,9 +611,21 @@ fun runtimeConfigBoolean(key: String, default: Boolean): Boolean =
         else -> default
     }
 
+// --- Fork identity ------------------------------------------------------
+// Defined in gradle.properties; see the comment there before changing. Feeds
+// both the generated ForkBranding object and the desktop packaging below.
+val forkAppNameValue: String = providers.gradleProperty("fork.appName").getOrElse("Nuvio")
+val forkVendorValue: String = providers.gradleProperty("fork.vendor").getOrElse("Nuvio Media")
+val forkBundleIdValue: String = providers.gradleProperty("fork.bundleId").getOrElse("com.nuvio.media.desktop")
+val forkUrlSchemeValue: String = providers.gradleProperty("fork.urlScheme").getOrElse("nuvio")
+
 val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generateRuntimeConfigs") {
     outputDir.set(generatedRuntimeConfigDir)
     localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
+    forkAppName.set(forkAppNameValue)
+    forkVendor.set(forkVendorValue)
+    forkBundleId.set(forkBundleIdValue)
+    forkUrlScheme.set(forkUrlSchemeValue)
     appVersionName.set(releaseAppVersionName)
     appVersionCode.set(releaseAppVersionCode)
     desktopAppVersionName.set(desktopReleaseVersionName)
@@ -1230,9 +1278,9 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "Nuvio"
+            packageName = forkAppNameValue
             packageVersion = desktopReleasePackageVersion
-            vendor = "Nuvio Media"
+            vendor = forkVendorValue
             if (isMacHost) {
                 appResourcesRootDir.set(macosPlayerAppResourcesRoot)
             }
@@ -1244,7 +1292,7 @@ compose.desktop {
                 "jdk.unsupported",
             )
             macOS {
-                bundleID = "com.nuvio.media.desktop"
+                bundleID = forkBundleIdValue
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
                 infoPlist {
                     extraKeysRawXml = """
@@ -1252,9 +1300,10 @@ compose.desktop {
                         <array>
                             <dict>
                                 <key>CFBundleURLName</key>
-                                <string>com.nuvio.media.desktop</string>
+                                <string>$forkBundleIdValue</string>
                                 <key>CFBundleURLSchemes</key>
                                 <array>
+                                    <string>$forkUrlSchemeValue</string>
                                     <string>nuvio</string>
                                     <string>stremio</string>
                                 </array>

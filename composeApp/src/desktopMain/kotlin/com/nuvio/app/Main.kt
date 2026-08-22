@@ -16,6 +16,7 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.branding.ForkBranding
 import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.diagnostics.SentryInitializer
 import com.nuvio.app.features.discordrpc.DiscordPresenceManager
@@ -114,7 +115,11 @@ fun main(args: Array<String>) {
                 SentryInitializer.close()
                 exitApplication()
             },
-            title = if (smokePlayerUrl == null) "Nuvio" else "Nuvio Player Smoke",
+            title = if (smokePlayerUrl == null) {
+                ForkBranding.APP_NAME
+            } else {
+                "${ForkBranding.APP_NAME} Player Smoke"
+            },
             state = windowState,
             icon = painterResource(appIconState.selected.transparentPreviewResource),
         ) {
