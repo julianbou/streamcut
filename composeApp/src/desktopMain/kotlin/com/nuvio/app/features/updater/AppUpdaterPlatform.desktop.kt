@@ -34,7 +34,9 @@ actual object AppUpdaterPlatform {
     private val currentOs: DesktopUpdaterOs = DesktopUpdaterOs.current()
     private val store = DesktopStorage.store(desktopUpdaterPreferencesName)
 
-    actual val isSupported: Boolean = currentOs != DesktopUpdaterOs.UNKNOWN
+    // Updates are disabled for this fork: the release source below points at
+    // upstream NuvioMedia/NuvioDesktop, whose builds would replace the clipper.
+    actual val isSupported: Boolean = false
 
     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(
         owner = "NuvioMedia",
