@@ -17,6 +17,12 @@ internal interface ClipTaskHandle {
     fun cancel()
 }
 
+/** Where a finished clip landed, so the library can index it. */
+internal data class ClipOutput(
+    val fileUri: String,
+    val fileName: String,
+)
+
 /**
  * Platform entry point for clip extraction.
  *
@@ -32,10 +38,31 @@ internal expect object ClipExtractor {
     fun start(
         request: ClipExtractRequest,
         onProgress: (fraction: Float) -> Unit,
-        onSuccess: (outputFileUri: String) -> Unit,
+        onSuccess: (output: ClipOutput) -> Unit,
         onFailure: (message: String) -> Unit,
     ): ClipTaskHandle
 
     /** Reveal the finished clip in the platform file manager. No-op where unsupported. */
     fun reveal(outputFileUri: String)
+
+    /** Open the clip in the system's default video player. No-op where unsupported. */
+    fun openFile(outputFileUri: String)
+
+    /** Whether the clip file is still on disk. */
+    fun exists(outputFileUri: String): Boolean
+
+    /** Delete the clip file. Missing files count as deleted. */
+    fun deleteFile(outputFileUri: String)
+
+    /** Absolute path clips are written to right now (custom folder, or the default). */
+    fun outputDirPath(): String
+
+    /** Absolute path used when the user has not chosen a folder. */
+    fun defaultOutputDirPath(): String
+
+    /**
+     * Point future exports at [path]; pass null to fall back to the default.
+     * Returns false if the folder is unusable (missing, or not writable).
+     */
+    fun setOutputDirPath(path: String?): Boolean
 }

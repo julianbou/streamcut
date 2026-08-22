@@ -31,6 +31,19 @@ const clipDismissButton = document.getElementById("clipDismissButton");
 const clipPreviewButton = document.getElementById("clipPreviewButton");
 const clipExportButton = document.getElementById("clipExportButton");
 const clipNudgeRows = Array.from(document.querySelectorAll(".clip-nudge-row"));
+const clipZoomWrap = document.getElementById("clipZoomWrap");
+const clipZoomTrack = document.getElementById("clipZoomTrack");
+const clipZoomRange = document.getElementById("clipZoomRange");
+const clipZoomPlayhead = document.getElementById("clipZoomPlayhead");
+const clipZoomHandleIn = document.getElementById("clipZoomHandleIn");
+const clipZoomHandleOut = document.getElementById("clipZoomHandleOut");
+const clipZoomStartLabel = document.getElementById("clipZoomStartLabel");
+const clipZoomEndLabel = document.getElementById("clipZoomEndLabel");
+const clipZoomScale = document.getElementById("clipZoomScale");
+const clipLibraryButton = document.getElementById("clipLibraryButton");
+const clipLibraryPanel = document.getElementById("clipLibraryPanel");
+const clipLibraryList = document.getElementById("clipLibraryList");
+const clipLibraryPath = document.getElementById("clipLibraryPath");
 
 // --- trim draft state ---
 let clipDraft = { inMs: null, outMs: null };
@@ -38,14 +51,153 @@ let clipDraftDurationMs = 0;
 let clipDragTarget = null;
 let clipPreviewActive = false;
 let clipPreviewLoopSeekAt = 0;
+let clipLibraryOpen = false;
+// Window of the timeline the zoom track spans, or null when zoom is off.
+let clipZoomView = null;
 
 const clipHasRange = () =>
   clipDraft.inMs != null && clipDraft.outMs != null && clipDraft.outMs > clipDraft.inMs;
 
-/** Clip times show tenths of a second — precision the plain time labels don't need. */
+/** Clip times show tenths of a second -- precision the plain time labels don't need. */
 const formatClipTime = ms => {
   const safe = Math.max(0, Number(ms) || 0);
   return `${formatTime(safe)}.${Math.floor((safe % 1000) / 100)}`;
+};
+
+// --- zoomed trim window ---------------------------------------------------
+//
+// On a 2h movie the main scrub bar packs ~7 seconds into every pixel, so a
+// 20-second selection is a sliver and the mouse cannot place a cut within a
+// second. Once the handles are that close together, a second track appears
+// beneath the scrub bar spanning only a narrow window around the selection,
+// which buys back two orders of magnitude of pointer precision.
+
+/** Zoom in once the selection covers less than this share of the runtime. */
+const CLIP_ZOOM_TRIGGER_RATIO = 0.1;
+/** Never show a window narrower than this, or the handles have nowhere to go. */
+const CLIP_ZOOM_MIN_WINDOW_MS = 4000;
+/** Selection-to-window ratio: the selection fills a third of the zoom track. */
+const CLIP_ZOOM_CONTEXT_FACTOR = 3;
+
+const clipZoomShouldShow = () =>
+  clipHasRange() &&
+  clipDraftDurationMs > 0 &&
+  clipDraft.outMs - clipDraft.inMs <= clipDraftDurationMs * CLIP_ZOOM_TRIGGER_RATIO;
+
+/** A window centred on the selection, clamped to the runtime. */
+const clipZoomComputeView = () => {
+  const selection = clipDraft.outMs - clipDraft.inMs;
+  const width = Math.min(
+    clipDraftDurationMs,
+    Math.max(selection * CLIP_ZOOM_CONTEXT_FACTOR, CLIP_ZOOM_MIN_WINDOW_MS),
+  );
+  const centre = (clipDraft.inMs + clipDraft.outMs) / 2;
+  const start = Math.max(0, Math.min(clipDraftDurationMs - width, centre - width / 2));
+  return { startMs: start, endMs: start + width };
+};
+
+/**
+ * Slide the window (keeping its width) so `ms` stays off the edges.
+ * Used while dragging: recentring mid-drag would yank the track out from under
+ * the pointer, whereas panning only kicks in near the ends.
+ */
+const clipZoomPanTo = ms => {
+  if (!clipZoomView) return;
+  const width = clipZoomView.endMs - clipZoomView.startMs;
+  const pad = width * 0.1;
+  let start = clipZoomView.startMs;
+  if (ms < start + pad) start = ms - pad;
+  else if (ms > start + width - pad) start = ms - width + pad;
+  start = Math.max(0, Math.min(Math.max(0, clipDraftDurationMs - width), start));
+  clipZoomView = { startMs: start, endMs: start + width };
+};
+
+const clipZoomPercentFor = ms => {
+  if (!clipZoomView) return 0;
+  const width = clipZoomView.endMs - clipZoomView.startMs;
+  if (width <= 0) return 0;
+  return Math.max(0, Math.min(100, ((ms - clipZoomView.startMs) / width) * 100));
+};
+
+const clipZoomUpdatePlayhead = positionMs => {
+  if (!clipZoomView || clipZoomWrap.hidden) return;
+  clipZoomPlayhead.style.left = `${clipZoomPercentFor(positionMs)}%`;
+};
+
+const renderClipZoom = () => {
+  const show = clipZoomShouldShow() && !state.clipRunning;
+  clipZoomWrap.hidden = !show;
+  if (!show) {
+    clipZoomView = null;
+    return;
+  }
+  // Recentre only at rest; while a handle is down the window may only pan, so
+  // the pixel under the pointer keeps meaning the same instant.
+  if (!clipZoomView || clipDragTarget == null) clipZoomView = clipZoomComputeView();
+
+  const inPct = clipZoomPercentFor(clipDraft.inMs);
+  const outPct = clipZoomPercentFor(clipDraft.outMs);
+  clipZoomRange.style.left = `${inPct}%`;
+  clipZoomRange.style.width = `${Math.max(0, outPct - inPct)}%`;
+  clipZoomHandleIn.style.left = `${inPct}%`;
+  clipZoomHandleOut.style.left = `${outPct}%`;
+  clipZoomUpdatePlayhead(Number(state.positionMs) || 0);
+  clipZoomStartLabel.textContent = formatClipTime(clipZoomView.startMs);
+  clipZoomEndLabel.textContent = formatClipTime(clipZoomView.endMs);
+  const windowSec = (clipZoomView.endMs - clipZoomView.startMs) / 1000;
+  clipZoomScale.textContent = `${windowSec < 10 ? windowSec.toFixed(1) : Math.round(windowSec)}s view`;
+};
+
+// --- saved clips for this title ------------------------------------------
+
+const clipLibraryItems = () => (Array.isArray(state.clipLibrary) ? state.clipLibrary : []);
+
+const renderClipLibrary = () => {
+  const items = clipLibraryItems();
+  clipLibraryButton.hidden = items.length === 0;
+  clipLibraryButton.textContent = `Clips (${items.length})`;
+  const open = clipLibraryOpen && items.length > 0;
+  clipLibraryPanel.hidden = !open;
+  if (!open) return;
+
+  clipLibraryPath.textContent = state.clipOutputDir || "";
+  clipLibraryPath.title = state.clipOutputDir || "";
+  clipLibraryList.textContent = "";
+  items.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "clip-library-item";
+
+    const name = document.createElement("span");
+    name.className = "clip-library-item-name";
+    name.textContent = item.fileName || "clip.mp4";
+    name.title = item.fileName || "";
+    row.appendChild(name);
+
+    const meta = document.createElement("span");
+    meta.className = "clip-library-item-meta";
+    meta.textContent = `${item.rangeLabel || ""} - ${item.durationLabel || ""}`;
+    row.appendChild(meta);
+
+    // The index is the address: Kotlin resolves it against the same
+    // per-title, newest-first list it just sent, so ids stay out of the DOM.
+    [
+      ["Play", "clipLibraryOpen", ""],
+      ["Show", "clipLibraryReveal", ""],
+      ["Delete", "clipLibraryDelete", "danger"],
+    ].forEach(([label, event, extraClass]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `clip-action${extraClass ? ` ${extraClass}` : ""}`;
+      button.textContent = label;
+      button.addEventListener("click", clickEvent => {
+        clickEvent.stopPropagation();
+        send(event, index);
+      });
+      row.appendChild(button);
+    });
+
+    clipLibraryList.appendChild(row);
+  });
 };
 
 const renderClipUi = () => {
@@ -55,7 +207,12 @@ const renderClipUi = () => {
   clipRange.hidden = !ready;
   clipHandleIn.hidden = !ready;
   clipHandleOut.hidden = !ready;
-  if (!show) return;
+  if (!show) {
+    clipZoomWrap.hidden = true;
+    clipLibraryPanel.hidden = true;
+    clipLibraryButton.hidden = true;
+    return;
+  }
   const running = Boolean(state.clipRunning);
   if (ready) {
     const inPct = Math.max(0, Math.min(100, clipDraft.inMs / clipDraftDurationMs * 100));
@@ -93,6 +250,8 @@ const renderClipUi = () => {
   }
   clipStatus.textContent = state.clipStatusMessage || "";
   clipStatus.dataset.kind = state.clipStatusKind || "";
+  renderClipZoom();
+  renderClipLibrary();
 };
 
 const clipSeekTo = ms => {
@@ -137,9 +296,24 @@ const clipTrackMsFromEvent = event => {
   return Math.max(0, Math.min(1, ratio)) * clipDraftDurationMs;
 };
 
+const clipZoomMsFromEvent = event => {
+  if (!clipZoomView) return clipTrackMsFromEvent(event);
+  const rect = clipZoomTrack.getBoundingClientRect();
+  const ratio = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
+  const width = clipZoomView.endMs - clipZoomView.startMs;
+  return clipZoomView.startMs + Math.max(0, Math.min(1, ratio)) * width;
+};
+
 let clipDragLastSeekAt = 0;
 
-[clipHandleIn, clipHandleOut].forEach(handle => {
+/**
+ * Wires one In/Out handle for pointer dragging.
+ *
+ * `msFromEvent` is what makes the same code serve both tracks: the main scrub
+ * maps the pointer across the whole runtime, the zoom track across its window.
+ * `onDrag` lets the zoom track pan itself as a handle nears the edge.
+ */
+const bindClipHandle = (handle, msFromEvent, onDrag) => {
   const target = handle.dataset.clipHandle;
   handle.addEventListener("pointerdown", event => {
     if (state.clipRunning || clipDraftDurationMs <= 0) return;
@@ -154,7 +328,8 @@ let clipDragLastSeekAt = 0;
   handle.addEventListener("pointermove", event => {
     if (clipDragTarget !== target) return;
     event.stopPropagation();
-    const ms = clipApplyPoint(target, clipTrackMsFromEvent(event));
+    const ms = clipApplyPoint(target, msFromEvent(event));
+    if (onDrag) onDrag(ms);
     scrubPositionMs = ms;
     setProgress(ms, state.durationMs);
     // Live-seek (throttled) so the frame under the handle shows while dragging.
@@ -177,6 +352,27 @@ let clipDragLastSeekAt = 0;
   };
   handle.addEventListener("pointerup", finishDrag);
   handle.addEventListener("pointercancel", finishDrag);
+};
+
+bindClipHandle(clipHandleIn, clipTrackMsFromEvent, null);
+bindClipHandle(clipHandleOut, clipTrackMsFromEvent, null);
+bindClipHandle(clipZoomHandleIn, clipZoomMsFromEvent, clipZoomPanTo);
+bindClipHandle(clipZoomHandleOut, clipZoomMsFromEvent, clipZoomPanTo);
+
+// Clicking the zoom track scrubs within the window without moving the handles.
+clipZoomTrack.addEventListener("pointerdown", event => {
+  if (clipDragTarget != null || state.clipRunning) return;
+  event.stopPropagation();
+  clipPreviewActive = false;
+  clipSeekTo(clipZoomMsFromEvent(event));
+  renderClipUi();
+  noteChromeActivity();
+});
+
+clipLibraryButton.addEventListener("click", event => {
+  event.stopPropagation();
+  clipLibraryOpen = !clipLibraryOpen;
+  renderClipUi();
 });
 
 clipPreviewButton.addEventListener("click", event => {
@@ -226,7 +422,12 @@ const clipSyncPlayback = (durationMs, positionMs) => {
     clipDraftDurationMs = durationMs;
     clipDraft = { inMs: 0, outMs: durationMs };
     clipPreviewActive = false;
+    clipZoomView = null;
+    // A new source means a different title, so a stale open panel would be
+    // showing the previous one's clips until the next full render.
+    clipLibraryOpen = false;
   }
+  clipZoomUpdatePlayhead(positionMs);
   if (
     clipPreviewActive &&
     clipDraft.inMs != null &&

@@ -3,6 +3,8 @@ package com.nuvio.app.features.player
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import com.nuvio.app.features.clip.ClipContentRef
+import com.nuvio.app.features.clip.ClipLibrary
 import com.nuvio.app.features.clip.ClipRepository
 import com.nuvio.app.features.clip.ClipStatus
 import androidx.compose.animation.core.tween
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -217,7 +220,16 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             )
         else -> ""
     }
-    val clipJob by ClipRepository.activeJob.collectAsState()
+    LaunchedEffect(Unit) { ClipLibrary.ensureLoaded() }
+    val clipContent = buildClipContentRef()
+    val clipJobs by ClipRepository.jobs.collectAsState()
+    // Only this title's job is ever rendered, so an export running on another
+    // movie cannot show its progress or its "saved" notice here.
+    val clipJob = clipJobs[clipContent.key]
+    val clipLibraryEntries by ClipLibrary.entries.collectAsState()
+    val clipsForThisContent = remember(clipLibraryEntries, clipContent.key) {
+        clipLibraryEntries.filter { it.contentKey == clipContent.key }
+    }
     val clipStatusKind = when (clipJob?.status) {
         ClipStatus.Running -> "running"
         ClipStatus.Completed -> "done"
@@ -225,9 +237,10 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         ClipStatus.Cancelled -> "cancelled"
         null -> ""
     }
+    val clipOutputDirLabel = remember(clipLibraryEntries) { ClipRepository.outputDirPath() }
     val clipStatusMessage = when (clipJob?.status) {
         ClipStatus.Running -> "Exporting ${((clipJob?.progress ?: 0f) * 100).toInt()}%"
-        ClipStatus.Completed -> "Saved to your Clips folder"
+        ClipStatus.Completed -> "Saved to ${clipOutputDirLabel.clipFolderDisplayName()}"
         ClipStatus.Failed -> clipJob?.errorMessage ?: "Clip failed"
         ClipStatus.Cancelled -> "Clip cancelled"
         null -> ""
@@ -352,6 +365,15 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipProgress = clipJob?.progress ?: 0f,
         clipStatusMessage = clipStatusMessage,
         clipStatusKind = clipStatusKind,
+        clipOutputDir = clipOutputDirLabel,
+        clipLibrary = clipsForThisContent.map { entry ->
+            PlayerClipLibraryItem(
+                id = entry.id,
+                fileName = entry.fileName,
+                rangeLabel = formatClipRangeLabel(entry.startMs, entry.endMs),
+                durationLabel = formatClipDurationLabel(entry.durationMs),
+            )
+        },
         showVideoSettings = isIos,
         showSources = activeVideoId != null,
         showEpisodes = isSeries,
@@ -758,16 +780,52 @@ private fun PlayerScreenRuntime.handlePlayerControlsAction(action: PlayerControl
     return true
 }
 
-private fun PlayerScreenRuntime.buildClipTitleForPlayer(): String = buildString {
-    append(title)
+/** Trailing folder name of a clips path, on either path-separator convention. */
+private fun String.clipFolderDisplayName(): String =
+    trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\').ifBlank { "your clips folder" }
+
+/** Resolves a clip-list index sent by the player chrome to a library id. */
+private fun PlayerScreenRuntime.clipLibraryIdAt(value: Double): String {
+    val index = value.takeIf { it.isFinite() && it >= 0.0 }?.toInt() ?: return ""
+    return ClipLibrary.entriesFor(buildClipContentRef().key).getOrNull(index)?.id.orEmpty()
+}
+
+/** `12:03 - 12:41`, matching the precision of the trim readouts. */
+private fun formatClipRangeLabel(startMs: Long, endMs: Long): String =
+    "${formatClipClock(startMs)} - ${formatClipClock(endMs)}"
+
+private fun formatClipDurationLabel(durationMs: Long): String {
+    val tenths = (durationMs.coerceAtLeast(0L) + 50) / 100
+    return "${tenths / 10}.${tenths % 10}s"
+}
+
+private fun formatClipClock(ms: Long): String {
+    val totalSeconds = (ms.coerceAtLeast(0L)) / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    val mm = minutes.toString().padStart(2, '0')
+    val ss = seconds.toString().padStart(2, '0')
+    return if (hours > 0) "$hours:$mm:$ss" else "$mm:$ss"
+}
+
+/**
+ * Identity of whatever is on screen right now, used to key clip jobs and the
+ * clip library. Recomputed per call so switching episodes without leaving the
+ * player produces a new key -- which is what keeps a previous episode's export
+ * progress from bleeding into this one.
+ */
+private fun PlayerScreenRuntime.buildClipContentRef(): ClipContentRef {
     val season = activeSeasonNumber
     val episode = activeEpisodeNumber
-    if (isSeries && season != null && episode != null) {
-        append(" S")
-        append(season.toString().padStart(2, '0'))
-        append("E")
-        append(episode.toString().padStart(2, '0'))
-    }
+    val episodic = isSeries && season != null && episode != null
+    return ClipContentRef(
+        videoId = activeVideoId.orEmpty(),
+        title = title,
+        seasonNumber = if (episodic) season else null,
+        episodeNumber = if (episodic) episode else null,
+        posterUrl = (if (episodic) activeEpisodeThumbnail ?: poster else poster).orEmpty(),
+    )
 }
 
 private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: Double): Boolean {
@@ -866,15 +924,18 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                 ClipRepository.startClip(
                     sourceUrl = activeSourceUrl,
                     sourceHeaders = activeSourceHeaders,
-                    title = buildClipTitleForPlayer(),
+                    content = buildClipContentRef(),
                     startMs = start,
                     endMs = end,
                 )
             }
         }
-        "clipCancel" -> ClipRepository.cancel()
-        "clipDismiss" -> ClipRepository.dismiss()
-        "clipReveal" -> ClipRepository.revealOutput()
+        "clipCancel" -> ClipRepository.cancel(buildClipContentRef().key)
+        "clipDismiss" -> ClipRepository.dismiss(buildClipContentRef().key)
+        "clipReveal" -> ClipRepository.revealOutput(buildClipContentRef().key)
+        "clipLibraryOpen" -> ClipLibrary.open(clipLibraryIdAt(value))
+        "clipLibraryReveal" -> ClipLibrary.reveal(clipLibraryIdAt(value))
+        "clipLibraryDelete" -> ClipLibrary.delete(clipLibraryIdAt(value))
         "skipInterval" -> {
             val interval = activeSkipInterval ?: return true
             playerController?.seekTo((interval.endTime * 1000).toLong())

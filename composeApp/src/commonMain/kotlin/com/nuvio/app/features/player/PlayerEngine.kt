@@ -205,6 +205,8 @@ data class PlayerControlsState(
     val clipProgress: Float = 0f,
     val clipStatusMessage: String = "",
     val clipStatusKind: String = "",
+    val clipOutputDir: String = "",
+    val clipLibrary: List<PlayerClipLibraryItem> = emptyList(),
     val showP2pConsent: Boolean = false,
     val subtitleActiveTab: String = "BuiltIn",
     val subtitleLanguageItems: List<PlayerControlSubtitleLanguageItem> = emptyList(),
@@ -365,4 +367,17 @@ expect fun PlatformPlayerSurface(
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
+)
+
+/**
+ * One saved clip, as shown in the player's clip list.
+ *
+ * Pre-formatted on the Kotlin side so the webview chrome only has to print
+ * strings -- the same approach the subtitle and source item types take.
+ */
+data class PlayerClipLibraryItem(
+    val id: String,
+    val fileName: String,
+    val rangeLabel: String,
+    val durationLabel: String,
 )

@@ -168,3 +168,173 @@
   opacity: .4;
   cursor: default;
 }
+
+/* --- zoomed trim track ---------------------------------------------------
+   Shown only when the In/Out handles sit close together on the main scrub bar,
+   where a pixel is worth several seconds. This track re-maps a narrow window
+   around the selection across the full width, so one pixel becomes tens of
+   milliseconds and frame-level trimming is possible with the mouse. The main
+   scrub bar is left untouched -- it still spans the whole runtime. */
+.clip-zoom-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 0;
+  padding: 0 2px;
+}
+.clip-zoom-edge {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .45);
+  white-space: nowrap;
+  min-width: 52px;
+}
+.clip-zoom-edge:last-of-type {
+  text-align: right;
+}
+.clip-zoom-scale {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--theme-accent);
+  white-space: nowrap;
+  min-width: 42px;
+  text-align: right;
+}
+.clip-zoom-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 26px;
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 255, 255, .14) 0 1px,
+      transparent 1px 10%
+    ),
+    rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .1);
+  cursor: pointer;
+  touch-action: none;
+}
+.clip-zoom-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--theme-accent) 26%, transparent);
+  border-left: 1px solid var(--theme-accent);
+  border-right: 1px solid var(--theme-accent);
+  pointer-events: none;
+}
+.clip-zoom-playhead {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, .6);
+  pointer-events: none;
+}
+.clip-zoom-handle {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 14px;
+  margin-left: -7px;
+  border-radius: 4px;
+  background: var(--theme-accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.clip-zoom-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 12px;
+  margin: -6px 0 0 -1px;
+  border-radius: 1px;
+  background: rgba(0, 0, 0, .45);
+}
+
+/* --- saved clips for the current title ---------------------------------- */
+.clip-library-panel {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  background: rgba(12, 12, 14, .72);
+  max-height: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.clip-library-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .6);
+}
+.clip-library-path {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(255, 255, 255, .35);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  direction: rtl;
+  text-align: left;
+}
+.clip-library-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.clip-library-empty {
+  font-size: 12px;
+  color: rgba(255, 255, 255, .4);
+  padding: 6px 2px;
+}
+.clip-library-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .05);
+}
+.clip-library-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, .88);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-library-item-meta {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .45);
+  white-space: nowrap;
+}
+.clip-library-item .clip-action {
+  min-height: 22px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.clip-action.danger:hover:not(:disabled) {
+  background: rgba(220, 60, 60, .28);
+  color: #fff;
+}

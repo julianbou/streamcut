@@ -199,6 +199,24 @@
           <div class="clip-handle" id="clipHandleIn" data-clip-handle="in" hidden><span class="clip-handle-bar"></span></div>
           <div class="clip-handle" id="clipHandleOut" data-clip-handle="out" hidden><span class="clip-handle-bar"></span></div>
         </div>
+        <div class="clip-zoom-wrap" id="clipZoomWrap" hidden>
+          <span class="clip-zoom-edge" id="clipZoomStartLabel">--:--</span>
+          <div class="clip-zoom-track" id="clipZoomTrack">
+            <div class="clip-zoom-range" id="clipZoomRange"></div>
+            <div class="clip-zoom-playhead" id="clipZoomPlayhead"></div>
+            <div class="clip-zoom-handle" id="clipZoomHandleIn" data-clip-handle="in"></div>
+            <div class="clip-zoom-handle" id="clipZoomHandleOut" data-clip-handle="out"></div>
+          </div>
+          <span class="clip-zoom-edge" id="clipZoomEndLabel">--:--</span>
+          <span class="clip-zoom-scale" id="clipZoomScale"></span>
+        </div>
+        <div class="clip-library-panel" id="clipLibraryPanel" hidden>
+          <div class="clip-library-head">
+            <span id="clipLibraryTitle">Clips from this title</span>
+            <span class="clip-library-path" id="clipLibraryPath"></span>
+          </div>
+          <div class="clip-library-list" id="clipLibraryList"></div>
+        </div>
         <div class="clip-row" id="clipRow" hidden>
           <span class="clip-io-label">IN</span>
           <span class="clip-io-time" id="clipInReadout">--:--</span>
@@ -225,6 +243,7 @@
           <button class="clip-action" id="clipCancelButton" type="button" hidden>Cancel</button>
           <button class="clip-action" id="clipRevealButton" type="button" hidden>Show file</button>
           <button class="clip-action" id="clipDismissButton" type="button" hidden>&#10005;</button>
+          <button class="clip-action" id="clipLibraryButton" type="button" hidden>Clips</button>
           <button class="clip-action" id="clipPreviewButton" type="button">Preview</button>
           <button class="clip-action primary" id="clipExportButton" type="button">Export clip</button>
         </div>

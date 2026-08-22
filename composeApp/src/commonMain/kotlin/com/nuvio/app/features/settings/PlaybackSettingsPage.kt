@@ -368,6 +368,7 @@ private fun PlaybackSettingsSection(
     Column(
         verticalArrangement = Arrangement.spacedBy(sectionSpacing),
     ) {
+        ClipsSettingsSection(isTablet = isTablet)
         SettingsSection(
             title = stringResource(Res.string.settings_playback_section_player),
             isTablet = isTablet,

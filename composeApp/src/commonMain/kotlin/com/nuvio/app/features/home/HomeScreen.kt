@@ -42,6 +42,7 @@ import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.details.SeriesPrimaryAction
 import com.nuvio.app.features.details.seriesPrimaryAction
 import com.nuvio.app.features.home.components.HomeCatalogRowSection
+import com.nuvio.app.features.clip.homeClipsSection
 import com.nuvio.app.features.home.components.HomeContinueWatchingSection
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
 import com.nuvio.app.features.home.components.HomeHeroReservedSpace
@@ -897,6 +898,8 @@ fun HomeScreen(
                     }
                 }
             }
+
+            homeClipsSection(sectionPadding = homeSectionPadding)
 
             when {
                 !hasActiveAddons && !hasRenderableCollectionRows -> {

@@ -29,8 +29,26 @@ import kotlin.io.path.createDirectories
 internal actual object ClipExtractor {
     actual val isSupported: Boolean = true
 
+    /**
+     * Folder clips are written to. Defaults to `clips/` inside the app data
+     * directory; the user can point it anywhere writable from settings.
+     *
+     * Resolution is deliberately per-call rather than cached: the user can
+     * change the folder while a clip is queued, and an unplugged external drive
+     * must fall back to the default instead of failing the export.
+     */
     private val clipsDir: File
+        get() {
+            val custom = ClipStorage.loadOutputDir()?.let(::File)
+            if (custom != null && custom.isUsableClipDir()) return custom
+            return defaultClipsDir
+        }
+
+    private val defaultClipsDir: File
         get() = File(DesktopStorage.rootDir.resolve("clips").also { it.createDirectories() }.toUri())
+
+    private fun File.isUsableClipDir(): Boolean =
+        runCatching { (exists() || mkdirs()) && isDirectory && canWrite() }.getOrDefault(false)
 
     @Volatile
     private var cachedEncoders: Set<String>? = null
@@ -38,7 +56,7 @@ internal actual object ClipExtractor {
     actual fun start(
         request: ClipExtractRequest,
         onProgress: (fraction: Float) -> Unit,
-        onSuccess: (outputFileUri: String) -> Unit,
+        onSuccess: (output: ClipOutput) -> Unit,
         onFailure: (message: String) -> Unit,
     ): ClipTaskHandle {
         val job = SupervisorJob()
@@ -82,7 +100,7 @@ internal actual object ClipExtractor {
                 if (!succeeded) error(lastError ?: "Clip export failed")
 
                 onProgress(1f)
-                onSuccess(outFile.toURI().toString())
+                onSuccess(ClipOutput(fileUri = outFile.toURI().toString(), fileName = outFile.name))
             } catch (cancel: CancellationException) {
                 processRef.get()?.destroyForcibly()
                 throw cancel
@@ -117,6 +135,50 @@ internal actual object ClipExtractor {
             ProcessBuilder(command).start()
         }
     }
+
+    actual fun openFile(outputFileUri: String) {
+        runCatching {
+            val file = fileFor(outputFileUri) ?: return
+            if (!file.exists()) return
+            val os = System.getProperty("os.name").orEmpty().lowercase()
+            val command = when {
+                os.contains("mac") -> listOf("open", file.absolutePath)
+                os.contains("win") -> listOf("cmd", "/c", "start", "", file.absolutePath)
+                else -> listOf("xdg-open", file.absolutePath)
+            }
+            ProcessBuilder(command).start()
+        }
+    }
+
+    actual fun exists(outputFileUri: String): Boolean =
+        fileFor(outputFileUri)?.exists() == true
+
+    actual fun deleteFile(outputFileUri: String) {
+        runCatching { fileFor(outputFileUri)?.delete() }
+    }
+
+    actual fun outputDirPath(): String = runCatching { clipsDir.absolutePath }.getOrDefault("")
+
+    actual fun defaultOutputDirPath(): String =
+        runCatching { defaultClipsDir.absolutePath }.getOrDefault("")
+
+    actual fun setOutputDirPath(path: String?): Boolean {
+        val trimmed = path?.trim()?.takeIf { it.isNotEmpty() }
+        if (trimmed == null) {
+            ClipStorage.saveOutputDir(null)
+            return true
+        }
+        val target = File(trimmed)
+        if (!target.isUsableClipDir()) return false
+        // Store the resolved path so a relative entry cannot follow the working
+        // directory around between launches.
+        ClipStorage.saveOutputDir(target.absolutePath)
+        return true
+    }
+
+    private fun fileFor(outputFileUri: String): File? = runCatching {
+        if (outputFileUri.startsWith("file:")) File(java.net.URI(outputFileUri)) else File(outputFileUri)
+    }.getOrNull()
 
     private fun runFfmpeg(
         args: List<String>,
