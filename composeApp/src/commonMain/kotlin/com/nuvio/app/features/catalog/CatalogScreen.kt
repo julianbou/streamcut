@@ -52,7 +52,9 @@ import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
 import com.nuvio.app.core.format.formatReleaseDateForDisplay
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.NuvioDesktopVerticalScrollbar
+import com.nuvio.app.core.ui.NuvioCardDepthSurface
 import com.nuvio.app.core.ui.NuvioPosterWatchedOverlay
+import com.nuvio.app.core.ui.nuvioCardDepth
 import com.nuvio.app.core.ui.rememberPosterCardStyleUiState
 import com.nuvio.app.core.ui.posterCardClickable
 import com.nuvio.app.core.ui.desktopPosterHoverScale
@@ -61,6 +63,7 @@ import com.nuvio.app.core.ui.withDuplicateSafeLazyKeys
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.PosterShape
+import com.nuvio.app.features.home.components.HomePosterHoverPreview
 import com.nuvio.app.features.home.stableKey
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watching.application.WatchingState
@@ -305,53 +308,67 @@ private fun CatalogPosterTile(
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
-    Column(
-        modifier = Modifier.desktopPosterHoverScale(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    HomePosterHoverPreview(
+        item = item,
+        isWatched = isWatched,
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(item.posterShape.catalogAspectRatio())
-                .clip(RoundedCornerShape(cornerRadiusDp.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .posterCardClickable(
-                    onClick = onClick,
-                    onLongClick = onLongClick,
-                    zoomImageUrl = item.poster,
-                    zoomCornerRadius = cornerRadiusDp.dp,
-                    hoverScaleEnabled = false,
-                ),
+                .desktopPosterHoverScale()
+                .then(it),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            if (item.poster != null) {
-                AsyncImage(
-                    model = item.poster,
-                    contentDescription = item.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(item.posterShape.catalogAspectRatio())
+                    .clip(RoundedCornerShape(cornerRadiusDp.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .nuvioCardDepth(
+                        shape = RoundedCornerShape(cornerRadiusDp.dp),
+                        surface = NuvioCardDepthSurface.Posters,
+                    )
+                    .posterCardClickable(
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                        zoomImageUrl = item.poster,
+                        zoomCornerRadius = cornerRadiusDp.dp,
+                        hoverScaleEnabled = false,
+                    ),
+            ) {
+                if (item.poster != null) {
+                    AsyncImage(
+                        model = item.poster,
+                        contentDescription = item.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+                NuvioPosterWatchedOverlay(isWatched = isWatched)
             }
-            NuvioPosterWatchedOverlay(isWatched = isWatched)
-        }
-        if (!hideLabels) {
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val detail = item.releaseInfo?.let { formatReleaseDateForDisplay(it) }
-            if (detail != null) {
+            if (!hideLabels) {
                 Text(
-                    text = detail,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    text = item.name,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-            } else {
-                Spacer(modifier = Modifier.height(8.dp))
+                val detail = item.releaseInfo?.let { formatReleaseDateForDisplay(it) }
+                if (detail != null) {
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
         }
     }

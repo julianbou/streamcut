@@ -5,7 +5,9 @@ actual object AppFeaturePolicy {
     actual val downloadsEnabled: Boolean = true
     actual val notificationsEnabled: Boolean = true
     actual val supportersContributorsPageEnabled: Boolean = true
-    actual val accountDeletionEnabled: Boolean = false
+    actual val donationActionsEnabled: Boolean = false
+    actual val donationProgressEnabled: Boolean = true
+    actual val accountDeletionEnabled: Boolean = true
     actual val personalMediaAddonCopyEnabled: Boolean = false
     actual val p2pEnabled: Boolean = true
     actual val externalPlayerSupported: Boolean = true
@@ -13,4 +15,6 @@ actual object AppFeaturePolicy {
     actual val heroTrailerPlaybackSupported: Boolean = false
     actual val inAppUpdaterEnabled: Boolean = false
     actual val imdbRatingLogoEnabled: Boolean = false
+    actual val mediaPlaybackForegroundServiceEnabled: Boolean = false
+    actual val customServerConnectionsEnabled: Boolean = false
 }

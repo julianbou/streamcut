@@ -2,13 +2,69 @@ package com.nuvio.app.features.watched
 
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaVideo
-import com.nuvio.app.features.trakt.WatchProgressSource
+import com.nuvio.app.features.tracking.TrackingProviderId
+import com.nuvio.app.features.tracking.WatchProgressSource
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WatchedRepositoryTest {
+    @Test
+    fun oversizedLegacyPayload_isNotRestored() {
+        assertTrue(shouldRestoreWatchedPayload(4 * 1024 * 1024))
+        assertFalse(shouldRestoreWatchedPayload(4 * 1024 * 1024 + 1))
+    }
+
+    @Test
+    fun emptyProviderExtraKeys_doNotTriggerInitialRefresh() {
+        assertFalse(extraWatchedKeysChanged(previous = null, current = emptySet()))
+    }
+
+    @Test
+    fun populatedProviderExtraKeys_triggerRefreshFromEmptyState() {
+        assertTrue(extraWatchedKeysChanged(previous = null, current = setOf("series:tt1:-1:-1")))
+    }
+
+    @Test
+    fun changedProviderExtraKeys_triggerRefresh() {
+        assertTrue(
+            extraWatchedKeysChanged(
+                previous = setOf("series:tt1:-1:-1"),
+                current = setOf("series:tt2:-1:-1"),
+            ),
+        )
+    }
+
+    @Test
+    fun providerRefreshFailure_isContainedWithoutReplacingState() = runBlocking {
+        val failure = IllegalStateException("rate limited")
+        var observedFailure: Throwable? = null
+
+        val result = watchedProviderRefreshOrNull(
+            refresh = { throw failure },
+            onFailure = { observedFailure = it },
+        )
+
+        assertNull(result)
+        assertEquals(failure, observedFailure)
+    }
+
+    @Test
+    fun providerRefreshCancellation_isNotContained() = runBlocking {
+        assertFailsWith<CancellationException> {
+            watchedProviderRefreshOrNull(
+                refresh = { throw CancellationException("cancelled") },
+                onFailure = {},
+            )
+        }
+        Unit
+    }
+
     @Test
     fun watchedItemKey_isTypeAware() {
         assertEquals("movie:tt1:-1:-1", watchedItemKey(type = "movie", id = "tt1"))
@@ -72,120 +128,133 @@ class WatchedRepositoryTest {
     }
 
     @Test
-    fun mergeWatchedItemsPreservingUnsynced_keeps_local_items_marked_after_last_push() {
-        val serverItem = WatchedItem(
-            id = "show",
-            type = "series",
-            name = "Episode 1",
-            season = 1,
-            episode = 1,
-            markedAtEpochMs = 1_000L,
-        )
-        val unsyncedLocalItem = WatchedItem(
-            id = "show",
-            type = "series",
-            name = "Episode 2",
-            season = 1,
-            episode = 2,
-            markedAtEpochMs = 3_000L,
-        )
+    fun snapshot_dropsRemoteLoadedLocalMissingFromServerDespiteLegacyZeroPushWatermark() {
+        val remoteLoadedLocalItem = watchedItem(id = "remote-loaded", markedAtEpochMs = 1_000L)
 
-        val merged = mergeWatchedItemsPreservingUnsynced(
-            serverItems = listOf(serverItem),
-            localItems = listOf(serverItem, unsyncedLocalItem),
-            lastSuccessfulPushEpochMs = 2_000L,
-            pullStartedEpochMs = 4_000L,
-        )
-
-        assertEquals(
-            setOf("series:show:1:1", "series:show:1:2"),
-            merged.keys,
-        )
-    }
-
-    @Test
-    fun mergeWatchedItemsPreservingUnsynced_drops_old_local_items_missing_from_server() {
-        val oldLocalItem = WatchedItem(
-            id = "show",
-            type = "series",
-            name = "Episode 1",
-            season = 1,
-            episode = 1,
-            markedAtEpochMs = 1_000L,
-        )
-
-        val merged = mergeWatchedItemsPreservingUnsynced(
+        val merged = mergeWatchedSnapshot(
             serverItems = emptyList(),
-            localItems = listOf(oldLocalItem),
-            lastSuccessfulPushEpochMs = 2_000L,
-            pullStartedEpochMs = 4_000L,
+            localItems = listOf(remoteLoadedLocalItem),
+            dirtyKeys = emptySet(),
         )
 
-        assertTrue(merged.isEmpty())
+        assertTrue(merged.items.isEmpty())
+        assertTrue(merged.dirtyKeys.isEmpty())
     }
 
     @Test
-    fun mergeWatchedItemsPreservingUnsynced_keeps_local_only_item_before_first_push() {
-        val localOnlyItem = watchedItem(id = "local-only", markedAtEpochMs = 1_000L)
+    fun snapshot_preservesGenuinePendingLocalMarkMissingFromServer() {
+        val pendingLocalItem = watchedItem(id = "pending", markedAtEpochMs = 1_000L)
+        val pendingKey = watchedItemKey(pendingLocalItem.type, pendingLocalItem.id)
 
-        val merged = mergeWatchedItemsPreservingUnsynced(
+        val merged = mergeWatchedSnapshot(
             serverItems = emptyList(),
-            localItems = listOf(localOnlyItem),
-            lastSuccessfulPushEpochMs = 0L,
-            pullStartedEpochMs = 2_000L,
+            localItems = listOf(pendingLocalItem),
+            dirtyKeys = setOf(pendingKey),
         )
 
-        assertEquals(listOf(localOnlyItem), merged.values.toList())
+        assertEquals(mapOf(pendingKey to pendingLocalItem), merged.items)
+        assertEquals(setOf(pendingKey), merged.dirtyKeys)
     }
 
     @Test
-    fun traktSnapshot_drops_old_transient_items_missingFromRemote() {
-        val oldTraktItem = watchedItem(id = "old-trakt", markedAtEpochMs = 1_000L)
+    fun snapshot_acknowledgesOnlyDirtyKeyWithEqualOrNewerRemoteItem() {
+        val acknowledgedLocal = watchedItem(id = "acknowledged", markedAtEpochMs = 1_000L)
+        val stillPendingLocal = watchedItem(id = "still-pending", markedAtEpochMs = 2_000L)
+        val acknowledgedRemote = acknowledgedLocal.copy(name = "server copy")
+        val acknowledgedKey = watchedItemKey(acknowledgedLocal.type, acknowledgedLocal.id)
+        val stillPendingKey = watchedItemKey(stillPendingLocal.type, stillPendingLocal.id)
 
-        val merged = mergeWatchedItemsPreservingUnsynced(
-            serverItems = emptyList(),
-            localItems = listOf(oldTraktItem),
-            lastSuccessfulPushEpochMs = 0L,
-            pullStartedEpochMs = 2_000L,
-            preserveWhenNoSuccessfulPush = false,
+        val merged = mergeWatchedSnapshot(
+            serverItems = listOf(acknowledgedRemote),
+            localItems = listOf(acknowledgedLocal, stillPendingLocal),
+            dirtyKeys = setOf(acknowledgedKey, stillPendingKey),
         )
 
-        assertTrue(merged.isEmpty())
+        assertEquals(acknowledgedRemote, merged.items[acknowledgedKey])
+        assertEquals(stillPendingLocal, merged.items[stillPendingKey])
+        assertEquals(setOf(stillPendingKey), merged.dirtyKeys)
     }
 
     @Test
-    fun playbackCompletionWatchedMarks_doNotMirrorToTraktHistory() {
+    fun successfulPush_acknowledgesOnlyPushedDirtyKey() {
+        val pushedItem = watchedItem(id = "pushed", markedAtEpochMs = 1_000L)
+        val pendingItem = watchedItem(id = "pending", markedAtEpochMs = 2_000L)
+        val pushedKey = watchedItemKey(pushedItem.type, pushedItem.id)
+        val pendingKey = watchedItemKey(pendingItem.type, pendingItem.id)
+
+        val remainingDirtyKeys = acknowledgeSuccessfulWatchedPush(
+            currentItems = mapOf(pushedKey to pushedItem, pendingKey to pendingItem),
+            dirtyKeys = setOf(pushedKey, pendingKey),
+            pushedItems = listOf(pushedItem),
+        )
+
+        assertEquals(setOf(pendingKey), remainingDirtyKeys)
+    }
+
+    @Test
+    fun successfulTrackerPush_doesNotAcknowledgeFailedNuvioPush() {
+        val outcome = WatchedPushOutcome(
+            nuvioSyncSucceeded = false,
+            succeededTrackerProviderIds = setOf(TrackingProviderId.TRAKT),
+        )
+
         assertFalse(
-            shouldMirrorWatchedMarkToTraktHistory(
-                sync = WatchedTraktHistorySync.Skip,
-                isTraktAuthenticated = true,
+            shouldAcknowledgeNuvioWatchedPush(
+                source = WatchProgressSource.NUVIO_SYNC,
+                outcome = outcome,
+            ),
+        )
+    }
+
+    @Test
+    fun successfulNuvioPush_acknowledgesNuvioDirtyState() {
+        val outcome = WatchedPushOutcome(nuvioSyncSucceeded = true)
+
+        assertTrue(
+            shouldAcknowledgeNuvioWatchedPush(
+                source = WatchProgressSource.NUVIO_SYNC,
+                outcome = outcome,
+            ),
+        )
+    }
+
+    @Test
+    fun playbackCompletionWatchedMarks_doNotMirrorToTrackerHistory() {
+        assertFalse(
+            shouldMirrorWatchedMarkToTrackers(
+                sync = WatchedTrackerHistorySync.Skip,
+                hasConnectedTracker = true,
             ),
         )
         assertTrue(
-            shouldMirrorWatchedMarkToTraktHistory(
-                sync = WatchedTraktHistorySync.Mirror,
-                isTraktAuthenticated = true,
+            shouldMirrorWatchedMarkToTrackers(
+                sync = WatchedTrackerHistorySync.Mirror,
+                hasConnectedTracker = true,
             ),
         )
         assertFalse(
-            shouldMirrorWatchedMarkToTraktHistory(
-                sync = WatchedTraktHistorySync.Mirror,
-                isTraktAuthenticated = false,
+            shouldMirrorWatchedMarkToTrackers(
+                sync = WatchedTrackerHistorySync.Mirror,
+                hasConnectedTracker = false,
             ),
         )
     }
 
     @Test
-    fun watchedItemsForSource_keepsNuvioAndTraktSnapshotsIsolated() {
+    fun watchedItemsForSource_keepsProviderSnapshotsIsolated() {
         val nuvioItem = watchedItem(id = "nuvio", markedAtEpochMs = 1_000L)
         val traktItem = watchedItem(id = "trakt", markedAtEpochMs = 2_000L)
+        val simklItem = watchedItem(id = "simkl", markedAtEpochMs = 3_000L)
 
         assertEquals(
             listOf(nuvioItem),
             watchedItemsForSource(
                 source = WatchProgressSource.NUVIO_SYNC,
                 nuvioItems = listOf(nuvioItem),
-                traktItems = listOf(traktItem),
+                providerItems = mapOf(
+                    TrackingProviderId.TRAKT to listOf(traktItem),
+                    TrackingProviderId.SIMKL to listOf(simklItem),
+                ),
             ),
         )
         assertEquals(
@@ -193,15 +262,49 @@ class WatchedRepositoryTest {
             watchedItemsForSource(
                 source = WatchProgressSource.TRAKT,
                 nuvioItems = listOf(nuvioItem),
-                traktItems = listOf(traktItem),
+                providerItems = mapOf(
+                    TrackingProviderId.TRAKT to listOf(traktItem),
+                    TrackingProviderId.SIMKL to listOf(simklItem),
+                ),
+            ),
+        )
+        assertEquals(
+            listOf(simklItem),
+            watchedItemsForSource(
+                source = WatchProgressSource.SIMKL,
+                nuvioItems = listOf(nuvioItem),
+                providerItems = mapOf(
+                    TrackingProviderId.TRAKT to listOf(traktItem),
+                    TrackingProviderId.SIMKL to listOf(simklItem),
+                ),
             ),
         )
     }
 
     @Test
-    fun onlyNuvioWatchedStateIsPersisted() {
-        assertTrue(shouldPersistWatchedSource(WatchProgressSource.NUVIO_SYNC))
-        assertFalse(shouldPersistWatchedSource(WatchProgressSource.TRAKT))
+    fun successfulTrackerPush_waitsForRemoteSnapshotAcknowledgement() {
+        val outcome = WatchedPushOutcome(
+            succeededTrackerProviderIds = setOf(TrackingProviderId.TRAKT),
+        )
+
+        assertFalse(shouldAcknowledgeNuvioWatchedPush(WatchProgressSource.TRAKT, outcome))
+    }
+
+    @Test
+    fun providerSnapshot_acknowledgesPendingMarkByPresence() {
+        val localItem = watchedItem(id = "pending", markedAtEpochMs = 1_999L)
+        val remoteItem = localItem.copy(markedAtEpochMs = 1_000L)
+        val key = watchedItemKey(localItem.type, localItem.id)
+
+        val merged = mergeWatchedSnapshot(
+            serverItems = listOf(remoteItem),
+            localItems = listOf(localItem),
+            dirtyKeys = setOf(key),
+            acknowledgeDirtyByPresence = true,
+        )
+
+        assertEquals(mapOf(key to remoteItem), merged.items)
+        assertTrue(merged.dirtyKeys.isEmpty())
     }
 
     @Test
@@ -210,17 +313,22 @@ class WatchedRepositoryTest {
         val previousTraktItem = watchedItem(id = "old-trakt", markedAtEpochMs = 2_000L)
         val refreshedTraktItem = watchedItem(id = "new-trakt", markedAtEpochMs = 3_000L)
         val nuvioItems = mutableMapOf("nuvio" to nuvioItem)
-        val traktItems = mutableMapOf("old-trakt" to previousTraktItem)
+        val providerItems = mutableMapOf(
+            TrackingProviderId.TRAKT to mutableMapOf("old-trakt" to previousTraktItem),
+        )
 
         replaceWatchedItemsForSource(
             source = WatchProgressSource.TRAKT,
             nuvioItems = nuvioItems,
-            traktItems = traktItems,
+            providerItems = providerItems,
             replacement = mapOf("new-trakt" to refreshedTraktItem),
         )
 
         assertEquals(mapOf("nuvio" to nuvioItem), nuvioItems)
-        assertEquals(mapOf("new-trakt" to refreshedTraktItem), traktItems)
+        assertEquals(
+            mapOf("new-trakt" to refreshedTraktItem),
+            providerItems[TrackingProviderId.TRAKT].orEmpty(),
+        )
     }
 
     @Test
@@ -229,14 +337,32 @@ class WatchedRepositoryTest {
             WatchProgressSource.NUVIO_SYNC,
             effectiveWatchedSource(
                 requestedSource = WatchProgressSource.TRAKT,
-                isTraktAuthenticated = false,
+                connectedProviderIds = emptySet(),
             ),
         )
         assertEquals(
             WatchProgressSource.TRAKT,
             effectiveWatchedSource(
                 requestedSource = WatchProgressSource.TRAKT,
-                isTraktAuthenticated = true,
+                connectedProviderIds = setOf(TrackingProviderId.TRAKT),
+            ),
+        )
+    }
+
+    @Test
+    fun effectiveWatchedSource_selectsConnectedSimkl() {
+        assertEquals(
+            WatchProgressSource.SIMKL,
+            effectiveWatchedSource(
+                requestedSource = WatchProgressSource.SIMKL,
+                connectedProviderIds = setOf(TrackingProviderId.SIMKL),
+            ),
+        )
+        assertEquals(
+            WatchProgressSource.NUVIO_SYNC,
+            effectiveWatchedSource(
+                requestedSource = WatchProgressSource.SIMKL,
+                connectedProviderIds = emptySet(),
             ),
         )
     }

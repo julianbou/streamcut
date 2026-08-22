@@ -4,6 +4,7 @@ import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.collection.TmdbCollectionSourceResolver
 import com.nuvio.app.features.collection.catalogRouteKey
 import com.nuvio.app.features.library.LibraryRepository
+import com.nuvio.app.features.library.sortLibraryItems
 import com.nuvio.app.features.library.toMetaPreview
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.features.home.filterReleasedItems
@@ -34,7 +35,7 @@ object CatalogRepository {
         force: Boolean = false,
     ) {
         val request = catalogRequest(target)
-        if (!force && activeRequest == request && (_uiState.value.items.isNotEmpty() || _uiState.value.isLoading)) {
+        if (!force && activeRequest == request && _uiState.value.isLoading) {
             return
         }
         activeRequest = request
@@ -42,14 +43,22 @@ object CatalogRepository {
             fetchInternalLibrary(request)
             return
         }
-        fetchPage(request = request, reset = true)
+        fetchPage(
+            request = request,
+            reset = true,
+            forceRefresh = force,
+        )
     }
 
     fun loadMore() {
         val request = activeRequest ?: return
         val current = _uiState.value
         if (current.isLoading || current.nextSkip == null) return
-        fetchPage(request = request, reset = false)
+        fetchPage(
+            request = request,
+            reset = false,
+            forceRefresh = false,
+        )
     }
 
     fun clear() {
@@ -88,10 +97,16 @@ object CatalogRepository {
             runCatching {
                 val target = request.target as CatalogTarget.Library
                 LibraryRepository.ensureLoaded()
-                LibraryRepository.uiState.value.sections
+                val libraryState = LibraryRepository.uiState.value
+                val items = libraryState.sections
                     .firstOrNull { it.type == target.sectionType }
                     ?.items
                     .orEmpty()
+                sortLibraryItems(
+                    items = items,
+                    selected = target.sortOption,
+                    sourceMode = libraryState.sourceMode,
+                )
                     .map { it.toMetaPreview() }
                     .let(::dedupeCatalogItems)
             }.fold(
@@ -120,6 +135,7 @@ object CatalogRepository {
     private fun fetchPage(
         request: CatalogRequest,
         reset: Boolean,
+        forceRefresh: Boolean,
     ) {
         activeJob?.cancel()
         val current = _uiState.value
@@ -141,6 +157,7 @@ object CatalogRepository {
                         catalogId = target.catalogId,
                         genre = target.genre,
                         skip = requestedSkip.takeIf { it > 0 },
+                        forceRefresh = forceRefresh,
                     )
 
                     is CatalogTarget.CollectionSource -> fetchCollectionSourcePage(

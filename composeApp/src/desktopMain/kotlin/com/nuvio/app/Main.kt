@@ -4,10 +4,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
@@ -15,7 +17,10 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.deeplink.handleAppUrl
+import com.nuvio.app.core.diagnostics.SentryInitializer
+import com.nuvio.app.features.discordrpc.DiscordPresenceManager
 import com.nuvio.app.features.p2p.P2pStreamingEngine
+import com.nuvio.app.features.plugins.configureDesktopQuickJsLibrary
 import com.nuvio.app.features.player.PlatformPlayerSurface
 import com.nuvio.app.features.player.desktop.DesktopAppFullscreenController
 import com.nuvio.app.features.player.desktop.DesktopHostOs
@@ -25,51 +30,93 @@ import com.nuvio.app.features.player.desktop.applyNativeDesktopWindowChrome
 import com.nuvio.app.features.player.desktop.installDesktopAppFullscreenShortcuts
 import com.nuvio.app.features.player.desktop.preloadNativePlayerBridgeAsync
 import com.nuvio.app.features.player.desktop.registerDesktopAppFullscreenToggle
+import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.settings.AppIconRepository
+import com.nuvio.app.features.settings.applyDesktopRendererPreference
+import com.nuvio.app.features.settings.transparentPreviewResource
 import java.awt.Desktop
+import javax.imageio.ImageIO
 import java.awt.Color as AwtColor
 import javax.swing.JComponent
 
 private val NuvioDesktopNativeBackground = AwtColor(0x0D, 0x0D, 0x0D)
-private const val NuvioDesktopIconPath = "icons/nuvio-app-icon.png"
 private const val MacosDarkAquaAppearance = "NSAppearanceNameDarkAqua"
 
 fun main(args: Array<String>) {
+    applyDesktopRendererPreference()
+    SentryInitializer.start()
+    configureDesktopQuickJsLibrary()
     configureDesktopChrome()
     installDesktopOpenUriHandler()
     handleDesktopLaunchArgs(args)
     preloadNativePlayerBridgeAsync()
+    // Load cached profile data synchronously so the profile color is available
+    // on the very first Compose frame (matching Android's SharedPreferences behavior).
+    ProfileRepository.loadCachedProfiles()
+    AppIconRepository.ensureLoaded()
+    DiscordPresenceManager.start()
 
     application {
+        val appIconState by AppIconRepository.state.collectAsState()
         val smokePlayerUrl = (
             System.getProperty("nuvio.desktop.smokePlayerUrl")
                 ?: System.getenv("NUVIO_DESKTOP_SMOKE_PLAYER_URL")
             )
             ?.takeIf { it.isNotBlank() }
         val wasFullscreenOnLastExit = remember { DesktopWindowModeStorage.loadWasFullscreen() }
+        val wasMaximizedOnLastExit = remember { DesktopWindowModeStorage.loadWasMaximized() }
         val savedGeometry = remember { DesktopWindowModeStorage.loadWindowedGeometry() }
+        val restoresMaximizedWindowPlacement = DesktopHostOs.current != DesktopHostOs.MACOS
+        val initialPlacement = when {
+            wasFullscreenOnLastExit && DesktopHostOs.current != DesktopHostOs.WINDOWS -> {
+                WindowPlacement.Fullscreen
+            }
+            wasMaximizedOnLastExit == false && savedGeometry != null -> {
+                WindowPlacement.Floating
+            }
+            restoresMaximizedWindowPlacement -> {
+                WindowPlacement.Maximized
+            }
+            else -> WindowPlacement.Floating
+        }
+        val isStartingMaximizedOrFullscreen =
+            initialPlacement == WindowPlacement.Maximized || initialPlacement == WindowPlacement.Fullscreen
+        val maxScreenBounds = remember {
+            runCatching {
+                java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+            }.getOrNull()
+        }
+        val initialWidth = when {
+            isStartingMaximizedOrFullscreen && maxScreenBounds != null -> maxScreenBounds.width.dp
+            savedGeometry != null -> savedGeometry.width.dp
+            else -> 1280.dp
+        }
+        val initialHeight = when {
+            isStartingMaximizedOrFullscreen && maxScreenBounds != null -> maxScreenBounds.height.dp
+            savedGeometry != null -> savedGeometry.height.dp
+            else -> 820.dp
+        }
         val windowState = rememberWindowState(
-            width = savedGeometry?.width?.dp ?: 1280.dp,
-            height = savedGeometry?.height?.dp ?: 820.dp,
+            width = initialWidth,
+            height = initialHeight,
             position = savedGeometry?.let { WindowPosition.Absolute(x = it.x.dp, y = it.y.dp) }
                 ?: WindowPosition.PlatformDefault,
             // Windows fullscreen is emulated natively (see DesktopAppFullscreenController)
             // rather than driven by WindowPlacement, so it's restored separately below.
-            placement = if (wasFullscreenOnLastExit && DesktopHostOs.current != DesktopHostOs.WINDOWS) {
-                WindowPlacement.Fullscreen
-            } else {
-                WindowPlacement.Floating
-            },
+            placement = initialPlacement,
         )
         val fullscreenController = remember { DesktopAppFullscreenController() }
 
         Window(
             onCloseRequest = {
                 P2pStreamingEngine.shutdown()
+                DiscordPresenceManager.shutdown()
+                SentryInitializer.close()
                 exitApplication()
             },
             title = if (smokePlayerUrl == null) "Nuvio" else "Nuvio Player Smoke",
             state = windowState,
-            icon = painterResource(NuvioDesktopIconPath),
+            icon = painterResource(appIconState.selected.transparentPreviewResource),
         ) {
             SideEffect {
                 window.background = NuvioDesktopNativeBackground
@@ -77,6 +124,16 @@ fun main(args: Array<String>) {
                 window.contentPane.background = NuvioDesktopNativeBackground
                 (window.contentPane as? JComponent)?.isOpaque = true
             }
+            LaunchedEffect(window, appIconState.selected) {
+                val backgroundSuffix = "-transparent"
+                val iconPath = "icons/app-icon-${appIconState.selected.key}$backgroundSuffix.png"
+                Thread.currentThread().contextClassLoader.getResourceAsStream(iconPath)?.use { stream ->
+                    ImageIO.read(stream)?.let { image ->
+                        window.iconImages = listOf(image)
+                    }
+                }
+            }
+
             LaunchedEffect(window) {
                 applyNativeDesktopWindowChrome(window)
                 // Windows fullscreen is emulated natively and isn't reflected by
@@ -98,8 +155,11 @@ fun main(args: Array<String>) {
                 // coordinates aren't a meaningful "windowed position" to restore later.
                 snapshotFlow { Triple(windowState.placement, windowState.position, windowState.size) }
                     .collect { (placement, position, size) ->
-                        val isWindowed = placement == WindowPlacement.Floating &&
-                            !fullscreenController.isFullscreen(window, windowState)
+                        val isFullscreen = fullscreenController.isFullscreen(window, windowState)
+                        if (!isFullscreen && restoresMaximizedWindowPlacement) {
+                            DesktopWindowModeStorage.saveWasMaximized(placement == WindowPlacement.Maximized)
+                        }
+                        val isWindowed = placement == WindowPlacement.Floating && !isFullscreen
                         if (isWindowed && position.isSpecified) {
                             DesktopWindowModeStorage.saveWindowedGeometry(
                                 DesktopWindowGeometry(

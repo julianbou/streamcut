@@ -33,6 +33,7 @@ private val desktopUpdaterHttpClient: HttpClient = HttpClient.newBuilder()
 actual object AppUpdaterPlatform {
     private val currentOs: DesktopUpdaterOs = DesktopUpdaterOs.current()
     private val store = DesktopStorage.store(desktopUpdaterPreferencesName)
+    actual val isDebugBuild: Boolean = false
 
     // Updates are disabled for this fork: the release source below points at
     // upstream NuvioMedia/NuvioDesktop, whose builds would replace the clipper.

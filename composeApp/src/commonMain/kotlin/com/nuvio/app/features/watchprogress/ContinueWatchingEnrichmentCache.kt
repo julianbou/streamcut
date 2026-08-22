@@ -1,7 +1,7 @@
 package com.nuvio.app.features.watchprogress
 
 import com.nuvio.app.core.storage.ProfileScopedKey
-import com.nuvio.app.features.trakt.WatchProgressSource
+import com.nuvio.app.features.tracking.WatchProgressSource
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,7 +53,16 @@ data class CachedInProgressItem(
     val duration: Long,
     val lastWatched: Long,
     val progressPercent: Float? = null,
+    val progressKey: String? = null,
 )
+
+internal fun CachedInProgressItem.resolvedProgressKey(): String =
+    progressKey?.takeIf(String::isNotBlank)
+        ?: buildWatchProgressKey(
+            contentId = contentId,
+            seasonNumber = season,
+            episodeNumber = episode,
+        )
 
 @Serializable
 private data class CachedEnrichmentPayload(

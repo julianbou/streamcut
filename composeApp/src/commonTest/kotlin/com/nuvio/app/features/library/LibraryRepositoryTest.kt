@@ -3,8 +3,9 @@ package com.nuvio.app.features.library
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.home.PosterShape
 import com.nuvio.app.features.home.MetaPreview
-import com.nuvio.app.features.trakt.TraktListTab
-import com.nuvio.app.features.trakt.TraktListType
+import com.nuvio.app.features.tracking.TrackingLibraryTab
+import com.nuvio.app.features.tracking.TrackingLibraryTabKind
+import com.nuvio.app.features.tracking.TrackingProviderId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -71,10 +72,11 @@ class LibraryRepositoryTest {
 
     @Test
     fun `library tabs include local Nuvio library before Trakt tabs`() {
-        val traktTab = TraktListTab(
+        val traktTab = TrackingLibraryTab(
             key = "trakt:watchlist",
             title = "Watchlist",
-            type = TraktListType.WATCHLIST,
+            providerId = TrackingProviderId.TRAKT,
+            kind = TrackingLibraryTabKind.WATCHLIST,
         )
 
         val tabs = libraryTabsWithLocal(listOf(traktTab))
@@ -87,7 +89,7 @@ class LibraryRepositoryTest {
     fun `library membership always includes local state before Trakt membership`() {
         val membership = libraryMembershipWithLocal(
             inLocal = true,
-            traktMembership = mapOf("trakt:watchlist" to false),
+            providerMembership = mapOf("trakt:watchlist" to false),
         )
 
         assertEquals(
@@ -186,6 +188,98 @@ class LibraryRepositoryTest {
         assertFalse(accepted)
         assertFalse(committed)
         assertEquals(setOf("first", "second"), state.snapshot().items.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `pull lifecycle does not invalidate pending local push`() {
+        val state = LibraryLocalState()
+        val token = state.beginProfileLoad(profileId = 1).snapshot.token
+        state.completeProfileLoad(
+            token = token,
+            activeProfileId = 1,
+            items = emptyList(),
+        )
+        val localSnapshot = state.upsert(libraryItem(id = "local", savedAtEpochMs = 1L))
+
+        state.markPullStarted(token)
+
+        assertTrue(state.isContentCurrent(localSnapshot))
+    }
+
+    @Test
+    fun `server pull preserves local items awaiting push`() {
+        val state = LibraryLocalState()
+        val token = state.beginProfileLoad(profileId = 1).snapshot.token
+        state.completeProfileLoad(
+            token = token,
+            activeProfileId = 1,
+            items = listOf(libraryItem(id = "remote-old", savedAtEpochMs = 1L)),
+        )
+        state.upsert(libraryItem(id = "local-new", savedAtEpochMs = 2L))
+        val pullSnapshot = assertNotNull(state.markPullStarted(token))
+
+        val result = assertNotNull(
+            state.applyServerItems(
+                pullSnapshot = pullSnapshot,
+                serverItems = listOf(libraryItem(id = "remote-old", savedAtEpochMs = 1L)),
+            ),
+        )
+
+        assertTrue(result.preservedLocalItems)
+        assertEquals(
+            setOf("remote-old", "local-new"),
+            result.snapshot.items.map { it.id }.toSet(),
+        )
+    }
+
+    @Test
+    fun `server pull preserves a local mutation made while pulling`() {
+        val state = LibraryLocalState()
+        val token = state.beginProfileLoad(profileId = 1).snapshot.token
+        state.completeProfileLoad(
+            token = token,
+            activeProfileId = 1,
+            items = listOf(libraryItem(id = "remote-old", savedAtEpochMs = 1L)),
+        )
+        val pullSnapshot = assertNotNull(state.markPullStarted(token))
+        state.upsert(libraryItem(id = "local-new", savedAtEpochMs = 2L))
+
+        val result = assertNotNull(
+            state.applyServerItems(
+                pullSnapshot = pullSnapshot,
+                serverItems = listOf(libraryItem(id = "remote-old", savedAtEpochMs = 1L)),
+            ),
+        )
+
+        assertTrue(result.preservedLocalItems)
+        assertEquals(
+            setOf("remote-old", "local-new"),
+            result.snapshot.items.map { it.id }.toSet(),
+        )
+    }
+
+    @Test
+    fun `server pull applies after local push completes`() {
+        val state = LibraryLocalState()
+        val token = state.beginProfileLoad(profileId = 1).snapshot.token
+        state.completeProfileLoad(
+            token = token,
+            activeProfileId = 1,
+            items = listOf(libraryItem(id = "remote-old", savedAtEpochMs = 1L)),
+        )
+        val localSnapshot = state.upsert(libraryItem(id = "local-new", savedAtEpochMs = 2L))
+        state.markPushCompleted(localSnapshot)
+        val pullSnapshot = assertNotNull(state.markPullStarted(token))
+
+        val result = assertNotNull(
+            state.applyServerItems(
+                pullSnapshot = pullSnapshot,
+                serverItems = listOf(libraryItem(id = "remote-new", savedAtEpochMs = 3L)),
+            ),
+        )
+
+        assertFalse(result.preservedLocalItems)
+        assertEquals(listOf("remote-new"), result.snapshot.items.map { it.id })
     }
 
     private fun libraryItem(id: String, savedAtEpochMs: Long): LibraryItem =

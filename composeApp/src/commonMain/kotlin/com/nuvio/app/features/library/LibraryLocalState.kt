@@ -1,5 +1,8 @@
 package com.nuvio.app.features.library
 
+import com.nuvio.app.features.library.sync.LibraryDeltaEvent
+import com.nuvio.app.features.library.sync.LibrarySyncKey
+import com.nuvio.app.features.library.sync.toLibrarySyncKey
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.Job
@@ -16,9 +19,14 @@ internal data class LibraryLocalSnapshot(
     val hasLoaded: Boolean,
     val isLoading: Boolean,
     val items: List<LibraryItem>,
-    val isPullingNuvioSyncFromServer: Boolean,
-    val hasCompletedInitialNuvioSyncPull: Boolean,
-)
+    val deltaCursorEventId: Long,
+    val deltaInitialized: Boolean,
+    val pendingUpsertKeys: List<LibrarySyncKey>,
+    val pendingDeleteKeys: List<LibrarySyncKey>,
+) {
+    val hasPendingPush: Boolean
+        get() = pendingUpsertKeys.isNotEmpty() || pendingDeleteKeys.isNotEmpty()
+}
 
 internal data class LibraryStateTransition(
     val snapshot: LibraryLocalSnapshot,
@@ -61,8 +69,10 @@ internal class LibraryLocalState {
     private var contentRevision = 0L
     private var isLoading = false
     private var itemsById: MutableMap<String, LibraryItem> = mutableMapOf()
-    private var isPullingNuvioSyncFromServer = false
-    private var hasCompletedInitialNuvioSyncPull = false
+    private var deltaCursorEventId = 0L
+    private var deltaInitialized = false
+    private var pendingUpsertKeysByKey: MutableMap<String, LibrarySyncKey> = mutableMapOf()
+    private var pendingDeleteKeysByKey: MutableMap<String, LibrarySyncKey> = mutableMapOf()
     private var pushJob: Job? = null
 
     fun snapshot(): LibraryLocalSnapshot = synchronized(lock) {
@@ -83,6 +93,10 @@ internal class LibraryLocalState {
 
     fun isCurrent(snapshot: LibraryLocalSnapshot): Boolean = synchronized(lock) {
         isCurrentLocked(snapshot)
+    }
+
+    fun isContentCurrent(snapshot: LibraryLocalSnapshot): Boolean = synchronized(lock) {
+        isContentCurrentLocked(snapshot)
     }
 
     fun runIfCurrent(snapshot: LibraryLocalSnapshot, block: () -> Unit): Boolean = synchronized(lock) {
@@ -122,8 +136,10 @@ internal class LibraryLocalState {
         hasLoaded = false
         isLoading = true
         itemsById = mutableMapOf()
-        isPullingNuvioSyncFromServer = false
-        hasCompletedInitialNuvioSyncPull = false
+        deltaCursorEventId = 0L
+        deltaInitialized = false
+        pendingUpsertKeysByKey = mutableMapOf()
+        pendingDeleteKeysByKey = mutableMapOf()
         LibraryStateTransition(
             snapshot = snapshotLocked(),
             detachedPushJob = detachedPushJob,
@@ -134,11 +150,24 @@ internal class LibraryLocalState {
         token: LibraryProfileToken,
         activeProfileId: Int,
         items: Collection<LibraryItem>,
+        deltaCursorEventId: Long = 0L,
+        deltaInitialized: Boolean = false,
+        pendingUpsertKeys: Collection<LibrarySyncKey> = emptyList(),
+        pendingDeleteKeys: Collection<LibrarySyncKey> = emptyList(),
     ): LibraryLocalSnapshot? = synchronized(lock) {
         if (activeProfileId != token.profileId || !isCurrentLocked(token)) {
             return@synchronized null
         }
         itemsById = items.associateByTo(mutableMapOf()) { libraryItemKey(it.id, it.type) }
+        this.deltaCursorEventId = deltaCursorEventId.coerceAtLeast(0L)
+        this.deltaInitialized = deltaInitialized
+        pendingUpsertKeysByKey = pendingUpsertKeys
+            .associateByTo(mutableMapOf()) { libraryItemKey(it.contentId, it.contentType) }
+            .filterToExistingItems(itemsById)
+        pendingDeleteKeysByKey = pendingDeleteKeys
+            .associateByTo(mutableMapOf()) { libraryItemKey(it.contentId, it.contentType) }
+            .apply { pendingUpsertKeysByKey.keys.forEach(::remove) }
+        pendingDeleteKeysByKey.keys.forEach(itemsById::remove)
         hasLoaded = true
         isLoading = false
         revision += 1L
@@ -156,8 +185,10 @@ internal class LibraryLocalState {
         hasLoaded = false
         isLoading = false
         itemsById = mutableMapOf()
-        isPullingNuvioSyncFromServer = false
-        hasCompletedInitialNuvioSyncPull = false
+        deltaCursorEventId = 0L
+        deltaInitialized = false
+        pendingUpsertKeysByKey = mutableMapOf()
+        pendingDeleteKeysByKey = mutableMapOf()
         LibraryStateTransition(
             snapshot = snapshotLocked(),
             detachedPushJob = detachedPushJob,
@@ -166,46 +197,68 @@ internal class LibraryLocalState {
 
     fun markPullStarted(token: LibraryProfileToken): LibraryLocalSnapshot? = synchronized(lock) {
         if (!isCurrentLocked(token)) return@synchronized null
-        isPullingNuvioSyncFromServer = true
-        revision += 1L
-        snapshotLocked()
-    }
-
-    fun finishPull(
-        token: LibraryProfileToken,
-        completedSuccessfully: Boolean,
-    ): LibraryLocalSnapshot? = synchronized(lock) {
-        if (!isCurrentLocked(token)) return@synchronized null
-        isPullingNuvioSyncFromServer = false
-        if (completedSuccessfully) {
-            hasCompletedInitialNuvioSyncPull = true
-        }
-        revision += 1L
         snapshotLocked()
     }
 
     fun applyServerItems(
-        token: LibraryProfileToken,
+        pullSnapshot: LibraryLocalSnapshot,
         serverItems: Collection<LibraryItem>,
+        cursorEventId: Long = 0L,
     ): LibraryServerItemsApplyResult? = synchronized(lock) {
-        if (!isCurrentLocked(token)) return@synchronized null
+        if (!isCurrentLocked(pullSnapshot.token)) return@synchronized null
 
-        val preserveLocalItems = serverItems.isEmpty() && itemsById.isNotEmpty()
-        if (!preserveLocalItems) {
-            itemsById = serverItems.associateByTo(mutableMapOf()) { libraryItemKey(it.id, it.type) }
+        val reconciliation = reconcileLibrarySnapshot(
+            serverItems = serverItems,
+            localItemsByKey = itemsById,
+            pendingUpsertKeysByKey = pendingUpsertKeysByKey,
+            pendingDeleteKeysByKey = pendingDeleteKeysByKey,
+            preserveLegacyLocalWhenServerEmpty = !pullSnapshot.deltaInitialized,
+        )
+        if (itemsById != reconciliation.itemsByKey) {
             contentRevision += 1L
         }
+        itemsById = reconciliation.itemsByKey
+        pendingUpsertKeysByKey = reconciliation.pendingUpsertKeysByKey
+        pendingDeleteKeysByKey = reconciliation.pendingDeleteKeysByKey
+        deltaCursorEventId = cursorEventId.coerceAtLeast(0L)
+        deltaInitialized = true
         hasLoaded = true
         isLoading = false
         revision += 1L
         LibraryServerItemsApplyResult(
             snapshot = snapshotLocked(),
-            preservedLocalItems = preserveLocalItems,
+            preservedLocalItems = reconciliation.preservedLocalItems,
         )
     }
 
+    fun applyDeltaEvents(
+        token: LibraryProfileToken,
+        events: Collection<LibraryDeltaEvent>,
+    ): LibraryLocalSnapshot? = synchronized(lock) {
+        if (!isCurrentLocked(token)) return@synchronized null
+
+        val reconciliation = reconcileLibraryDelta(
+            events = events,
+            currentItemsByKey = itemsById,
+            pendingUpsertKeysByKey = pendingUpsertKeysByKey,
+            pendingDeleteKeysByKey = pendingDeleteKeysByKey,
+            currentCursorEventId = deltaCursorEventId,
+        )
+        if (reconciliation.changed) {
+            itemsById = reconciliation.itemsByKey
+            contentRevision += 1L
+        }
+        deltaCursorEventId = reconciliation.cursorEventId
+        deltaInitialized = true
+        revision += 1L
+        snapshotLocked()
+    }
+
     fun upsert(item: LibraryItem): LibraryLocalSnapshot = synchronized(lock) {
-        itemsById[libraryItemKey(item.id, item.type)] = item
+        val key = libraryItemKey(item.id, item.type)
+        itemsById[key] = item
+        pendingUpsertKeysByKey[key] = item.toLibrarySyncKey()
+        pendingDeleteKeysByKey.remove(key)
         revision += 1L
         contentRevision += 1L
         snapshotLocked()
@@ -213,10 +266,15 @@ internal class LibraryLocalState {
 
     fun toggle(item: LibraryItem): LibraryLocalToggleResult = synchronized(lock) {
         val key = libraryItemKey(item.id, item.type)
-        val isSaved = if (itemsById.remove(key) != null) {
+        val removedItem = itemsById.remove(key)
+        val isSaved = if (removedItem != null) {
+            pendingUpsertKeysByKey.remove(key)
+            pendingDeleteKeysByKey[key] = removedItem.toLibrarySyncKey()
             false
         } else {
             itemsById[key] = item
+            pendingUpsertKeysByKey[key] = item.toLibrarySyncKey()
+            pendingDeleteKeysByKey.remove(key)
             true
         }
         revision += 1L
@@ -228,9 +286,14 @@ internal class LibraryLocalState {
     }
 
     fun removeById(id: String): LibraryLocalMutation = synchronized(lock) {
-        val before = itemsById.size
-        itemsById.entries.removeAll { (_, item) -> item.id == id }
-        val affectedCount = before - itemsById.size
+        val removedEntries = itemsById
+            .filterValues { item -> item.id == id }
+        removedEntries.forEach { (key, item) ->
+            itemsById.remove(key)
+            pendingUpsertKeysByKey.remove(key)
+            pendingDeleteKeysByKey[key] = item.toLibrarySyncKey()
+        }
+        val affectedCount = removedEntries.size
         if (affectedCount > 0) {
             revision += 1L
             contentRevision += 1L
@@ -242,8 +305,12 @@ internal class LibraryLocalState {
     }
 
     fun remove(id: String, type: String): LibraryLocalMutation = synchronized(lock) {
-        val affectedCount = if (itemsById.remove(libraryItemKey(id, type)) != null) 1 else 0
-        if (affectedCount > 0) {
+        val key = libraryItemKey(id, type)
+        val removedItem = itemsById.remove(key)
+        val affectedCount = if (removedItem != null) 1 else 0
+        if (removedItem != null) {
+            pendingUpsertKeysByKey.remove(key)
+            pendingDeleteKeysByKey[key] = removedItem.toLibrarySyncKey()
             revision += 1L
             contentRevision += 1L
         }
@@ -284,6 +351,17 @@ internal class LibraryLocalState {
         }
     }
 
+    fun markPushCompleted(snapshot: LibraryLocalSnapshot): LibraryLocalSnapshot? = synchronized(lock) {
+        if (!isCurrentLocked(snapshot)) {
+            null
+        } else {
+            pendingUpsertKeysByKey.clear()
+            pendingDeleteKeysByKey.clear()
+            revision += 1L
+            snapshotLocked()
+        }
+    }
+
     private fun tokenLocked(): LibraryProfileToken =
         LibraryProfileToken(
             profileId = currentProfileId,
@@ -298,8 +376,10 @@ internal class LibraryLocalState {
             hasLoaded = hasLoaded,
             isLoading = isLoading,
             items = itemsById.values.toList(),
-            isPullingNuvioSyncFromServer = isPullingNuvioSyncFromServer,
-            hasCompletedInitialNuvioSyncPull = hasCompletedInitialNuvioSyncPull,
+            deltaCursorEventId = deltaCursorEventId,
+            deltaInitialized = deltaInitialized,
+            pendingUpsertKeys = pendingUpsertKeysByKey.values.toList(),
+            pendingDeleteKeys = pendingDeleteKeysByKey.values.toList(),
         )
 
     private fun isCurrentLocked(token: LibraryProfileToken): Boolean =
@@ -312,5 +392,12 @@ internal class LibraryLocalState {
         isCurrentLocked(snapshot.token) && contentRevision == snapshot.contentRevision
 }
 
-private fun libraryItemKey(id: String, type: String): String =
+private fun MutableMap<String, LibrarySyncKey>.filterToExistingItems(
+    itemsById: Map<String, LibraryItem>,
+): MutableMap<String, LibrarySyncKey> =
+    apply {
+        keys.retainAll(itemsById.keys)
+    }
+
+internal fun libraryItemKey(id: String, type: String): String =
     "${type.trim().lowercase()}:${id.trim()}"

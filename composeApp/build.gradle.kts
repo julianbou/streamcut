@@ -53,10 +53,10 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     abstract val sentryDsn: Property<String>
 
     @get:Input
-    abstract val sentryEnvironment: Property<String>
+    abstract val sentryDesktopDsn: Property<String>
 
     @get:Input
-    abstract val realtimeSyncEnabled: Property<Boolean>
+    abstract val sentryEnvironment: Property<String>
 
     @TaskAction
     fun generate() {
@@ -87,20 +87,8 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |
                 |object SentryConfig {
                 |    const val DSN = "${sentryDsn.get()}"
+                |    const val DESKTOP_DSN = "${sentryDesktopDsn.get()}"
                 |    const val ENVIRONMENT = "${sentryEnvironment.get()}"
-                |}
-                """.trimMargin()
-            )
-        }
-
-        outDir.resolve("com/nuvio/app/core/sync").apply {
-            mkdirs()
-            resolve("RealtimeSyncConfig.kt").writeText(
-                """
-                |package com.nuvio.app.core.sync
-                |
-                |object RealtimeSyncConfig {
-                |    const val ENABLED = ${realtimeSyncEnabled.get()}
                 |}
                 """.trimMargin()
             )
@@ -118,6 +106,34 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |    const val CLIENT_ID = "${props.getProperty("TRAKT_CLIENT_ID", "")}" 
                 |    const val CLIENT_SECRET = "${props.getProperty("TRAKT_CLIENT_SECRET", "")}" 
                 |    const val REDIRECT_URI = "${props.getProperty("TRAKT_REDIRECT_URI", "nuvio://auth/trakt")}" 
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/features/simkl").apply {
+            mkdirs()
+            resolve("SimklConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.simkl
+                |
+                |object SimklConfig {
+                |    const val CLIENT_ID = "${props.getProperty("SIMKL_CLIENT_ID", "")}"
+                |    const val REDIRECT_URI = "${props.getProperty("SIMKL_REDIRECT_URI", "nuvio://auth/simkl")}"
+                |    const val APP_NAME = "${props.getProperty("SIMKL_APP_NAME", "nuvio")}"
+                |}
+                """.trimMargin()
+            )
+        }
+
+        outDir.resolve("com/nuvio/app/features/discordrpc").apply {
+            mkdirs()
+            resolve("DiscordConfig.kt").writeText(
+                """
+                |package com.nuvio.app.features.discordrpc
+                |
+                |object DiscordConfig {
+                |    const val CLIENT_ID = "${props.getProperty("NUVIO_DISCORD_CLIENT_ID", "1538974392376369212")}"
                 |}
                 """.trimMargin()
             )
@@ -187,6 +203,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |
                 |object CommunityConfig {
                 |    const val CONTRIBUTIONS_URL = "${props.getProperty("CONTRIBUTIONS_URL", "")}" 
+                |    const val SUPPORTERS_WALL_URL = "${props.getProperty("SUPPORTERS_WALL_URL", "https://nuvio.tv/api/supporters/wall")}"
                 |    const val DONATIONS_BASE_URL = "${props.getProperty("DONATIONS_BASE_URL", "")}" 
                 |    const val DONATIONS_DONATE_URL = "${props.getProperty("DONATIONS_DONATE_URL", "")}" 
                 |}
@@ -214,6 +231,10 @@ abstract class NotarizeMacosDmgWithKeychainTask @Inject constructor(
     @get:Input
     abstract val keychainProfile: Property<String>
 
+    @get:Optional
+    @get:Input
+    abstract val keychainPath: Property<String>
+
     @get:Input
     abstract val signingIdentity: Property<String>
 
@@ -234,16 +255,21 @@ abstract class NotarizeMacosDmgWithKeychainTask @Inject constructor(
 
         val dmg = ensureFinalDmg()
         signDmg(dmg, identity)
+        val notaryCommand = mutableListOf(
+            "xcrun",
+            "notarytool",
+            "submit",
+            dmg.absolutePath,
+            "--wait",
+            "--keychain-profile",
+            profile,
+        )
+        keychainPath.orNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { notaryCommand += listOf("--keychain", it) }
         execOperations.exec {
-            commandLine(
-                "xcrun",
-                "notarytool",
-                "submit",
-                dmg.absolutePath,
-                "--wait",
-                "--keychain-profile",
-                profile,
-            )
+            commandLine(notaryCommand)
         }
         execOperations.exec {
             commandLine("xcrun", "stapler", "staple", dmg.absolutePath)
@@ -436,6 +462,7 @@ val macosNotaryKeychainProfile = localOrEnvProperty("NUVIO_MACOS_NOTARY_KEYCHAIN
         ?.substringAfter(':')
         ?.trim()
         ?.takeIf { it.isNotBlank() }
+val macosNotaryKeychainPath = localOrEnvProperty("NUVIO_MACOS_NOTARY_KEYCHAIN_PATH")
 val macosNotaryAppSpecificPassword = macosNotaryPassword
     ?.takeUnless { it.startsWith("@keychain:", ignoreCase = true) }
 
@@ -487,9 +514,12 @@ val iosDistributionSourceDir = if (iosDistribution == "full") {
     "src/iosAppStore/kotlin"
 }
 val iosFrameworkBundleId = "com.nuvio.media"
+val nuvioEngineAppleFramework = rootProject.file("../nuvio-engine/platform/apple/NuvioEngine.xcframework")
 val fullCommonSourceDir = project.file("src/fullCommonMain/kotlin")
 val fullPluginSourceDir = fullCommonSourceDir.resolve("com/nuvio/app/features/plugins")
+val fullTrailerSourceDir = fullCommonSourceDir.resolve("com/nuvio/app/features/trailer")
 val generatedRuntimeConfigDir = layout.buildDirectory.dir("generated/runtime-config/kotlin")
+val desktopSentryResourceDir = rootProject.layout.projectDirectory.dir("desktopSentry/build/generated/sentry")
 val requestedGradleTasks = gradle.startParameter.taskNames.map { taskName ->
     taskName.substringAfterLast(':').lowercase()
 }
@@ -556,6 +586,7 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))
+    sentryDesktopDsn.set(runtimeConfigValue("SENTRY_DESKTOP_DSN"))
     sentryEnvironment.set(
         when {
             requestedGradleTasks.any { "benchmark" in it } -> "benchmark"
@@ -563,7 +594,6 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
             else -> "production"
         }
     )
-    realtimeSyncEnabled.set(runtimeConfigBoolean("NUVIO_REALTIME_SYNC_ENABLED", true))
 }
 
 val isMacHost = System.getProperty("os.name").contains("mac", ignoreCase = true)
@@ -574,9 +604,8 @@ val prepareMacosTorrServerResources = tasks.register<PrepareMacosTorrServerResou
     outputDir.set(layout.buildDirectory.dir("generated/signed-macos-torrserver-resources"))
     signingIdentity.set(macosSigningIdentity.orEmpty())
 }
-val mpvKitDir = providers.gradleProperty("nuvio.mpvkit.dir")
-    .orElse(rootProject.layout.projectDirectory.dir("MPVKit").asFile.absolutePath)
 val macosPlayerBridgeSource = layout.projectDirectory.file("src/desktopMain/native/macos/player_bridge.mm")
+val macosLibmpvHeaders = layout.projectDirectory.dir("src/desktopMain/native/macos/include")
 fun normalizedMacosArch(value: String): String =
     when (value.lowercase()) {
         "aarch64", "arm64" -> "arm64"
@@ -602,29 +631,24 @@ if (isMacHost && isMacosDmgBuildRequested && macosPlayerBridgeArch != macosHostJ
 }
 val macosPlayerBridgeOutput = layout.buildDirectory.file("native/macos/$macosPlayerBridgeArch/libplayer_bridge.dylib")
 val macosPlayerRuntimeOutput = layout.buildDirectory.dir("native/macos-runtime/$macosPlayerBridgeArch")
+val macosPlayerAppResourcesRoot = layout.buildDirectory.dir("generated/macos-player-app-resources")
 val macosDmgArchName = macosPlayerBridgeArch
 val isMacosDmgNotarizationRequested = requestedGradleTasks.any { taskName ->
     taskName == "notarizedmg" || taskName == "notarizereleasedmg"
 }
-val mpvKitRoot = File(mpvKitDir.get())
-val mpvKitDistRoot = File(mpvKitRoot, "dist")
-val mpvKitLibmpvRoot = File(mpvKitDistRoot, "libmpv/macos/thin/$macosPlayerBridgeArch")
-val mpvKitLibmpvHeaders = File(mpvKitLibmpvRoot, "include")
 val bundledMacosLibmpvRuntimeRoot = layout.projectDirectory.dir("src/desktopMain/native/macos/runtime").asFile
 val bundledMacosLibmpvRuntimeDir = File(bundledMacosLibmpvRuntimeRoot, macosPlayerBridgeArch)
 val bundledMacosLibmpvDylib = File(bundledMacosLibmpvRuntimeDir, "libmpv.2.dylib")
 val missingMacosPlayerBridgeInputs = listOfNotNull(
-    "MPVKit headers".takeUnless { File(mpvKitLibmpvHeaders, "mpv/client.h").exists() },
+    "libmpv headers".takeUnless { macosLibmpvHeaders.file("mpv/client.h").asFile.exists() },
     "bundled libmpv.2.dylib".takeUnless { bundledMacosLibmpvDylib.exists() },
 )
-val missingMpvKitMacosMessage = """
+val missingMacosPlayerBridgeMessage = """
     macOS libmpv inputs are missing for $macosPlayerBridgeArch: ${missingMacosPlayerBridgeInputs.joinToString()}.
-    Build MPVKit's macOS runtime first:
-      cd ${mpvKitRoot.absolutePath}
-      make build platform=macos
+    The libmpv headers must be present under ${macosLibmpvHeaders.asFile.absolutePath}.
     The dynamic libmpv runtime must be present under ${bundledMacosLibmpvRuntimeDir.absolutePath}.
 """.trimIndent()
-val missingMpvKitMacosShellMessage = missingMpvKitMacosMessage.replace("'", "'\"'\"'")
+val missingMacosPlayerBridgeShellMessage = missingMacosPlayerBridgeMessage.replace("'", "'\"'\"'")
 val macosPlayerBridgeSourceFile = macosPlayerBridgeSource.asFile
 val macosPlayerBridgeOutputFile = macosPlayerBridgeOutput.get().asFile
 val macosPlayerBridgeJavaHome = providers.systemProperty("java.home").get()
@@ -635,7 +659,7 @@ val macosPlayerBridgeCommand = if (missingMacosPlayerBridgeInputs.isNotEmpty()) 
     listOf(
         "/bin/sh",
         "-c",
-        "printf '%s\\n' '$missingMpvKitMacosShellMessage' >&2; exit 1",
+        "printf '%s\\n' '$missingMacosPlayerBridgeShellMessage' >&2; exit 1",
     )
 } else {
     mutableListOf(
@@ -659,7 +683,7 @@ val macosPlayerBridgeCommand = if (missingMacosPlayerBridgeInputs.isNotEmpty()) 
           -o ${shellQuote(macosPlayerBridgeOutputFile.absolutePath)} \
           -I${shellQuote("$macosPlayerBridgeJavaHome/include")} \
           -I${shellQuote("$macosPlayerBridgeJavaHome/include/darwin")} \
-          -I${shellQuote(mpvKitLibmpvHeaders.absolutePath)} \
+          -I${shellQuote(macosLibmpvHeaders.asFile.absolutePath)} \
           -L"${'$'}{SWIFT_LIB}" \
           -L/usr/lib/swift \
           -framework AppKit \
@@ -683,7 +707,7 @@ val buildMacosPlayerBridge = tasks.register<Exec>("buildMacosPlayerBridge") {
     enabled = isMacHost
     inputs.file(macosPlayerBridgeSource)
     inputs.file(bundledMacosLibmpvDylib)
-    inputs.dir(mpvKitLibmpvHeaders)
+    inputs.dir(macosLibmpvHeaders)
     outputs.file(macosPlayerBridgeOutput)
     commandLine(macosPlayerBridgeCommand)
 }
@@ -803,6 +827,7 @@ val windowsPlayerBridgeCommand = if (missingWindowsPlayerBridgeInputs.isNotEmpty
         "User32.lib",
         "Gdi32.lib",
         "Dwmapi.lib",
+        "Shell32.lib",
     ).joinToString(" ")
     val powershellCompileCommand = compileCommand.replace("\"", "__DQ__")
     val powershellCommand = """
@@ -857,6 +882,7 @@ val buildWindowsPlayerBridge = tasks.register<Exec>("buildWindowsPlayerBridge") 
     outputs.file(windowsPlayerBridgeOutput)
     outputs.file(windowsPlayerBridgeImportLib)
     outputs.file(windowsPlayerBridgePdb)
+    onlyIf { !windowsPlayerBridgeOutput.get().asFile.exists() }
     commandLine(windowsPlayerBridgeCommand)
 }
 
@@ -915,23 +941,17 @@ val prepareMacosPlayerRuntime = tasks.register<Sync>("prepareMacosPlayerRuntime"
     into(macosPlayerRuntimeOutput)
 }
 
-val generateMacosPlayerRuntimeIndex = tasks.register<GenerateNativeRuntimeIndexTask>("generateMacosPlayerRuntimeIndex") {
+val prepareMacosPlayerAppResources = tasks.register<Sync>("prepareMacosPlayerAppResources") {
     enabled = isMacHost
-    dependsOn(prepareMacosPlayerRuntime)
-    runtimeDir.set(macosPlayerRuntimeOutput)
-    indexFile.set(macosPlayerRuntimeOutput.map { it.file("runtime-files.txt") })
+    dependsOn(buildMacosPlayerBridge, prepareMacosPlayerRuntime)
+    from(macosPlayerBridgeOutput)
+    from(macosPlayerRuntimeOutput) {
+        include("*.dylib")
+    }
+    into(macosPlayerAppResourcesRoot.map { it.dir("macos/native/macos") })
 }
 
 tasks.withType<Jar>().configureEach {
-    if (isMacHost && name == "desktopJar") {
-        dependsOn(buildMacosPlayerBridge, prepareMacosPlayerRuntime, generateMacosPlayerRuntimeIndex)
-        from(macosPlayerBridgeOutput) {
-            into("native/macos")
-        }
-        from(macosPlayerRuntimeOutput) {
-            into("native/macos")
-        }
-    }
     if (isWindowsHost && name == "desktopJar") {
         dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex)
         from(windowsPlayerBridgeOutput) {
@@ -943,7 +963,16 @@ tasks.withType<Jar>().configureEach {
     }
 }
 
+tasks.matching { it.name == "prepareAppResources" }.configureEach {
+    if (isMacHost) {
+        dependsOn(prepareMacosPlayerAppResources)
+    }
+}
+
 tasks.withType<ProcessResources>().matching { it.name == "desktopProcessResources" }.configureEach {
+    if (!isWindowsHost) {
+        exclude("torrserver/windows-amd64/**")
+    }
     if (isMacHost) {
         dependsOn(prepareMacosTorrServerResources)
         from(prepareMacosTorrServerResources.map { it.outputDir })
@@ -1011,11 +1040,31 @@ kotlin {
     )
 
     iosTargets.forEach { iosTarget ->
+        val nuvioEngineSlice = if (iosTarget.name == "iosArm64") {
+            "ios-arm64"
+        } else {
+            "ios-arm64_x86_64-simulator"
+        }
+        val nuvioEngineSliceDirectory = nuvioEngineAppleFramework.resolve(nuvioEngineSlice)
         iosTarget.compilations.getByName("main") {
             cinterops {
                 create("commoncrypto") {
                     defFile(project.file("src/nativeInterop/cinterop/commoncrypto.def"))
                     compilerOpts("-I${project.projectDir}/src/nativeInterop/cinterop")
+                }
+                create("appicon") {
+                    defFile(project.file("src/nativeInterop/cinterop/appicon.def"))
+                    compilerOpts("-I${project.projectDir}/src/nativeInterop/cinterop")
+                }
+                if (iosDistribution == "full") {
+                    check(nuvioEngineSliceDirectory.resolve("libCNuvioEngine.a").isFile) {
+                        "Build the local Nuvio Engine Apple XCFramework before compiling iOS Full."
+                    }
+                    create("nuvioengine") {
+                        defFile(project.file("src/nativeInterop/cinterop/nuvioengine.def"))
+                        compilerOpts("-I${nuvioEngineSliceDirectory.resolve("Headers").absolutePath}")
+                        extraOpts("-libraryPath", nuvioEngineSliceDirectory.absolutePath)
+                    }
                 }
             }
 
@@ -1036,6 +1085,14 @@ kotlin {
             baseName = "ComposeApp"
             isStatic = true
             freeCompilerArgs += listOf("-Xbinary=bundleId=$iosFrameworkBundleId")
+            if (iosDistribution == "full") {
+                linkerOpts(
+                    "-lc++",
+                    "-framework", "Security",
+                    "-framework", "SystemConfiguration",
+                    "-framework", "CoreFoundation",
+                )
+            }
         }
     }
     
@@ -1074,6 +1131,7 @@ kotlin {
                 implementation(libs.androidx.media3.container)
                 implementation(libs.androidx.media3.extractor)
                 implementation(libs.mpv.android.lib)
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
                 implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("lib-*.aar"))))
                 if (androidDistribution == "full") {
                     implementation(files("libs/quickjs-kt-android-1.0.5-nuvio.aar"))
@@ -1083,13 +1141,31 @@ kotlin {
         }
         val desktopMain by getting {
             kotlin.srcDir(fullPluginSourceDir)
+            kotlin.srcDir(fullTrailerSourceDir)
+            kotlin.srcDir(
+                if (isWindowsHost) {
+                    "src/windowsDesktopMain/kotlin"
+                } else {
+                    "src/nonWindowsDesktopMain/kotlin"
+                },
+            )
+            resources.srcDir(desktopSentryResourceDir)
             dependencies {
                 implementation(compose.desktop.currentOs)
+                if (!isWindowsHost) {
+                    implementation(project(":composeMediaPlayer"))
+                }
                 implementation(libs.kotlinx.coroutines.swing)
                 implementation(libs.ktor.client.cio)
                 implementation("com.squareup.okhttp3:okhttp:4.12.0")
                 implementation(libs.quickjs.kt)
                 implementation(libs.ksoup)
+                implementation(libs.sentry.jvm)
+            }
+        }
+        val androidHostTest by getting {
+            if (androidDistribution == "full") {
+                kotlin.srcDir(project.file("src/androidFullHostTest/kotlin"))
             }
         }
         commonMain.dependencies {
@@ -1097,6 +1173,9 @@ kotlin {
                 exclude(group = "org.jetbrains.skiko", module = "skiko")
             }
             implementation("io.coil-kt.coil3:coil-network-ktor3:${libs.versions.coil.get()}") {
+                exclude(group = "org.jetbrains.skiko", module = "skiko")
+            }
+            implementation("io.coil-kt.coil3:coil-network-cache-control:${libs.versions.coil.get()}") {
                 exclude(group = "org.jetbrains.skiko", module = "skiko")
             }
             implementation("io.coil-kt.coil3:coil-svg:${libs.versions.coil.get()}") {
@@ -1120,13 +1199,19 @@ kotlin {
             implementation(libs.supabase.postgrest)
             implementation(libs.supabase.auth)
             implementation(libs.supabase.functions)
-            implementation(libs.supabase.realtime)
+            implementation(libs.supabase.storage)
             implementation(libs.reorderable)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
     }
+}
+
+tasks.matching {
+    it.name == "desktopProcessResources" || it.name == "processDesktopMainResources"
+}.configureEach {
+    dependsOn(":desktopSentry:generateSentryDebugMetaPropertiesjava")
 }
 
 compose.desktop {
@@ -1148,6 +1233,9 @@ compose.desktop {
             packageName = "Nuvio"
             packageVersion = desktopReleasePackageVersion
             vendor = "Nuvio Media"
+            if (isMacHost) {
+                appResourcesRootDir.set(macosPlayerAppResourcesRoot)
+            }
             modules(
                 "java.instrument",
                 "java.management",
@@ -1157,7 +1245,7 @@ compose.desktop {
             )
             macOS {
                 bundleID = "com.nuvio.media.desktop"
-                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon.icns"))
+                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.icns"))
                 infoPlist {
                     extraKeysRawXml = """
                         <key>CFBundleURLTypes</key>
@@ -1193,14 +1281,14 @@ compose.desktop {
                 }
             }
             windows {
-                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon.ico"))
+                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.ico"))
                 upgradeUuid = windowsMsiUpgradeUuid
                 shortcut = true
                 menu = true
                 menuGroup = "Nuvio"
             }
             linux {
-                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon.png"))
+                iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.png"))
             }
         }
 
@@ -1330,6 +1418,7 @@ if (isMacHost) {
         finalDmgName.set("Nuvio-macOS-$macosDmgArchName-$desktopReleaseVersionName.dmg")
         defaultDmgName.set("Nuvio-$desktopReleasePackageVersion.dmg")
         keychainProfile.set(macosNotaryKeychainProfile.orEmpty())
+        keychainPath.set(macosNotaryKeychainPath.orEmpty())
         signingIdentity.set(macosSigningIdentity.orEmpty())
     }
 }

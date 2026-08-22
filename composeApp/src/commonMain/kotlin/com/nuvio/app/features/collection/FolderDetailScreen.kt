@@ -64,8 +64,10 @@ import com.nuvio.app.features.home.PosterShape
 import com.nuvio.app.features.home.canOpenCatalog
 import com.nuvio.app.features.home.stableKey
 import com.nuvio.app.features.home.components.HomeCatalogRowSection
+import com.nuvio.app.features.home.components.HomePosterHoverPreview
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watching.application.WatchingState
+import com.nuvio.app.navigation.LocalUseNativeNavigation
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
@@ -89,6 +91,7 @@ fun FolderDetailScreen(
         WatchedRepository.uiState
     }.collectAsState()
     val folder = uiState.folder
+    val useNativeNavigation = LocalUseNativeNavigation.current
     val coverImageUrl = folder?.coverImageUrl?.takeIf { it.isNotBlank() }
     val density = LocalDensity.current
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -144,13 +147,15 @@ fun FolderDetailScreen(
             )
         }
 
-        NuvioScreenHeader(
-            title = folder?.title ?: uiState.collectionTitle,
-            modifier = Modifier.padding(horizontal = 16.dp),
-            includeStatusBarPadding = coverImageUrl == null,
-            topPadding = if (coverImageUrl != null) statusBarTop * heroCollapseFraction else null,
-            onBack = onBack,
-        )
+        if (!useNativeNavigation) {
+            NuvioScreenHeader(
+                title = folder?.title ?: uiState.collectionTitle,
+                modifier = Modifier.padding(horizontal = 16.dp),
+                includeStatusBarPadding = coverImageUrl == null,
+                topPadding = if (coverImageUrl != null) statusBarTop * heroCollapseFraction else null,
+                onBack = onBack,
+            )
+        }
 
         if (folder == null && !uiState.isLoading) {
             Box(
@@ -294,17 +299,26 @@ private fun TabbedGridContent(
                                 key = { item -> item.lazyKey },
                             ) { keyedItem ->
                                 val item = keyedItem.value
-                                NuvioPosterCard(
-                                    title = item.name,
-                                    imageUrl = item.poster,
-                                    shape = NuvioPosterShape.Poster,
-                                    detailLine = item.releaseInfo,
-                                    isWatched = WatchingState.isPosterWatched(
-                                        watchedKeys = watchedKeys,
-                                        item = item,
-                                    ),
-                                    onClick = { onPosterClick(item) },
+                                val isWatched = WatchingState.isPosterWatched(
+                                    watchedKeys = watchedKeys,
+                                    item = item,
                                 )
+                                HomePosterHoverPreview(
+                                    item = item,
+                                    isWatched = isWatched,
+                                    onClick = { onPosterClick(item) },
+                                    onLongClick = null,
+                                ) {
+                                    NuvioPosterCard(
+                                        title = item.name,
+                                        imageUrl = item.poster,
+                                        modifier = it,
+                                        shape = NuvioPosterShape.Poster,
+                                        detailLine = item.releaseInfo,
+                                        isWatched = isWatched,
+                                        onClick = { onPosterClick(item) },
+                                    )
+                                }
                             }
 
                             if (uiState.selectedTabIsLoadingMore) {
