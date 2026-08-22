@@ -1,6 +1,10 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.nuvio.app.features.clip.ClipRepository
+import com.nuvio.app.features.clip.ClipStatus
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -162,6 +166,21 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             )
         else -> ""
     }
+    val clipJob by ClipRepository.activeJob.collectAsState()
+    val clipStatusKind = when (clipJob?.status) {
+        ClipStatus.Running -> "running"
+        ClipStatus.Completed -> "done"
+        ClipStatus.Failed -> "error"
+        ClipStatus.Cancelled -> "cancelled"
+        null -> ""
+    }
+    val clipStatusMessage = when (clipJob?.status) {
+        ClipStatus.Running -> "Exporting ${((clipJob?.progress ?: 0f) * 100).toInt()}%"
+        ClipStatus.Completed -> "Saved to your Clips folder"
+        ClipStatus.Failed -> clipJob?.errorMessage ?: "Clip failed"
+        ClipStatus.Cancelled -> "Clip cancelled"
+        null -> ""
+    }
     val playerControlsState = PlayerControlsState(
         title = title,
         episodeText = episodeText,
@@ -264,6 +283,11 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             playerSettingsUiState.introSubmitEnabled &&
             playerSettingsUiState.introDbApiKey.isNotBlank() &&
             !activeSubmitIntroImdbId().isNullOrBlank(),
+        showClip = ClipRepository.isSupported,
+        clipRunning = clipJob?.status == ClipStatus.Running,
+        clipProgress = clipJob?.progress ?: 0f,
+        clipStatusMessage = clipStatusMessage,
+        clipStatusKind = clipStatusKind,
         showVideoSettings = isIos,
         showSources = activeVideoId != null,
         showEpisodes = isSeries,
@@ -637,6 +661,18 @@ private fun PlayerScreenRuntime.handlePlayerControlsAction(action: PlayerControl
     return true
 }
 
+private fun PlayerScreenRuntime.buildClipTitleForPlayer(): String = buildString {
+    append(title)
+    val season = activeSeasonNumber
+    val episode = activeEpisodeNumber
+    if (isSeries && season != null && episode != null) {
+        append(" S")
+        append(season.toString().padStart(2, '0'))
+        append("E")
+        append(episode.toString().padStart(2, '0'))
+    }
+}
+
 private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: Double): Boolean {
     if (type.shouldLogPlayerControlsEvent()) {
         playerControlsLog.d { "event type=$type value=$value ${playerControlLogContext()}" }
@@ -713,6 +749,28 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
             submitIntroStatusMessage = null
         }
         "submitIntroCommit" -> submitIntroFromPlayerControls()
+        "clipStart" -> {
+            clipStartMs = value.takeIf { it.isFinite() && it >= 0.0 }?.let { (it * 1000).toLong() }
+        }
+        "clipEnd" -> {
+            clipEndMs = value.takeIf { it.isFinite() && it >= 0.0 }?.let { (it * 1000).toLong() }
+        }
+        "clipExport" -> {
+            val start = clipStartMs
+            val end = clipEndMs
+            if (start != null && end != null && end > start) {
+                ClipRepository.startClip(
+                    sourceUrl = activeSourceUrl,
+                    sourceHeaders = activeSourceHeaders,
+                    title = buildClipTitleForPlayer(),
+                    startMs = start,
+                    endMs = end,
+                )
+            }
+        }
+        "clipCancel" -> ClipRepository.cancel()
+        "clipDismiss" -> ClipRepository.dismiss()
+        "clipReveal" -> ClipRepository.revealOutput()
         "skipInterval" -> {
             val interval = activeSkipInterval ?: return true
             playerController?.seekTo((interval.endTime * 1000).toLong())

@@ -165,6 +165,11 @@ internal class PlayerScreenRuntime(
     var submitIntroEndTimeSec by mutableStateOf<Double?>(0.0)
     var isSubmitIntroSubmitting by mutableStateOf(false)
     var submitIntroStatusMessage by mutableStateOf<String?>(null)
+
+    // Clip In/Out points (desktop clip feature), set from the webview controls
+    // before an export command is issued.
+    var clipStartMs: Long? = null
+    var clipEndMs: Long? = null
     var playerControlsPendingP2pSwitch by mutableStateOf<PendingPlayerP2pSwitch?>(null)
     var playerControlsCloseModalsToken by mutableStateOf(0L)
     var episodeStreamsPanelState by mutableStateOf(EpisodeStreamsPanelState())
