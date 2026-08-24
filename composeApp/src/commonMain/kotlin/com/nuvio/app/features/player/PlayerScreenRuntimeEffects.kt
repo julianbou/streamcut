@@ -3,8 +3,10 @@ package com.nuvio.app.features.player
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
+import com.nuvio.app.features.p2p.P2pStreamLease
 import com.nuvio.app.features.p2p.P2pStreamRequest
 import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.p2p.P2pStreamingState
@@ -296,10 +298,16 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         }
     }
 
+    // Leaving the player no longer shuts the P2P engine down outright: a clip
+    // cut from a torrent reads the same local stream after the player is gone,
+    // and holds a lease of its own until it finishes. The engine stops once the
+    // last holder -- usually this screen -- lets go.
+    val p2pLeaseToken = remember { P2pStreamLease.newToken("player") }
     DisposableEffect(Unit) {
+        P2pStreamLease.retain(p2pLeaseToken)
         onDispose {
             playerController?.clearNowPlayingInfo()
-            P2pStreamingEngine.shutdown()
+            P2pStreamLease.release(p2pLeaseToken)
             PlayerStreamsRepository.clearAll()
         }
     }

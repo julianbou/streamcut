@@ -8,6 +8,7 @@ import com.nuvio.app.features.player.PlayerControlFilterItem
 import com.nuvio.app.features.player.PlayerControlSeasonItem
 import com.nuvio.app.features.player.PlayerControlSourceItem
 import com.nuvio.app.features.player.PlayerControlSubtitleCueItem
+import com.nuvio.app.features.player.PlayerClipJobItem
 import com.nuvio.app.features.player.PlayerClipLibraryItem
 import com.nuvio.app.features.player.PlayerControlSubtitleLanguageItem
 import com.nuvio.app.features.player.PlayerControlSubtitleOptionItem
@@ -1031,6 +1032,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("clipOutputDir", clipOutputDir)
         append(',')
+        appendJsonArrayField("clipJobs", clipJobs) { appendClipJobItemJson(it) }
+        append(',')
         appendJsonArrayField("clipLibrary", clipLibrary) { appendClipLibraryItemJson(it) }
         append(',')
         appendJsonField("showP2pConsent", showP2pConsent)
@@ -1234,6 +1237,24 @@ private fun StringBuilder.appendAddonSubtitleItemJson(item: PlayerControlAddonSu
     appendJsonField("addonName", item.addonName)
     append(',')
     appendJsonField("isSelected", item.isSelected)
+    append('}')
+}
+
+private fun StringBuilder.appendClipJobItemJson(item: PlayerClipJobItem) {
+    append('{')
+    appendJsonField("rangeLabel", item.rangeLabel)
+    append(',')
+    appendJsonField("durationLabel", item.durationLabel)
+    append(',')
+    appendJsonField("statusKind", item.statusKind)
+    append(',')
+    appendJsonField("statusMessage", item.statusMessage)
+    append(',')
+    appendJsonField("progress", item.progress)
+    append(',')
+    appendJsonField("isActive", item.isActive)
+    append(',')
+    appendJsonField("canReveal", item.canReveal)
     append('}')
 }
 

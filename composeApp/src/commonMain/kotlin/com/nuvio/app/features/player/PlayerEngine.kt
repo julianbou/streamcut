@@ -206,6 +206,7 @@ data class PlayerControlsState(
     val clipStatusMessage: String = "",
     val clipStatusKind: String = "",
     val clipOutputDir: String = "",
+    val clipJobs: List<PlayerClipJobItem> = emptyList(),
     val clipLibrary: List<PlayerClipLibraryItem> = emptyList(),
     val showP2pConsent: Boolean = false,
     val subtitleActiveTab: String = "BuiltIn",
@@ -367,6 +368,22 @@ expect fun PlatformPlayerSurface(
     onControllerReady: (PlayerEngineController) -> Unit,
     onSnapshot: (PlayerPlaybackSnapshot) -> Unit,
     onError: (String?) -> Unit,
+)
+
+/**
+ * One in-flight or just-finished export, as shown in the player's exports list.
+ *
+ * Several can be live at once -- marking a new range never waits on the
+ * previous export -- so each row carries its own status and progress.
+ */
+data class PlayerClipJobItem(
+    val rangeLabel: String,
+    val durationLabel: String,
+    val statusKind: String,
+    val statusMessage: String,
+    val progress: Float,
+    val isActive: Boolean,
+    val canReveal: Boolean,
 )
 
 /**

@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.nuvio.app.features.clip.ClipContentRef
+import com.nuvio.app.features.clip.ClipJob
 import com.nuvio.app.features.clip.ClipLibrary
 import com.nuvio.app.features.clip.ClipRepository
 import com.nuvio.app.features.clip.ClipStatus
@@ -222,28 +223,19 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
     }
     LaunchedEffect(Unit) { ClipLibrary.ensureLoaded() }
     val clipContent = buildClipContentRef()
-    val clipJobs by ClipRepository.jobs.collectAsState()
-    // Only this title's job is ever rendered, so an export running on another
+    val allClipJobs by ClipRepository.jobs.collectAsState()
+    // Only this title's jobs are ever rendered, so an export running on another
     // movie cannot show its progress or its "saved" notice here.
-    val clipJob = clipJobs[clipContent.key]
+    val clipJobsForThisContent = remember(allClipJobs, clipContent.key) {
+        allClipJobs.filter { it.contentKey == clipContent.key }
+    }
     val clipLibraryEntries by ClipLibrary.entries.collectAsState()
     val clipsForThisContent = remember(clipLibraryEntries, clipContent.key) {
         clipLibraryEntries.filter { it.contentKey == clipContent.key }
     }
-    val clipStatusKind = when (clipJob?.status) {
-        ClipStatus.Running -> "running"
-        ClipStatus.Completed -> "done"
-        ClipStatus.Failed -> "error"
-        ClipStatus.Cancelled -> "cancelled"
-        null -> ""
-    }
     val clipOutputDirLabel = remember(clipLibraryEntries) { ClipRepository.outputDirPath() }
-    val clipStatusMessage = when (clipJob?.status) {
-        ClipStatus.Running -> "Exporting ${((clipJob?.progress ?: 0f) * 100).toInt()}%"
-        ClipStatus.Completed -> "Saved to ${clipOutputDirLabel.clipFolderDisplayName()}"
-        ClipStatus.Failed -> clipJob?.errorMessage ?: "Clip failed"
-        ClipStatus.Cancelled -> "Clip cancelled"
-        null -> ""
+    val clipSummary = remember(clipJobsForThisContent, clipOutputDirLabel) {
+        summarizeClipJobs(clipJobsForThisContent, clipOutputDirLabel)
     }
     val playerControlsState = PlayerControlsState(
         title = title,
@@ -361,11 +353,23 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
             playerSettingsUiState.introDbApiKey.isNotBlank() &&
             !activeSubmitIntroImdbId().isNullOrBlank(),
         showClip = ClipRepository.isSupported,
-        clipRunning = clipJob?.status == ClipStatus.Running,
-        clipProgress = clipJob?.progress ?: 0f,
-        clipStatusMessage = clipStatusMessage,
-        clipStatusKind = clipStatusKind,
+        clipRunning = clipSummary.isRunning,
+        clipProgress = clipSummary.progress,
+        clipStatusMessage = clipSummary.message,
+        clipStatusKind = clipSummary.kind,
         clipOutputDir = clipOutputDirLabel,
+        // Newest first, matching the order the chrome sends indexes back in.
+        clipJobs = clipJobsForThisContent.map { job ->
+            PlayerClipJobItem(
+                rangeLabel = formatClipRangeLabel(job.startMs, job.endMs),
+                durationLabel = formatClipDurationLabel(job.durationMs),
+                statusKind = job.status.controlsStatusKind(),
+                statusMessage = job.controlsStatusMessage(clipOutputDirLabel),
+                progress = job.progress,
+                isActive = job.status == ClipStatus.Running || job.status == ClipStatus.Queued,
+                canReveal = job.status == ClipStatus.Completed,
+            )
+        },
         clipLibrary = clipsForThisContent.map { entry ->
             PlayerClipLibraryItem(
                 id = entry.id,
@@ -784,6 +788,77 @@ private fun PlayerScreenRuntime.handlePlayerControlsAction(action: PlayerControl
 private fun String.clipFolderDisplayName(): String =
     trimEnd('/', '\\').substringAfterLast('/').substringAfterLast('\\').ifBlank { "your clips folder" }
 
+/** Row-level status kind the player chrome styles each export row on. */
+private fun ClipStatus.controlsStatusKind(): String = when (this) {
+    ClipStatus.Queued -> "queued"
+    ClipStatus.Running -> "running"
+    ClipStatus.Completed -> "done"
+    ClipStatus.Failed -> "error"
+    ClipStatus.Cancelled -> "cancelled"
+}
+
+private fun ClipJob.controlsStatusMessage(outputDir: String): String = when (status) {
+    ClipStatus.Queued -> "Waiting"
+    ClipStatus.Running -> "Exporting ${(progress * 100).toInt()}%"
+    ClipStatus.Completed -> "Saved to ${outputDir.clipFolderDisplayName()}"
+    ClipStatus.Failed -> errorMessage ?: "Clip failed"
+    ClipStatus.Cancelled -> "Clip cancelled"
+}
+
+/** The one-line status in the clip row, collapsed from any number of jobs. */
+private data class ClipJobsSummary(
+    val isRunning: Boolean,
+    val progress: Float,
+    val message: String,
+    val kind: String,
+) {
+    companion object {
+        val Idle = ClipJobsSummary(isRunning = false, progress = 0f, message = "", kind = "")
+    }
+}
+
+/**
+ * Collapses one title's jobs into the row status. A single export reads exactly
+ * as it did when only one could run; several report the batch, with the detail
+ * per clip left to the exports panel.
+ */
+private fun summarizeClipJobs(jobs: List<ClipJob>, outputDir: String): ClipJobsSummary {
+    val running = jobs.filter { it.status == ClipStatus.Running }
+    val active = running.size + jobs.count { it.status == ClipStatus.Queued }
+    if (active > 0) {
+        val progress = if (running.isEmpty()) 0f else running.map { it.progress }.average().toFloat()
+        val percent = (progress * 100).toInt()
+        return ClipJobsSummary(
+            isRunning = true,
+            progress = progress,
+            message = if (active == 1) "Exporting $percent%" else "Exporting $active clips - $percent%",
+            kind = "running",
+        )
+    }
+    // Nothing in flight, so the newest settled job is the notice worth showing.
+    val latest = jobs.firstOrNull() ?: return ClipJobsSummary.Idle
+    return ClipJobsSummary(
+        isRunning = false,
+        progress = 0f,
+        message = latest.controlsStatusMessage(outputDir),
+        kind = latest.status.controlsStatusKind(),
+    )
+}
+
+/** Resolves an export-list index sent by the player chrome to a job id. */
+private fun PlayerScreenRuntime.clipJobIdAt(value: Double): String {
+    val index = value.takeIf { it.isFinite() && it >= 0.0 }?.toInt() ?: return ""
+    return ClipRepository.jobsFor(buildClipContentRef().key).getOrNull(index)?.id.orEmpty()
+}
+
+/**
+ * The stream a clip is cut from. Torrent playback runs through the local P2P
+ * server, and its URL is the only one ffmpeg can read -- the magnet the source
+ * list carries is not a media file.
+ */
+private fun PlayerScreenRuntime.clipSourceUrl(): String =
+    if (activeTorrentInfoHash != null) p2pResolvedSourceUrl.orEmpty() else activeSourceUrl
+
 /** Resolves a clip-list index sent by the player chrome to a library id. */
 private fun PlayerScreenRuntime.clipLibraryIdAt(value: Double): String {
     val index = value.takeIf { it.isFinite() && it >= 0.0 }?.toInt() ?: return ""
@@ -922,17 +997,21 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
             val end = clipEndMs
             if (start != null && end != null && end > start) {
                 ClipRepository.startClip(
-                    sourceUrl = activeSourceUrl,
+                    sourceUrl = clipSourceUrl(),
                     sourceHeaders = activeSourceHeaders,
                     content = buildClipContentRef(),
                     startMs = start,
                     endMs = end,
+                    retainsP2pStream = activeTorrentInfoHash != null,
                 )
             }
         }
-        "clipCancel" -> ClipRepository.cancel(buildClipContentRef().key)
-        "clipDismiss" -> ClipRepository.dismiss(buildClipContentRef().key)
-        "clipReveal" -> ClipRepository.revealOutput(buildClipContentRef().key)
+        // The index is the address, the same way the clip library rows work:
+        // Kotlin resolves it against the per-title, newest-first job list it
+        // just sent, so job ids stay out of the DOM.
+        "clipCancel" -> ClipRepository.cancel(clipJobIdAt(value))
+        "clipDismiss" -> ClipRepository.dismiss(clipJobIdAt(value))
+        "clipReveal" -> ClipRepository.revealOutput(clipJobIdAt(value))
         "clipLibraryOpen" -> ClipLibrary.open(clipLibraryIdAt(value))
         "clipLibraryReveal" -> ClipLibrary.reveal(clipLibraryIdAt(value))
         "clipLibraryDelete" -> ClipLibrary.delete(clipLibraryIdAt(value))

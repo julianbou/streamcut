@@ -5,12 +5,13 @@ import kotlinx.serialization.Serializable
 /**
  * Lifecycle of a single clip-extraction job.
  *
- * Kept intentionally small: a clip is produced by seeking into an
- * already-resolved stream URL and re-encoding the selected range to disk, so
- * there is no separate "queued" vs "downloading" distinction like the full
- * downloads feature has.
+ * A clip is produced by seeking into an already-resolved stream URL and
+ * re-encoding the selected range to disk. Several clips can be marked in a row
+ * without waiting for the previous export, so a job starts [Queued] and becomes
+ * [Running] once [ClipRepository] has a free encoding slot.
  */
 enum class ClipStatus {
+    Queued,
     Running,
     Completed,
     Failed,
@@ -21,7 +22,7 @@ enum class ClipStatus {
  * Identifies the movie or episode a clip was cut from.
  *
  * Every job and every saved clip carries one, which is what keeps export
- * progress from leaking across titles: the player renders only the job whose
+ * progress from leaking across titles: the player renders only the jobs whose
  * key matches what is currently on screen, and the clip library groups by it.
  *
  * [videoId] is the catalog id (`tt1234567`, or `tt1234567:1:2` for episodes)
@@ -64,6 +65,8 @@ data class ClipContentRef(
 /**
  * Snapshot of an in-flight or finished clip, observed by the player UI.
  *
+ * [id] is the job's identity for its whole life: every clip started gets its
+ * own, so a second export on a title never disturbs the first.
  * [startMs]/[endMs] are positions in the source timeline (milliseconds).
  * [progress] is 0f..1f, derived from ffmpeg's reported output time.
  */
