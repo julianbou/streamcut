@@ -55,6 +55,9 @@ object ClipLibrary {
         ensureLoaded()
         val entry = _entries.value.firstOrNull { it.id == id } ?: return
         ClipExtractor.deleteFile(entry.outputFileUri)
+        // The still is a cache entry keyed by the clip's path, so leaving it
+        // behind would hand the next clip written to that path the wrong picture.
+        if (entry.thumbnailUri.isNotBlank()) ClipExtractor.deleteFile(entry.thumbnailUri)
         _entries.value = _entries.value.filterNot { it.id == id }
         persist()
     }

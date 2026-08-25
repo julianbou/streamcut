@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,7 +62,10 @@ internal fun HomeClipsSection(
     // library is empty until it is read back from disk.
     LaunchedEffect(Unit) { ClipLibrary.ensureLoaded() }
     val entries by ClipLibrary.entries.collectAsStateWithLifecycle()
-    if (entries.isEmpty()) return
+    if (entries.isEmpty()) {
+        ClipsEmptyState(sectionPadding = sectionPadding, modifier = modifier)
+        return
+    }
 
     var pendingAction by remember { mutableStateOf<ClipEntry?>(null) }
     var pendingDelete by remember { mutableStateOf<ClipEntry?>(null) }
@@ -112,8 +116,9 @@ internal fun HomeClipsSection(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("Delete this clip?") },
-            // Deletion removes the file from disk, not just the list, so say so.
-            text = { Text("${deleteTarget.fileName} will be permanently removed from your clips folder.") },
+            // Says where the file goes, because that is the difference between
+            // a mistake being recoverable and not.
+            text = { Text("${deleteTarget.fileName} will be moved to your system Trash.") },
             confirmButton = {
                 TextButton(onClick = {
                     ClipLibrary.delete(deleteTarget.id)
@@ -124,6 +129,65 @@ internal fun HomeClipsSection(
                 TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+/**
+ * What home shows before the first clip exists.
+ *
+ * The row used to delete itself when empty, so a first run gave no evidence the
+ * app clips anything at all -- the one moment a user most needs telling. This
+ * doubles as the onboarding: the three steps, and where the files will land.
+ */
+@Composable
+private fun ClipsEmptyState(
+    sectionPadding: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val outputDir = remember { ClipRepository.outputDirPath() }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = sectionPadding),
+    ) {
+        NuvioSectionLabel(text = "Your clips")
+        Spacer(modifier = Modifier.height(10.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+        ) {
+            Text(
+                text = "No clips yet",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            listOf(
+                "Find a title and start playing it",
+                "Press I and O to mark the in and out points",
+                "Press X to export",
+            ).forEachIndexed { index, step ->
+                Text(
+                    text = "${index + 1}.  $step",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                    modifier = Modifier.padding(vertical = 2.dp),
+                )
+            }
+            if (outputDir.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Clips are saved to $outputDir",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -147,9 +211,14 @@ private fun ClipCard(
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.White.copy(alpha = 0.06f)),
         ) {
-            if (entry.content.posterUrl.isNotBlank()) {
+            // The clip's own midpoint frame, falling back to the title's poster
+            // for clips exported before stills were captured. The poster is a
+            // poor stand-in on purpose-only basis: two clips of one film are
+            // indistinguishable under it, which is the whole reason for the still.
+            val artwork = entry.thumbnailUri.ifBlank { entry.content.posterUrl }
+            if (artwork.isNotBlank()) {
                 NuvioAsyncImage(
-                    model = entry.content.posterUrl,
+                    model = artwork,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
@@ -183,11 +252,40 @@ private fun ClipCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+        // What decides whether a clip is usable: how big it came out, at what
+        // size, and -- the question actually being asked -- what it can be sent
+        // through. Absent for clips exported before any of it was captured.
+        val fits = entry.fitsLabels
+        if (fits.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                fits.forEach { target ->
+                    Text(
+                        text = target,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color.White.copy(alpha = 0.09f))
+                            .padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
-private fun clipSubtitle(entry: ClipEntry): String =
-    "${formatClipClockLabel(entry.startMs)} - ${formatClipClockLabel(entry.endMs)}"
+/**
+ * The line under a clip's title: where it came from in the film, then what it
+ * is. Facts that were not captured are dropped rather than shown as blanks --
+ * every clip exported before Phase 5 has none of them.
+ */
+private fun clipSubtitle(entry: ClipEntry): String = listOf(
+    "${formatClipClockLabel(entry.startMs)} - ${formatClipClockLabel(entry.endMs)}",
+    entry.resolutionLabel,
+    entry.fileSizeLabel,
+).filter { it.isNotBlank() }.joinToString(" \u00b7 ")
 
 private fun formatClipLength(durationMs: Long): String {
     val tenths = (durationMs.coerceAtLeast(0L) + 50) / 100

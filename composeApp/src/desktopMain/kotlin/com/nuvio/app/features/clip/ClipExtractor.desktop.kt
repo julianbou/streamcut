@@ -9,6 +9,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.awt.Desktop
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -134,7 +135,7 @@ internal actual object ClipExtractor {
                 if (!succeeded) error(lastError ?: "Clip export failed")
 
                 onProgress(1f)
-                onSuccess(ClipOutput(fileUri = outFile.toURI().toString(), fileName = outFile.name))
+                onSuccess(describeOutput(ffmpeg, outFile, durationSec))
             } catch (cancel: CancellationException) {
                 processRef.get()?.destroyForcibly()
                 throw cancel
@@ -247,8 +248,25 @@ internal actual object ClipExtractor {
     actual fun exists(outputFileUri: String): Boolean =
         fileFor(outputFileUri)?.exists() == true
 
+    /**
+     * Sends a clip to the system trash, falling back to an outright delete only
+     * where the platform has no trash to send it to.
+     *
+     * Clips are minutes of hunting each and the delete button sits next to the
+     * others on a card; the wrong one gets clicked eventually, and unlinking the
+     * file would make that unrecoverable. The trash is the undo.
+     */
     actual fun deleteFile(outputFileUri: String) {
-        runCatching { fileFor(outputFileUri)?.delete() }
+        runCatching {
+            val file = fileFor(outputFileUri) ?: return
+            if (!file.exists()) return
+            val desktop = if (Desktop.isDesktopSupported()) Desktop.getDesktop() else null
+            if (desktop != null && desktop.isSupported(Desktop.Action.MOVE_TO_TRASH)) {
+                if (desktop.moveToTrash(file)) return
+                log.w { "moveToTrash refused ${file.name}; deleting outright" }
+            }
+            file.delete()
+        }
     }
 
     actual fun outputDirPath(): String = runCatching { clipsDir.absolutePath }.getOrDefault("")
@@ -454,6 +472,96 @@ internal actual object ClipExtractor {
             "format=yuv420p",
         ).joinToString(",")
     }
+
+    /**
+     * Describes the finished clip: a still from its midpoint, its size on disk,
+     * and the dimensions it actually came out at.
+     *
+     * Everything is read from the local output rather than the source. That
+     * costs no network, it is fast because the file is small and local, and the
+     * still is the honest one -- already tonemapped, cropped and subtitled, so
+     * the card shows what the clip really looks like.
+     *
+     * Best-effort throughout: a clip with no still is still a clip, so nothing
+     * here is allowed to fail an export that already succeeded.
+     */
+    private fun describeOutput(ffmpeg: String, outFile: File, durationSec: Double): ClipOutput {
+        val dimensions = runCatching {
+            val args = listOf(
+                ffprobePath(ffmpeg), "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "default=noprint_wrappers=1",
+                outFile.absolutePath,
+            )
+            val process = ProcessBuilder(args).redirectErrorStream(false).start()
+            val output = process.inputStream.bufferedReader().readText()
+            if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return@runCatching 0 to 0
+            }
+            val fields = output.lineSequence().mapNotNull { line ->
+                val separator = line.indexOf('=')
+                if (separator <= 0) null else line.substring(0, separator).trim() to
+                    line.substring(separator + 1).trim()
+            }.toMap()
+            (fields["width"]?.toIntOrNull() ?: 0) to (fields["height"]?.toIntOrNull() ?: 0)
+        }.getOrElse { 0 to 0 }
+
+        return ClipOutput(
+            fileUri = outFile.toURI().toString(),
+            fileName = outFile.name,
+            thumbnailUri = captureThumbnail(ffmpeg, outFile, durationSec),
+            fileSizeBytes = runCatching { outFile.length() }.getOrDefault(0L),
+            width = dimensions.first,
+            height = dimensions.second,
+        )
+    }
+
+    /**
+     * Grabs a still from the middle of [outFile], or "" if it cannot.
+     *
+     * The midpoint rather than the first frame: clips often start on a cut, and
+     * a black frame tells you nothing about which clip this is -- which is the
+     * entire job of the picture on the card.
+     *
+     * Stills go to the cache directory, not next to the clips. They are
+     * regenerable, and the clips folder is somewhere the user opens and shares.
+     */
+    private fun captureThumbnail(ffmpeg: String, outFile: File, durationSec: Double): String =
+        runCatching {
+            val target = File(thumbnailDir, "${thumbnailStem(outFile)}.jpg")
+            val args = listOf(
+                ffmpeg, "-hide_banner", "-nostdin",
+                "-ss", formatSeconds(durationSec / 2.0),
+                "-i", outFile.absolutePath,
+                "-frames:v", "1",
+                // -2 keeps the height even without needing to know the aspect,
+                // which a shape crop has already changed.
+                "-vf", "scale=480:-2",
+                "-q:v", "4",
+                "-y", target.absolutePath,
+            )
+            val process = ProcessBuilder(args).redirectErrorStream(true).start()
+            // Drained, not ignored: a full pipe buffer would deadlock the wait.
+            process.inputStream.bufferedReader().readText()
+            if (!process.waitFor(30, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return@runCatching ""
+            }
+            if (target.exists() && target.length() > 0L) target.toURI().toString() else ""
+        }.getOrDefault("")
+
+    private val thumbnailDir: File
+        get() = File(DesktopStorage.cacheDir.resolve("clip-thumbs").also { it.createDirectories() }.toUri())
+
+    /**
+     * Stable per output path, so re-exporting to the same file replaces its
+     * still instead of leaving the old one orphaned. Hashed because a clip file
+     * name carries a title, and titles carry characters a path should not.
+     */
+    private fun thumbnailStem(outFile: File): String =
+        Integer.toHexString(outFile.absolutePath.hashCode())
 
     /**
      * Centre-crop to [aspect], or null to leave the frame alone.

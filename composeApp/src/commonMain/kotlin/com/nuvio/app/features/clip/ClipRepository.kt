@@ -230,6 +230,10 @@ object ClipRepository {
                             outputFileUri = output.fileUri,
                             fileName = output.fileName,
                             createdAtEpochMs = ClipClock.nowEpochMs(),
+                            thumbnailUri = output.thumbnailUri,
+                            fileSizeBytes = output.fileSizeBytes,
+                            width = output.width,
+                            height = output.height,
                         ),
                     )
                     trimFinished(job.contentKey)

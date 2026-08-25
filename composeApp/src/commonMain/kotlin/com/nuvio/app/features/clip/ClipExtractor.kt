@@ -33,10 +33,22 @@ internal interface ClipTaskHandle {
     fun cancel()
 }
 
-/** Where a finished clip landed, so the library can index it. */
+/**
+ * Where a finished clip landed, and what it turned out to be.
+ *
+ * [thumbnailUri] is a still from the middle of the clip; [width]/[height] are
+ * the clip's own dimensions, which stop matching the source's as soon as a
+ * shape crop is involved. All of it is read off the finished local file rather
+ * than the source -- no second network read, and the still shows what is really
+ * in the clip, tonemapped and cropped and subtitled.
+ */
 internal data class ClipOutput(
     val fileUri: String,
     val fileName: String,
+    val thumbnailUri: String = "",
+    val fileSizeBytes: Long = 0L,
+    val width: Int = 0,
+    val height: Int = 0,
 )
 
 /**

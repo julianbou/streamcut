@@ -142,7 +142,59 @@ data class ClipEntry(
     val outputFileUri: String,
     val fileName: String,
     val createdAtEpochMs: Long,
+    // Everything below defaults, so a library persisted before these existed
+    // still decodes instead of coming back empty on upgrade. A clip from then
+    // simply has no still and no size until it is exported again.
+    val thumbnailUri: String = "",
+    val fileSizeBytes: Long = 0L,
+    val width: Int = 0,
+    val height: Int = 0,
 ) {
     val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0L)
     val contentKey: String get() = content.key
+
+    /** e.g. `1080p`, or blank when the clip predates dimension capture. */
+    val resolutionLabel: String
+        get() = if (width <= 0 || height <= 0) "" else "${height}p"
+
+    /** e.g. `24.3 MB`, blank when unknown. Decimal MB, as the file manager counts. */
+    val fileSizeLabel: String
+        get() = when {
+            fileSizeBytes <= 0L -> ""
+            fileSizeBytes < 1_000_000L -> "${(fileSizeBytes / 1_000L).coerceAtLeast(1L)} KB"
+            fileSizeBytes < 1_000_000_000L -> {
+                val tenths = (fileSizeBytes / 100_000L)
+                "${tenths / 10}.${tenths % 10} MB"
+            }
+            else -> {
+                val tenths = (fileSizeBytes / 100_000_000L)
+                "${tenths / 10}.${tenths % 10} GB"
+            }
+        }
+
+    /**
+     * Share targets this clip already fits, largest first.
+     *
+     * The question a clip card has to answer is not "how big is it" but "can I
+     * send it", and the limits are not memorable.
+     */
+    val fitsLabels: List<String>
+        get() {
+            if (fileSizeBytes <= 0L) return emptyList()
+            return CLIP_SHARE_LIMITS.filter { fileSizeBytes <= it.second }.map { it.first }
+        }
 }
+
+/**
+ * Attachment ceilings, smallest first. Free tiers, since those are the ones
+ * that bite.
+ *
+ * Deliberately a file-level constant and not a companion object: adding a
+ * companion to a @Serializable class is where the generated serializer lives,
+ * and it is not worth the risk for a lookup table.
+ */
+private val CLIP_SHARE_LIMITS = listOf(
+    "Discord" to 10_000_000L,
+    "WhatsApp" to 16_000_000L,
+    "X" to 512_000_000L,
+)
