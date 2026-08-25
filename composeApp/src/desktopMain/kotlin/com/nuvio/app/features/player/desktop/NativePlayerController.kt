@@ -2,6 +2,7 @@ package com.nuvio.app.features.player.desktop
 
 import androidx.compose.ui.graphics.Color
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
 import com.nuvio.app.features.player.PlayerControlEpisodeItem
 import com.nuvio.app.features.player.PlayerControlFilterItem
@@ -933,6 +934,11 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         appendJsonField("isLoading", isLoading)
         append(',')
         appendJsonField("controlsVisible", controlsVisible)
+        append(',')
+        // Build-time, not per-frame state, so it is read off the policy object here
+        // instead of riding on PlayerControlsState -- that keeps the clipper out of
+        // upstream's data class entirely.
+        appendJsonField("viewingChromeEnabled", AppFeaturePolicy.viewingChromeEnabled)
         append(',')
         appendJsonArrayField("parentalWarnings", parentalWarnings) { appendParentalWarningJson(it) }
         append(',')

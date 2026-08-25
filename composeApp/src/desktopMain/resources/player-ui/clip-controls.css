@@ -384,3 +384,40 @@
   padding: 2px 8px;
   font-size: 11px;
 }
+
+/* --- clipper mode: viewing chrome off -------------------------------------
+ *
+ * `body.clipper-mode` is set from clip-controls.js off AppFeaturePolicy's
+ * viewingChromeEnabled. Everything below exists to make watching comfortable
+ * and gets in the way of cutting, so it is hidden rather than deleted -- the
+ * markup stays untouched and merges from upstream keep applying.
+ *
+ * !important throughout: controls.js drives most of these with inline styles
+ * and the `hidden` attribute, so the gate has to outrank it.
+ */
+
+/* Pausing is how you inspect a frame -- nothing may cover one. */
+body.clipper-mode #pauseMetadataOverlay { display: none !important; }
+
+/* Anything that advances or relocates playback on its own destroys a trim.
+ * The Kotlin side already refuses to act on these (PlayerScreenRuntimeEffects);
+ * this only makes sure the affordances never appear. */
+body.clipper-mode #skipPrompt,
+body.clipper-mode #nextEpisodeCard,
+body.clipper-mode #nextEpisodeButton { display: none !important; }
+
+/* Time-to-first-frame is the only thing that matters when opening a source, so
+ * the cinematic backdrop and logo-fill animation go; the spinner, status line
+ * and progress bar stay. */
+body.clipper-mode #openingArtwork,
+body.clipper-mode #openingLogoSlot { display: none !important; }
+
+/* Crowdsourced intro timestamps, content warnings, and the subtitle styling
+ * panel are all viewing-side concerns. */
+body.clipper-mode #submitIntroButton,
+body.clipper-mode #parentalGuide,
+body.clipper-mode #subtitleStyleRail { display: none !important; }
+
+/* "Fit" changes what you see but not what you export, which is actively
+ * misleading when the frame is the deliverable. */
+body.clipper-mode .action-pill .action[data-command="resize"] { display: none !important; }

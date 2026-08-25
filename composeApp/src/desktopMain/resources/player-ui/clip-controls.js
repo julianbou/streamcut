@@ -48,6 +48,22 @@ const clipLibraryPanel = document.getElementById("clipLibraryPanel");
 const clipLibraryList = document.getElementById("clipLibraryList");
 const clipLibraryPath = document.getElementById("clipLibraryPath");
 
+// --- clipper mode ---
+//
+// `viewingChromeEnabled` comes from AppFeaturePolicy, not from playback state, so
+// it never changes for the life of the window. Undefined means the field never
+// arrived (an older host, or the standalone browser harness) -- fall back to
+// upstream behaviour and leave the viewing chrome alone.
+const isClipperMode = () => state.viewingChromeEnabled === false;
+
+/**
+ * Keep the controls up while a trim is in progress.
+ *
+ * Marking in/out means staring at the timeline without moving the mouse, which
+ * is exactly what the idle timer reads as "user is watching, hide everything".
+ */
+const clipShouldPinChrome = () => Boolean(state.showClip) && clipHasRange();
+
 // --- trim draft state ---
 let clipDraft = { inMs: null, outMs: null };
 let clipDraftDurationMs = 0;
@@ -279,6 +295,7 @@ const renderClipLibrary = () => {
 };
 
 const renderClipUi = () => {
+  document.body.classList.toggle("clipper-mode", isClipperMode());
   const show = Boolean(state.showClip);
   const ready = show && clipDraftDurationMs > 0 && clipHasRange();
   setVisible(clipRow, show);
@@ -542,7 +559,11 @@ const clipSyncPlayback = (durationMs, positionMs) => {
 
 // controls.js reaches the clipper only through this namespace, so its call
 // sites stay safe regardless of script load order.
-window.clipUi = { render: renderClipUi, syncPlayback: clipSyncPlayback };
+window.clipUi = {
+  render: renderClipUi,
+  syncPlayback: clipSyncPlayback,
+  shouldPinChrome: clipShouldPinChrome,
+};
 
 // controls.js runs its initial render() before this file loads, so the clip row
 // needs one render of its own to show up on first paint.

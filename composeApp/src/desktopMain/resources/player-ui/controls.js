@@ -2054,6 +2054,7 @@ const noteCursorActivity = () => {
 };
 
 const hideChromeFromAutoTimer = () => {
+  if (window.clipUi?.shouldPinChrome()) return;
   if (!canAutoHideChrome(isOpeningOverlayActive())) return;
   state = { ...state, controlsVisible: false };
   renderChrome();

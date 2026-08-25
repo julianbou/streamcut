@@ -18,6 +18,17 @@ expect object AppFeaturePolicy {
     val externalPlayerSupported: Boolean
     val trailerPlaybackMode: TrailerPlaybackMode
     val heroTrailerPlaybackSupported: Boolean
+    /**
+     * Chrome that exists to make watching comfortable: the pause metadata card,
+     * the skip-intro and next-episode prompts, the opening logo animation, hero
+     * trailers and Continue Watching.
+     *
+     * The clipper build turns all of it off. Pausing is how you inspect a frame,
+     * so nothing may cover one; and anything that advances playback on its own
+     * destroys a trim in progress. It stays gated rather than deleted so merges
+     * from upstream keep applying to these files.
+     */
+    val viewingChromeEnabled: Boolean
     val inAppUpdaterEnabled: Boolean
     val imdbRatingLogoEnabled: Boolean
     val mediaPlaybackForegroundServiceEnabled: Boolean
