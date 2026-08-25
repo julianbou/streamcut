@@ -61,6 +61,46 @@
   background: var(--theme-accent);
 }
 
+/* Set-aside ranges, drawn under the active selection on both tracks. Dimmer
+   than the live one on purpose: they are decided, the bright bar is the one
+   still being argued with. */
+.clip-range-list {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.clip-range-item {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--theme-accent) 70%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--theme-accent) 70%, transparent);
+}
+
+.clip-range-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.clip-range-chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  color: rgba(255, 255, 255, .9);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.clip-range-chip:hover {
+  background: color-mix(in srgb, #ff5f5f 30%, transparent);
+  border-color: #ff5f5f;
+}
+
 /* Clip control row under the timeline */
 .clip-row {
   display: flex;

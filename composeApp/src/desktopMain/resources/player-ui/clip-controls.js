@@ -30,6 +30,10 @@ const clipRevealButton = document.getElementById("clipRevealButton");
 const clipDismissButton = document.getElementById("clipDismissButton");
 const clipSubsButton = document.getElementById("clipSubsButton");
 const clipPreviewButton = document.getElementById("clipPreviewButton");
+const clipAddRangeButton = document.getElementById("clipAddRangeButton");
+const clipRangeList = document.getElementById("clipRangeList");
+const clipZoomRangeList = document.getElementById("clipZoomRangeList");
+const clipRangeChips = document.getElementById("clipRangeChips");
 const clipExportButton = document.getElementById("clipExportButton");
 const clipNudgeRows = Array.from(document.querySelectorAll(".clip-nudge-row"));
 const clipZoomWrap = document.getElementById("clipZoomWrap");
@@ -73,7 +77,13 @@ const clipTimeFields = [
 ];
 
 // --- trim draft state ---
+//
+// One title, several clips. `clipDraft` is the pair being built right now;
+// `clipRanges` holds the ones already set aside. Scrubbing a film for the good
+// bits finds more than one of them, and the old single-draft model made you
+// export, wait, and re-find your place before you could mark the next.
 let clipDraft = { inMs: null, outMs: null };
+let clipRanges = [];
 let clipDraftDurationMs = 0;
 let clipDragTarget = null;
 let clipPreviewActive = false;
@@ -87,7 +97,15 @@ const clipHasRange = () =>
   clipDraft.inMs != null && clipDraft.outMs != null && clipDraft.outMs > clipDraft.inMs;
 
 /** True once either point is marked, i.e. a trim is under way. */
-const clipTrimStarted = () => clipDraft.inMs != null || clipDraft.outMs != null;
+const clipTrimStarted = () =>
+  clipDraft.inMs != null || clipDraft.outMs != null || clipRanges.length > 0;
+
+/** Everything that would be exported right now, set-aside ranges plus the draft. */
+const clipExportableRanges = () => {
+  const ranges = clipRanges.slice();
+  if (clipHasRange()) ranges.push({ inMs: clipDraft.inMs, outMs: clipDraft.outMs });
+  return ranges;
+};
 
 /** Clip times show tenths of a second -- precision the plain time labels don't need. */
 const formatClipTime = ms => {
@@ -160,6 +178,27 @@ const clipZoomPercentFor = ms => {
 };
 
 /**
+ * Paints one set-aside range per child of `list`, positioned by `percentFor`.
+ *
+ * Rebuilt from scratch on every render rather than diffed: there are a handful
+ * of these at most, and a stale bar pointing at a range that was removed is a
+ * worse bug than the cost of recreating them.
+ */
+const clipPaintRangeList = (list, percentFor) => {
+  list.textContent = "";
+  clipRanges.forEach(range => {
+    const start = percentFor(range.inMs);
+    const end = percentFor(range.outMs);
+    if (end <= start) return;
+    const bar = document.createElement("div");
+    bar.className = "clip-range-item";
+    bar.style.left = `${start}%`;
+    bar.style.width = `${end - start}%`;
+    list.appendChild(bar);
+  });
+};
+
+/**
  * Draws the zoom track from `clipZoomView`. Each point is drawn on its own, so
  * the half-made state after marking only In renders as a lone marker.
  */
@@ -177,6 +216,7 @@ const clipZoomPaint = () => {
     clipZoomRange.style.left = `${inPct}%`;
     clipZoomRange.style.width = `${outPct - inPct}%`;
   }
+  clipPaintRangeList(clipZoomRangeList, clipZoomPercentFor);
   clipZoomPlayhead.style.left = `${clipZoomPercentFor(Number(state.positionMs) || 0)}%`;
   clipZoomStartLabel.textContent = formatClipTime(clipZoomView.startMs);
   clipZoomEndLabel.textContent = formatClipTime(clipZoomView.endMs);
@@ -339,6 +379,25 @@ const renderClipLibrary = () => {
   });
 };
 
+/** One removable chip per set-aside range, so a wrong one can be taken back. */
+const renderClipRangeChips = () => {
+  clipRangeChips.textContent = "";
+  clipRanges.forEach((range, index) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "clip-range-chip";
+    chip.title = `${formatClipTime(range.inMs)} - ${formatClipTime(range.outMs)} (click to remove)`;
+    chip.textContent = `${formatClipTime(range.outMs - range.inMs)} \u00d7`;
+    chip.addEventListener("click", event => {
+      event.stopPropagation();
+      clipRanges.splice(index, 1);
+      renderClipUi();
+      noteChromeActivity();
+    });
+    clipRangeChips.appendChild(chip);
+  });
+};
+
 const renderClipUi = () => {
   document.body.classList.toggle("clipper-mode", isClipperMode());
   const show = Boolean(state.showClip);
@@ -363,6 +422,8 @@ const renderClipUi = () => {
   }
   const running = Boolean(state.clipRunning);
   const clipTrackPercent = ms => Math.max(0, Math.min(100, ms / clipDraftDurationMs * 100));
+  if (hasDuration) clipPaintRangeList(clipRangeList, clipTrackPercent);
+  else clipRangeList.textContent = "";
   if (hasIn) clipHandleIn.style.left = `${clipTrackPercent(clipDraft.inMs)}%`;
   if (hasOut) clipHandleOut.style.left = `${clipTrackPercent(clipDraft.outMs)}%`;
   if (ready) {
@@ -377,9 +438,14 @@ const renderClipUi = () => {
   });
   // A length is only meaningful measured from somewhere.
   clipLenReadout.disabled = clipDraft.inMs == null;
+  renderClipRangeChips();
+  clipAddRangeButton.disabled = !clipHasRange();
   // Exports run in the background, so nothing below is gated on one: the trim
   // controls stay live while clips encode, and so does the export button.
-  clipExportButton.disabled = !clipHasRange();
+  const exportable = clipExportableRanges().length;
+  clipExportButton.disabled = exportable === 0;
+  clipExportButton.textContent = exportable > 1 ? `Export ${exportable} clips` : "Export clip";
+  // Preview loops the draft, so it needs the draft specifically, not a count.
   clipPreviewButton.disabled = !clipHasRange();
   // Only offered when something is actually on screen to burn in; the export
   // itself decides nothing, it just carries whatever this says.
@@ -532,9 +598,34 @@ const clipStepPlayhead = frames => {
   renderClipUi();
 };
 
-/** Throws the draft away and starts over. The playhead stays where it is. */
-const clipClearDraft = () => {
+/**
+ * Sets the current range aside and clears the draft for the next one.
+ *
+ * Nothing is exported here -- the ranges pile up until Export, which starts one
+ * job per range. Keeping them as drafts rather than firing each off immediately
+ * is what lets you go back and remove one you changed your mind about.
+ */
+const clipAddRange = () => {
+  if (!clipHasRange()) return;
+  clipRanges.push({ inMs: clipDraft.inMs, outMs: clipDraft.outMs });
   clipDraft = { inMs: null, outMs: null };
+  clipPreviewActive = false;
+  clipZoomView = null;
+  renderClipUi();
+  noteChromeActivity();
+};
+
+/**
+ * Undo, one step at a time: the half-made draft first, then the set-aside
+ * ranges newest-first. Clearing everything at once would throw away work that
+ * took minutes to find, on a single keypress.
+ */
+const clipClearDraft = () => {
+  if (clipTrimStarted() && clipDraft.inMs == null && clipDraft.outMs == null) {
+    clipRanges.pop();
+  } else {
+    clipDraft = { inMs: null, outMs: null };
+  }
   clipPreviewActive = false;
   clipZoomView = null;
   renderClipUi();
@@ -577,9 +668,10 @@ const clipMarkAtPlayhead = target => {
  *
  *   , .        step the playhead one frame
  *   I O        mark In / Out at the frame on screen
- *   X          export
+ *   A          set this range aside and start another
+ *   X          export every range
  *   R          review the selection on a loop
- *   Backspace  clear the draft
+ *   Backspace  undo -- the draft, then the set-aside ranges newest-first
  *
  * Deliberately not on the letters upstream already spends (S/T/C/E/P for the
  * panels, K/J/L and the arrows for transport) -- a clipper build still has to
@@ -596,6 +688,9 @@ const clipHandleKey = event => {
     case "Comma":
     case "Period":
       clipStepPlayhead(event.code === "Comma" ? -1 : 1);
+      break;
+    case "KeyA":
+      clipAddRange();
       break;
     case "KeyX":
       if (!clipExportButton.disabled) clipExportButton.click();
@@ -821,13 +916,30 @@ clipSubsButton.addEventListener("click", event => {
   send("clipBurnSubtitles", state.clipBurnSubtitles ? 0 : 1);
 });
 
+clipAddRangeButton.addEventListener("click", event => {
+  event.stopPropagation();
+  clipAddRange();
+});
+
 clipExportButton.addEventListener("click", event => {
   event.stopPropagation();
-  if (!clipHasRange()) return;
+  const ranges = clipExportableRanges();
+  if (ranges.length === 0) return;
   clipPreviewActive = false;
-  send("clipStart", clipDraft.inMs / 1000);
-  send("clipEnd", clipDraft.outMs / 1000);
-  send("clipExport", 0);
+  // Kotlin holds no state between these: clipExport starts a job from whatever
+  // clipStart/clipEnd last said, so one triple per range queues one job per
+  // range, and they encode concurrently.
+  ranges.forEach(range => {
+    send("clipStart", range.inMs / 1000);
+    send("clipEnd", range.outMs / 1000);
+    send("clipExport", 0);
+  });
+  // The ranges live in the Exports panel now; leaving them here would re-queue
+  // every one of them on the next press.
+  clipRanges = [];
+  clipDraft = { inMs: null, outMs: null };
+  clipZoomView = null;
+  renderClipUi();
 });
 /** Row buttons carry the index of the job they act on, set during render. */
 const bindClipRowJobAction = (button, event) => {
@@ -856,6 +968,7 @@ const clipSyncPlayback = (durationMs, positionMs) => {
     // handles at the far ends of the bar -- as far as reachable from wherever
     // you actually were.
     clipDraft = { inMs: null, outMs: null };
+    clipRanges = [];
     clipPreviewActive = false;
     clipZoomView = null;
     // A new source means a different title, so a stale open panel would be
