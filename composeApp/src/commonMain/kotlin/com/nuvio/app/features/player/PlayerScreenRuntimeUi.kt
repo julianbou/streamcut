@@ -5,6 +5,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.nuvio.app.features.clip.ClipAspect
 import com.nuvio.app.features.clip.ClipContentRef
 import com.nuvio.app.features.clip.ClipExtractor
 import com.nuvio.app.features.clip.ClipJob
@@ -377,6 +378,8 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipSubtitlesAvailable = activeClipSubtitle(delayMs = 0) != null,
         clipBurnSubtitles = clipBurnSubtitles,
         clipFrameDurationUs = clipFrameDurationUs,
+        clipAspect = clipAspect.ordinal,
+        clipTargetSizeMb = clipTargetSizeMb,
         // Newest first, matching the order the chrome sends indexes back in.
         clipJobs = clipJobsForThisContent.map { job ->
             PlayerClipJobItem(
@@ -1042,6 +1045,14 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
         "clipBurnSubtitles" -> {
             clipBurnSubtitles = value != 0.0
         }
+        "clipSetAspect" -> {
+            clipAspect = ClipAspect.fromOrdinal(value.toInt())
+        }
+        "clipSetSizeMb" -> {
+            // Clamped rather than rejected: the field is free text, and a cap
+            // below a megabyte cannot produce a watchable clip anyway.
+            clipTargetSizeMb = value.toInt().coerceIn(0, 4096)
+        }
         "clipExport" -> {
             val start = clipStartMs
             val end = clipEndMs
@@ -1055,6 +1066,8 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                     retainsP2pStream = activeTorrentInfoHash != null,
                     audioTrackIndex = activeClipAudioTrackIndex(),
                     subtitle = if (clipBurnSubtitles) activeClipSubtitle(subtitleDelayMs) else null,
+                    aspect = clipAspect,
+                    targetSizeMb = clipTargetSizeMb,
                 )
             }
         }

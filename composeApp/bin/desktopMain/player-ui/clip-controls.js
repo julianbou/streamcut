@@ -34,6 +34,11 @@ const clipAddRangeButton = document.getElementById("clipAddRangeButton");
 const clipRangeList = document.getElementById("clipRangeList");
 const clipZoomRangeList = document.getElementById("clipZoomRangeList");
 const clipRangeChips = document.getElementById("clipRangeChips");
+const clipFormatButton = document.getElementById("clipFormatButton");
+const clipFormatPanel = document.getElementById("clipFormatPanel");
+const clipAspectOptions = document.getElementById("clipAspectOptions");
+const clipSizeOptions = document.getElementById("clipSizeOptions");
+const clipSizeNote = document.getElementById("clipSizeNote");
 const clipExportButton = document.getElementById("clipExportButton");
 const clipNudgeRows = Array.from(document.querySelectorAll(".clip-nudge-row"));
 const clipZoomWrap = document.getElementById("clipZoomWrap");
@@ -90,6 +95,7 @@ let clipPreviewActive = false;
 let clipPreviewLoopSeekAt = 0;
 let clipLibraryOpen = false;
 let clipJobsOpen = false;
+let clipFormatOpen = false;
 // Window of the timeline the zoom track spans, or null when zoom is off.
 let clipZoomView = null;
 
@@ -379,6 +385,44 @@ const renderClipLibrary = () => {
   });
 };
 
+/**
+ * Draws the format popover from state, and says what the size cap works out to.
+ *
+ * The note is the useful part: a cap is a bitrate spread over the runtime, so
+ * the same 25MB is generous on a ten-second clip and brutal on a two-minute
+ * one, and there is no way to know which you have without the arithmetic.
+ */
+const renderClipFormat = () => {
+  const open = clipFormatOpen && Boolean(state.showClip);
+  clipFormatPanel.hidden = !open;
+  clipFormatButton.classList.toggle("toggled-on", Number(state.clipAspect) > 0 || Number(state.clipTargetSizeMb) > 0);
+  if (!open) return;
+  const aspect = Number(state.clipAspect) || 0;
+  const sizeMb = Number(state.clipTargetSizeMb) || 0;
+  clipAspectOptions.querySelectorAll("[data-clip-aspect]").forEach(button => {
+    button.classList.toggle("toggled-on", Number(button.dataset.clipAspect) === aspect);
+  });
+  clipSizeOptions.querySelectorAll("[data-clip-size]").forEach(button => {
+    button.classList.toggle("toggled-on", Number(button.dataset.clipSize) === sizeMb);
+  });
+  if (sizeMb <= 0) {
+    clipSizeNote.textContent = "Best quality the encoder can manage.";
+    return;
+  }
+  const ranges = clipExportableRanges();
+  if (ranges.length === 0) {
+    clipSizeNote.textContent = "Each clip is capped at this size.";
+    return;
+  }
+  const longestSec = Math.max(...ranges.map(range => (range.outMs - range.inMs) / 1000));
+  // Mirrors targetVideoBitrateBps in ClipExtractor.desktop.kt: 2% muxing
+  // overhead off the top, then the audio track, then the rest to the video.
+  const videoKbps = Math.round(((sizeMb * 1e6 * 8 * 0.97) / longestSec - 192000) / 1000);
+  clipSizeNote.textContent = videoKbps < 150
+    ? `Too tight for ${Math.round(longestSec)}s -- the clip will come out over the cap.`
+    : `About ${videoKbps} kbps of video on the longest range (${Math.round(longestSec)}s).`;
+};
+
 /** One removable chip per set-aside range, so a wrong one can be taken back. */
 const renderClipRangeChips = () => {
   clipRangeChips.textContent = "";
@@ -413,6 +457,7 @@ const renderClipUi = () => {
   clipHandleIn.hidden = !hasIn;
   clipHandleOut.hidden = !hasOut;
   if (!show) {
+    clipFormatPanel.hidden = true;
     clipZoomWrap.hidden = true;
     clipJobsPanel.hidden = true;
     clipJobsButton.hidden = true;
@@ -439,6 +484,7 @@ const renderClipUi = () => {
   // A length is only meaningful measured from somewhere.
   clipLenReadout.disabled = clipDraft.inMs == null;
   renderClipRangeChips();
+  renderClipFormat();
   clipAddRangeButton.disabled = !clipHasRange();
   // Exports run in the background, so nothing below is gated on one: the trim
   // controls stay live while clips encode, and so does the export button.
@@ -914,6 +960,33 @@ clipPreviewButton.addEventListener("click", event => {
 clipSubsButton.addEventListener("click", event => {
   event.stopPropagation();
   send("clipBurnSubtitles", state.clipBurnSubtitles ? 0 : 1);
+});
+
+// --- output format --------------------------------------------------------
+//
+// Shape and size cap live in a popover rather than the clip row: they are set
+// once for a run of clips headed to the same place, while everything in the row
+// is touched per clip. Both are owned by Kotlin -- the ffmpeg command is built
+// there -- so these buttons only report the choice.
+
+clipFormatButton.addEventListener("click", event => {
+  event.stopPropagation();
+  clipFormatOpen = !clipFormatOpen;
+  renderClipUi();
+});
+
+clipAspectOptions.querySelectorAll("[data-clip-aspect]").forEach(button => {
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    send("clipSetAspect", Number(button.dataset.clipAspect) || 0);
+  });
+});
+
+clipSizeOptions.querySelectorAll("[data-clip-size]").forEach(button => {
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    send("clipSetSizeMb", Number(button.dataset.clipSize) || 0);
+  });
 });
 
 clipAddRangeButton.addEventListener("click", event => {

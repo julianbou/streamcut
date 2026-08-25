@@ -332,18 +332,23 @@ internal actual object ClipExtractor {
         // clip that silently switches language is the wrong clip.
         val audioStream = resolveAudioStreamIndex(request.audioTrackIndex, probe)
 
-        val tonemap = tonemapChain(ffmpeg, probe)
+        // Tonemap, then crop, then whatever draws on top. Cropping first would
+        // reshape a picture still in HDR, and subtitles must come last or they
+        // get cropped away at the edges and tone-curved along with the frame.
+        val prefilter = listOfNotNull(tonemapChain(ffmpeg, probe), cropFilter(request.aspect))
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(",")
         if (burn == null) {
             // No graph to join, so the chain rides on -vf and the video is still
             // mapped straight off the input.
-            if (tonemap != null) args += listOf("-vf", tonemap)
+            if (prefilter != null) args += listOf("-vf", prefilter)
             args += listOf("-map", "0:v:0")
         } else {
             // Burned-in subtitles come out of a filtergraph, so the video is
             // mapped from its output label instead of straight off the input.
             args += listOf(
                 "-filter_complex",
-                composeVideoGraph(tonemap, burn.filterGraph),
+                composeVideoGraph(prefilter, burn.filterGraph),
                 "-map",
                 "[$BURN_OUTPUT_LABEL]",
             )
@@ -356,13 +361,17 @@ internal actual object ClipExtractor {
         if (burn?.readsSourceSubtitles != true) args += "-sn"
         args += "-dn"
 
-        args += encoderArgs(videoEncoder, probe.height)
+        args += encoderArgs(
+            videoEncoder,
+            probe.height,
+            targetVideoBitrateBps(request.targetSizeMb, durationSec),
+        )
         // 8-bit 4:2:0 so 10-bit HEVC sources produce a universally playable file.
         // Redundant when the tonemap chain ran -- it ends in yuv420p -- but this
         // is also what covers a 10-bit SDR source, which needs no tone curve.
         args += listOf("-pix_fmt", "yuv420p")
         // Stereo AAC plays everywhere (sources are often DTS/TrueHD/5.1).
-        args += listOf("-c:a", "aac", "-b:a", "192k", "-ac", "2")
+        args += listOf("-c:a", "aac", "-b:a", "${AUDIO_BITRATE_BPS / 1000}k", "-ac", "2")
 
         args += "-avoid_negative_ts"
         args += "make_zero"
@@ -374,7 +383,22 @@ internal actual object ClipExtractor {
         return args
     }
 
-    private fun encoderArgs(videoEncoder: String, sourceHeight: Int?): List<String> {
+    private fun encoderArgs(
+        videoEncoder: String,
+        sourceHeight: Int?,
+        targetBitrateBps: Int?,
+    ): List<String> {
+        // A size cap turns every encoder into a bitrate-driven one: CRF aims at
+        // a quality level and will happily overshoot the file size to hold it.
+        if (targetBitrateBps != null) {
+            val bps = targetBitrateBps
+            return listOf(
+                "-c:v", videoEncoder,
+                "-b:v", "$bps",
+                "-maxrate", "${bps * 3 / 2}",
+                "-bufsize", "${bps * 2}",
+            )
+        }
         if (videoEncoder == "libx264") {
             return listOf("-c:v", "libx264", "-preset", "veryfast", "-crf", "18")
         }
@@ -432,6 +456,46 @@ internal actual object ClipExtractor {
     }
 
     /**
+     * Centre-crop to [aspect], or null to leave the frame alone.
+     *
+     * Written as ffmpeg expressions rather than computed here, so it holds for
+     * whatever the source turns out to be without a second probe: the crop takes
+     * the largest rectangle of the requested shape that fits inside the frame,
+     * and `crop` centres by default. Both sides are forced even -- yuv420p
+     * subsamples chroma by two, and an odd dimension is rejected outright.
+     */
+    private fun cropFilter(aspect: ClipAspect): String? {
+        val ratio = aspect.ratio ?: return null
+        val w = "trunc(min(iw\\,ih*$ratio)/2)*2"
+        val h = "trunc(min(ih\\,iw/$ratio)/2)*2"
+        return "crop=w=$w:h=$h"
+    }
+
+    /**
+     * Video bitrate that lands the file near [targetSizeMb], or null for none.
+     *
+     * The cap is on the whole file, so the audio track and roughly 2% of muxing
+     * overhead come off the top before the rest is spread over the runtime. A
+     * short clip therefore gets a generous bitrate from the same cap that
+     * squeezes a long one, which is the point of expressing it as a size.
+     */
+    private fun targetVideoBitrateBps(targetSizeMb: Int, durationSec: Double): Int? {
+        if (targetSizeMb <= 0 || durationSec <= 0.0) return null
+        // Megabytes as the file manager counts them, which is what someone
+        // checking against an upload limit is comparing with.
+        val totalBits = targetSizeMb.toLong() * 1_000_000L * 8L
+        val audioBits = (AUDIO_BITRATE_BPS * durationSec).toLong()
+        val videoBits = (totalBits * 97 / 100) - audioBits
+        val bps = (videoBits / durationSec).toLong()
+        // Floor: below this the cap was unreachable and the picture would be a
+        // grey smear -- an oversized clip beats an unwatchable one. Ceiling: a
+        // generous cap on a two-second clip works out to an absurd bitrate, and
+        // maxrate/bufsize are derived from this, so it has to stay well inside
+        // Int range.
+        return bps.coerceIn(MIN_VIDEO_BITRATE_BPS, MAX_VIDEO_BITRATE_BPS).toInt()
+    }
+
+    /**
      * Splices the tonemap in ahead of a subtitle burn.
      *
      * Order matters: subtitles are authored for SDR, so drawing them first and
@@ -439,9 +503,9 @@ internal actual object ClipExtractor {
      * picture and leave it grey. Every burn graph starts from `[0:v:0]`, so the
      * tonemap takes that input and the burn reads its output instead.
      */
-    private fun composeVideoGraph(tonemap: String?, burnGraph: String): String {
-        if (tonemap == null) return burnGraph
-        return "[0:v:0]$tonemap[$TONEMAP_OUTPUT_LABEL];" +
+    private fun composeVideoGraph(prefilter: String?, burnGraph: String): String {
+        if (prefilter == null) return burnGraph
+        return "[0:v:0]$prefilter[$TONEMAP_OUTPUT_LABEL];" +
             burnGraph.replaceFirst("[0:v:0]", "[$TONEMAP_OUTPUT_LABEL]")
     }
 
@@ -584,6 +648,15 @@ internal actual object ClipExtractor {
 
     /** Label the tonemapped picture leaves on, before anything is drawn over it. */
     private const val TONEMAP_OUTPUT_LABEL = "vtm"
+
+    /** Audio bitrate, also subtracted from a size cap before the video gets the rest. */
+    private const val AUDIO_BITRATE_BPS = 192_000
+
+    /** Floor for a size-capped encode; below this there is no clip worth having. */
+    private const val MIN_VIDEO_BITRATE_BPS = 150_000L
+
+    /** Ceiling for the same: past this the cap is not what is limiting the file. */
+    private const val MAX_VIDEO_BITRATE_BPS = 200_000_000L
 
     /**
      * How far before the in-point subtitle events are collected. A line that is

@@ -225,6 +225,30 @@
           </div>
           <div class="clip-library-list" id="clipLibraryList"></div>
         </div>
+        <div class="clip-format-panel" id="clipFormatPanel" hidden>
+          <div class="clip-format-group">
+            <span class="clip-format-label">Shape</span>
+            <div class="clip-format-options" id="clipAspectOptions">
+              <button class="clip-nudge" type="button" data-clip-aspect="0">Source</button>
+              <button class="clip-nudge" type="button" data-clip-aspect="1">16:9</button>
+              <button class="clip-nudge" type="button" data-clip-aspect="2">1:1</button>
+              <button class="clip-nudge" type="button" data-clip-aspect="3">4:5</button>
+              <button class="clip-nudge" type="button" data-clip-aspect="4">9:16</button>
+            </div>
+          </div>
+          <div class="clip-format-group">
+            <span class="clip-format-label">Max size</span>
+            <div class="clip-format-options" id="clipSizeOptions">
+              <button class="clip-nudge" type="button" data-clip-size="0">None</button>
+              <button class="clip-nudge" type="button" data-clip-size="8">8 MB</button>
+              <button class="clip-nudge" type="button" data-clip-size="16">16 MB</button>
+              <button class="clip-nudge" type="button" data-clip-size="25">25 MB</button>
+              <button class="clip-nudge" type="button" data-clip-size="50">50 MB</button>
+              <button class="clip-nudge" type="button" data-clip-size="100">100 MB</button>
+            </div>
+            <span class="clip-format-note" id="clipSizeNote"></span>
+          </div>
+        </div>
         <div class="clip-row" id="clipRow" hidden>
           <span class="clip-io-label">IN</span>
           <input class="clip-io-time" id="clipInReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
@@ -254,6 +278,7 @@
           <button class="clip-action" id="clipJobsButton" type="button" hidden>Exports</button>
           <button class="clip-action" id="clipLibraryButton" type="button" hidden>Clips</button>
           <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
+          <button class="clip-action" id="clipFormatButton" type="button" title="Output shape and size">Format</button>
           <button class="clip-action" id="clipAddRangeButton" type="button" title="Keep this range and start another (A)">&#43; Add</button>
           <button class="clip-action" id="clipPreviewButton" type="button">Preview</button>
           <button class="clip-action primary" id="clipExportButton" type="button">Export clip</button>

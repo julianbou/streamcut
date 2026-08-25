@@ -214,6 +214,10 @@ data class PlayerControlsState(
      * it -- a step size for the trim nudges -- and it stays an exact integer.
      */
     val clipFrameDurationUs: Int = 0,
+    /** Ordinal of the selected [com.nuvio.app.features.clip.ClipAspect]. */
+    val clipAspect: Int = 0,
+    /** File-size cap in MB, or 0 for none. */
+    val clipTargetSizeMb: Int = 0,
     val clipJobs: List<PlayerClipJobItem> = emptyList(),
     val clipLibrary: List<PlayerClipLibraryItem> = emptyList(),
     val showP2pConsent: Boolean = false,

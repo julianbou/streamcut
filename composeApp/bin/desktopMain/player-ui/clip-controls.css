@@ -78,6 +78,52 @@
   border-right: 1px solid color-mix(in srgb, var(--theme-accent) 70%, transparent);
 }
 
+/* Output format popover. Sits above the clip row like the library/exports
+   panels, so the row itself does not grow every time a knob is added. */
+.clip-format-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(20, 20, 26, .96);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+}
+.clip-format-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.clip-format-label {
+  min-width: 64px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .55);
+}
+.clip-format-options {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.clip-format-note {
+  flex: 1 1 100%;
+  padding-left: 74px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, .5);
+  font-variant-numeric: tabular-nums;
+}
+/* Shared with the Subtitles toggle in the clip row. */
+.clip-nudge.toggled-on {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: #fff;
+}
+
 .clip-range-chips {
   display: flex;
   align-items: center;

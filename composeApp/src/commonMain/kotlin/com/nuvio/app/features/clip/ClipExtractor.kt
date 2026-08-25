@@ -12,6 +12,10 @@ package com.nuvio.app.features.clip
  *
  * [subtitle] is the subtitle to burn into the picture, or null to leave the
  * clip clean.
+ *
+ * [aspect] reshapes the frame by centre-cropping; [targetSizeMb] caps the
+ * output, trading quality for a file that fits whatever it is being sent
+ * through. 0 means no cap, which is the default and the better clip.
  */
 internal data class ClipExtractRequest(
     val sourceUrl: String,
@@ -21,6 +25,8 @@ internal data class ClipExtractRequest(
     val title: String,
     val audioTrackIndex: Int = -1,
     val subtitle: ClipSubtitleSelection? = null,
+    val aspect: ClipAspect = ClipAspect.Source,
+    val targetSizeMb: Int = 0,
 )
 
 internal interface ClipTaskHandle {

@@ -1042,6 +1042,10 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("clipFrameDurationUs", clipFrameDurationUs)
         append(',')
+        appendJsonField("clipAspect", clipAspect)
+        append(',')
+        appendJsonField("clipTargetSizeMb", clipTargetSizeMb)
+        append(',')
         appendJsonField("clipBurnSubtitles", clipBurnSubtitles)
         append(',')
         appendJsonArrayField("clipJobs", clipJobs) { appendClipJobItemJson(it) }

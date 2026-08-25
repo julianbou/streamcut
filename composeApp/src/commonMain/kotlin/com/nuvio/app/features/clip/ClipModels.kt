@@ -63,6 +63,29 @@ data class ClipContentRef(
 }
 
 /**
+ * Frame shape a clip is exported in.
+ *
+ * A clip headed for a phone screen is not the shape it was shot in, and
+ * reshaping it afterwards costs a second re-encode and another generation of
+ * loss. [ratio] is width over height; null leaves the source frame alone.
+ *
+ * Ordinals are the wire format -- the webview bridge carries numbers, not
+ * strings -- so entries may be appended but not reordered.
+ */
+enum class ClipAspect(val label: String, val ratio: Double?) {
+    Source("Source", null),
+    Wide("16:9", 16.0 / 9.0),
+    Square("1:1", 1.0),
+    Portrait("4:5", 4.0 / 5.0),
+    Vertical("9:16", 9.0 / 16.0),
+    ;
+
+    companion object {
+        fun fromOrdinal(value: Int): ClipAspect = entries.getOrElse(value) { Source }
+    }
+}
+
+/**
  * The subtitle a clip is rendered with. Burning is the only option that
  * survives sharing: an MP4 the viewer sends to someone else has no track
  * picker, so the subtitle has to be part of the picture.

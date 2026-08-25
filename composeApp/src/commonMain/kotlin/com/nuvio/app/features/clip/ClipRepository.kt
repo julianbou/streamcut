@@ -101,6 +101,8 @@ object ClipRepository {
         retainsP2pStream: Boolean = false,
         audioTrackIndex: Int = -1,
         subtitle: ClipSubtitleSelection? = null,
+        aspect: ClipAspect = ClipAspect.Source,
+        targetSizeMb: Int = 0,
     ) {
         if (!isSupported) return
         if (sourceUrl.isBlank() || endMs <= startMs) return
@@ -114,6 +116,8 @@ object ClipRepository {
             title = title,
             audioTrackIndex = audioTrackIndex,
             subtitle = subtitle,
+            aspect = aspect,
+            targetSizeMb = targetSizeMb,
         )
         onMain {
             // A double-click on Export would otherwise encode the same range
