@@ -28,6 +28,7 @@ const clipStatus = document.getElementById("clipStatus");
 const clipCancelButton = document.getElementById("clipCancelButton");
 const clipRevealButton = document.getElementById("clipRevealButton");
 const clipDismissButton = document.getElementById("clipDismissButton");
+const clipSubsButton = document.getElementById("clipSubsButton");
 const clipPreviewButton = document.getElementById("clipPreviewButton");
 const clipExportButton = document.getElementById("clipExportButton");
 const clipNudgeRows = Array.from(document.querySelectorAll(".clip-nudge-row"));
@@ -48,6 +49,29 @@ const clipLibraryPanel = document.getElementById("clipLibraryPanel");
 const clipLibraryList = document.getElementById("clipLibraryList");
 const clipLibraryPath = document.getElementById("clipLibraryPath");
 
+// --- clipper mode ---
+//
+// `viewingChromeEnabled` comes from AppFeaturePolicy, not from playback state, so
+// it never changes for the life of the window. Undefined means the field never
+// arrived (an older host, or the standalone browser harness) -- fall back to
+// upstream behaviour and leave the viewing chrome alone.
+const isClipperMode = () => state.viewingChromeEnabled === false;
+
+/**
+ * Keep the controls up while a trim is in progress.
+ *
+ * Marking in/out means staring at the timeline without moving the mouse, which
+ * is exactly what the idle timer reads as "user is watching, hide everything".
+ */
+const clipShouldPinChrome = () => Boolean(state.showClip) && clipTrimStarted();
+
+/** The three editable timecodes, paired with the draft point each one names. */
+const clipTimeFields = [
+  ["in", clipInReadout],
+  ["out", clipOutReadout],
+  ["len", clipLenReadout],
+];
+
 // --- trim draft state ---
 let clipDraft = { inMs: null, outMs: null };
 let clipDraftDurationMs = 0;
@@ -61,6 +85,9 @@ let clipZoomView = null;
 
 const clipHasRange = () =>
   clipDraft.inMs != null && clipDraft.outMs != null && clipDraft.outMs > clipDraft.inMs;
+
+/** True once either point is marked, i.e. a trim is under way. */
+const clipTrimStarted = () => clipDraft.inMs != null || clipDraft.outMs != null;
 
 /** Clip times show tenths of a second -- precision the plain time labels don't need. */
 const formatClipTime = ms => {
@@ -76,27 +103,36 @@ const formatClipTime = ms => {
 // beneath the scrub bar spanning only a narrow window around the selection,
 // which buys back two orders of magnitude of pointer precision.
 
-/** Zoom in once the selection covers less than this share of the runtime. */
-const CLIP_ZOOM_TRIGGER_RATIO = 0.1;
 /** Never show a window narrower than this, or the handles have nowhere to go. */
 const CLIP_ZOOM_MIN_WINDOW_MS = 4000;
 /** Selection-to-window ratio: the selection fills a third of the zoom track. */
 const CLIP_ZOOM_CONTEXT_FACTOR = 3;
+/** Window width before anything is marked, so the track still has a scale. */
+const CLIP_ZOOM_IDLE_WINDOW_MS = 30000;
 
-const clipZoomShouldShow = () =>
-  clipHasRange() &&
-  clipDraftDurationMs > 0 &&
-  clipDraft.outMs - clipDraft.inMs <= clipDraftDurationMs * CLIP_ZOOM_TRIGGER_RATIO;
+// The track used to appear only once the selection was already under a tenth of
+// the runtime, which had it backwards: placing a cut to the second on the main
+// scrub bar is the very thing that needs magnifying, so the tool only showed up
+// after the hard part was over. It is up whenever the clip row is.
+const clipZoomShouldShow = () => Boolean(state.showClip) && clipDraftDurationMs > 0;
 
-/** A window centred on the selection, clamped to the runtime. */
+/**
+ * The stretch of runtime the zoom track spans, clamped to the film.
+ *
+ * Anchored on the selection once there is one, and on the playhead until then --
+ * with nothing marked, the part worth magnifying is wherever you are looking.
+ */
 const clipZoomComputeView = () => {
-  const selection = clipDraft.outMs - clipDraft.inMs;
+  const selection = clipHasRange() ? clipDraft.outMs - clipDraft.inMs : 0;
+  const floorMs = selection > 0 ? CLIP_ZOOM_MIN_WINDOW_MS : CLIP_ZOOM_IDLE_WINDOW_MS;
   const width = Math.min(
     clipDraftDurationMs,
-    Math.max(selection * CLIP_ZOOM_CONTEXT_FACTOR, CLIP_ZOOM_MIN_WINDOW_MS),
+    Math.max(selection * CLIP_ZOOM_CONTEXT_FACTOR, floorMs),
   );
-  const centre = (clipDraft.inMs + clipDraft.outMs) / 2;
-  const start = Math.max(0, Math.min(clipDraftDurationMs - width, centre - width / 2));
+  const centre = clipHasRange()
+    ? (clipDraft.inMs + clipDraft.outMs) / 2
+    : Number(state.positionMs) || 0;
+  const start = Math.max(0, Math.min(Math.max(0, clipDraftDurationMs - width), centre - width / 2));
   return { startMs: start, endMs: start + width };
 };
 
@@ -123,8 +159,41 @@ const clipZoomPercentFor = ms => {
   return Math.max(0, Math.min(100, ((ms - clipZoomView.startMs) / width) * 100));
 };
 
+/**
+ * Draws the zoom track from `clipZoomView`. Each point is drawn on its own, so
+ * the half-made state after marking only In renders as a lone marker.
+ */
+const clipZoomPaint = () => {
+  if (!clipZoomView) return;
+  const inPct = clipDraft.inMs == null ? null : clipZoomPercentFor(clipDraft.inMs);
+  const outPct = clipDraft.outMs == null ? null : clipZoomPercentFor(clipDraft.outMs);
+  clipZoomHandleIn.hidden = inPct == null;
+  clipZoomHandleOut.hidden = outPct == null;
+  if (inPct != null) clipZoomHandleIn.style.left = `${inPct}%`;
+  if (outPct != null) clipZoomHandleOut.style.left = `${outPct}%`;
+  const hasSpan = inPct != null && outPct != null && outPct > inPct;
+  clipZoomRange.hidden = !hasSpan;
+  if (hasSpan) {
+    clipZoomRange.style.left = `${inPct}%`;
+    clipZoomRange.style.width = `${outPct - inPct}%`;
+  }
+  clipZoomPlayhead.style.left = `${clipZoomPercentFor(Number(state.positionMs) || 0)}%`;
+  clipZoomStartLabel.textContent = formatClipTime(clipZoomView.startMs);
+  clipZoomEndLabel.textContent = formatClipTime(clipZoomView.endMs);
+  const windowSec = (clipZoomView.endMs - clipZoomView.startMs) / 1000;
+  clipZoomScale.textContent = `${windowSec < 10 ? windowSec.toFixed(1) : Math.round(windowSec)}s view`;
+};
+
 const clipZoomUpdatePlayhead = positionMs => {
   if (!clipZoomView || clipZoomWrap.hidden) return;
+  // With nothing marked the window trails the playhead, panning only as it nears
+  // an edge -- a window that recentred every tick would slide under the eye
+  // continuously and never give a stable scale to read.
+  if (!clipHasRange() && clipDragTarget == null) {
+    clipZoomPanTo(positionMs);
+    clipZoomPaint();
+    return;
+  }
   clipZoomPlayhead.style.left = `${clipZoomPercentFor(positionMs)}%`;
 };
 
@@ -135,21 +204,13 @@ const renderClipZoom = () => {
     clipZoomView = null;
     return;
   }
-  // Recentre only at rest; while a handle is down the window may only pan, so
-  // the pixel under the pointer keeps meaning the same instant.
-  if (!clipZoomView || clipDragTarget == null) clipZoomView = clipZoomComputeView();
-
-  const inPct = clipZoomPercentFor(clipDraft.inMs);
-  const outPct = clipZoomPercentFor(clipDraft.outMs);
-  clipZoomRange.style.left = `${inPct}%`;
-  clipZoomRange.style.width = `${Math.max(0, outPct - inPct)}%`;
-  clipZoomHandleIn.style.left = `${inPct}%`;
-  clipZoomHandleOut.style.left = `${outPct}%`;
-  clipZoomUpdatePlayhead(Number(state.positionMs) || 0);
-  clipZoomStartLabel.textContent = formatClipTime(clipZoomView.startMs);
-  clipZoomEndLabel.textContent = formatClipTime(clipZoomView.endMs);
-  const windowSec = (clipZoomView.endMs - clipZoomView.startMs) / 1000;
-  clipZoomScale.textContent = `${windowSec < 10 ? windowSec.toFixed(1) : Math.round(windowSec)}s view`;
+  // Recentre on the selection only at rest; while a handle is down the window
+  // may only pan, so the pixel under the pointer keeps meaning the same instant.
+  // A playhead-anchored window is left alone here -- updatePlayhead pans it, and
+  // recomputing would snap it back on every unrelated render.
+  if (!clipZoomView) clipZoomView = clipZoomComputeView();
+  else if (clipDragTarget == null && clipHasRange()) clipZoomView = clipZoomComputeView();
+  clipZoomPaint();
 };
 
 // --- exports in flight ----------------------------------------------------
@@ -279,12 +340,19 @@ const renderClipLibrary = () => {
 };
 
 const renderClipUi = () => {
+  document.body.classList.toggle("clipper-mode", isClipperMode());
   const show = Boolean(state.showClip);
-  const ready = show && clipDraftDurationMs > 0 && clipHasRange();
+  const hasDuration = show && clipDraftDurationMs > 0;
+  // Each point is drawn on its own. Marking In leaves a single marker and no
+  // range, and that half-made state has to show or there is no confirmation the
+  // mark landed where you meant it.
+  const hasIn = hasDuration && clipDraft.inMs != null;
+  const hasOut = hasDuration && clipDraft.outMs != null;
+  const ready = hasDuration && clipHasRange();
   setVisible(clipRow, show);
   clipRange.hidden = !ready;
-  clipHandleIn.hidden = !ready;
-  clipHandleOut.hidden = !ready;
+  clipHandleIn.hidden = !hasIn;
+  clipHandleOut.hidden = !hasOut;
   if (!show) {
     clipZoomWrap.hidden = true;
     clipJobsPanel.hidden = true;
@@ -294,23 +362,34 @@ const renderClipUi = () => {
     return;
   }
   const running = Boolean(state.clipRunning);
+  const clipTrackPercent = ms => Math.max(0, Math.min(100, ms / clipDraftDurationMs * 100));
+  if (hasIn) clipHandleIn.style.left = `${clipTrackPercent(clipDraft.inMs)}%`;
+  if (hasOut) clipHandleOut.style.left = `${clipTrackPercent(clipDraft.outMs)}%`;
   if (ready) {
-    const inPct = Math.max(0, Math.min(100, clipDraft.inMs / clipDraftDurationMs * 100));
-    const outPct = Math.max(0, Math.min(100, clipDraft.outMs / clipDraftDurationMs * 100));
+    const inPct = clipTrackPercent(clipDraft.inMs);
+    const outPct = clipTrackPercent(clipDraft.outMs);
     clipRange.style.left = `${inPct}%`;
     clipRange.style.width = `${Math.max(0, outPct - inPct)}%`;
-    clipHandleIn.style.left = `${inPct}%`;
-    clipHandleOut.style.left = `${outPct}%`;
   }
-  clipInReadout.textContent = clipDraft.inMs == null ? "--:--" : formatClipTime(clipDraft.inMs);
-  clipOutReadout.textContent = clipDraft.outMs == null ? "--:--" : formatClipTime(clipDraft.outMs);
-  clipLenReadout.textContent = clipHasRange()
-    ? `(${formatClipTime(clipDraft.outMs - clipDraft.inMs)})`
-    : "";
+  // Never overwrite a field mid-edit; the blur handler is what reconciles it.
+  clipTimeFields.forEach(([target, input]) => {
+    if (document.activeElement !== input) input.value = clipFieldText(target);
+  });
+  // A length is only meaningful measured from somewhere.
+  clipLenReadout.disabled = clipDraft.inMs == null;
   // Exports run in the background, so nothing below is gated on one: the trim
   // controls stay live while clips encode, and so does the export button.
   clipExportButton.disabled = !clipHasRange();
   clipPreviewButton.disabled = !clipHasRange();
+  // Only offered when something is actually on screen to burn in; the export
+  // itself decides nothing, it just carries whatever this says.
+  const burnSubtitles = Boolean(state.clipBurnSubtitles);
+  clipSubsButton.hidden = !state.clipSubtitlesAvailable;
+  clipSubsButton.classList.toggle("toggled-on", burnSubtitles);
+  clipSubsButton.textContent = burnSubtitles ? "Subtitles on" : "Subtitles off";
+  clipSubsButton.title = burnSubtitles
+    ? "The active subtitle is rendered into the clip"
+    : "Export the clip without subtitles";
   clipPreviewButton.textContent = clipPreviewActive ? "Stop preview" : "Preview";
   // The row's buttons act on a single job, so they only appear when there is no
   // ambiguity about which one; the rest is per-row in the exports panel.
@@ -325,10 +404,12 @@ const renderClipUi = () => {
   clipRevealButton.dataset.clipJobIndex = revealIndex;
   clipDismissButton.hidden = dismissIndex < 0 || !state.clipStatusKind;
   clipDismissButton.dataset.clipJobIndex = dismissIndex;
+  // Stepping needs a point to step from. Set does not -- it is how the point
+  // gets there -- so it stays live even though it shares the row.
   clipNudgeRows.forEach(row => {
     const target = row.dataset.clipTarget;
     const value = target === "in" ? clipDraft.inMs : clipDraft.outMs;
-    row.querySelectorAll("button").forEach(button => {
+    row.querySelectorAll("button[data-clip-nudge-frames]").forEach(button => {
       button.disabled = value == null;
     });
   });
@@ -340,6 +421,8 @@ const renderClipUi = () => {
     clipProgressBar.style.width = "0%";
   }
   clipStatus.textContent = state.clipStatusMessage || "";
+  // Failure text can run long and the row truncates it; hovering shows all of it.
+  clipStatus.title = state.clipStatusMessage || "";
   clipStatus.dataset.kind = state.clipStatusKind || "";
   renderClipZoom();
   renderClipJobs();
@@ -355,6 +438,59 @@ const clipSeekTo = ms => {
 
 const CLIP_MIN_GAP_MS = 200;
 
+/**
+ * Reads a typed timecode into milliseconds, or null if it cannot.
+ *
+ * Accepts what the readouts print back -- `44:09.5`, `1:30:00` -- and also bare
+ * seconds, because typing `90` for a minute and a half is the obvious thing to
+ * try. A comma is taken as a decimal point: this app is used in locales that
+ * write it that way, and it is never ambiguous in a timecode.
+ */
+const parseClipTime = text => {
+  const trimmed = String(text).trim().replace(",", ".");
+  if (!/^\d{1,3}(:\d{1,2}){0,2}(\.\d{1,3})?$/.test(trimmed)) return null;
+  const [whole, fraction] = trimmed.split(".");
+  let seconds = 0;
+  for (const part of whole.split(":")) seconds = seconds * 60 + Number(part);
+  return Math.round(seconds * 1000 + Number(`0.${fraction || 0}`) * 1000);
+};
+
+/** What a timecode field should read right now; empty shows its placeholder. */
+const clipFieldText = target => {
+  if (target === "len") {
+    return clipHasRange() ? formatClipTime(clipDraft.outMs - clipDraft.inMs) : "";
+  }
+  const ms = target === "in" ? clipDraft.inMs : clipDraft.outMs;
+  return ms == null ? "" : formatClipTime(ms);
+};
+
+/**
+ * Microseconds in one source frame, probed off the container by Kotlin.
+ *
+ * 0 until the probe lands, and 0 for good where ffprobe found no rate -- the
+ * step falls back to a fixed time nudge in that case. Kept in microseconds
+ * because 23.976fps is 41.7083ms: rounding to whole milliseconds per press
+ * would drift a frame within a couple of dozen steps.
+ */
+const clipFrameDurationUs = () => Number(state.clipFrameDurationUs) || 0;
+
+/** Step used when the source rate is unknown. */
+const CLIP_FALLBACK_STEP_MS = 100;
+
+/**
+ * Where `frames` frames from `fromMs` lands.
+ *
+ * Snapped to the frame grid rather than added to the current value, so a point
+ * marked mid-frame lands on a boundary at the first press instead of carrying
+ * its offset for the rest of the session.
+ */
+const clipFrameStepMs = (fromMs, frames) => {
+  const frameUs = clipFrameDurationUs();
+  if (frameUs <= 0) return fromMs + frames * CLIP_FALLBACK_STEP_MS;
+  const index = Math.round((fromMs * 1000) / frameUs) + frames;
+  return Math.max(0, Math.round((index * frameUs) / 1000));
+};
+
 const clipApplyPoint = (target, ms) => {
   if (target === "in") {
     const limit = clipDraft.outMs != null ? clipDraft.outMs - CLIP_MIN_GAP_MS : clipDraftDurationMs;
@@ -366,17 +502,209 @@ const clipApplyPoint = (target, ms) => {
   return clipDraft.outMs;
 };
 
+/**
+ * Holds the picture still so the frame being landed on can be read.
+ *
+ * Stepping a frame while the film runs is pointless -- the frame is gone before
+ * the eye reaches it -- so every fine adjustment pauses first. Quiet, because
+ * this is not the user asking to stop watching; it is the trim UI needing a
+ * still to work against.
+ */
+const clipPauseForInspection = () => {
+  if (!state.isPlaying) return;
+  // Optimistic, like controls.js's own toggle: the next native update carries
+  // the real value a beat later.
+  state.isPlaying = false;
+  send("setPlaybackStateQuiet", 0);
+};
+
+/**
+ * Moves the playhead one frame. Nothing about the draft changes.
+ *
+ * The counterpart to marking, and the reason marking can stay seek-free: step
+ * to the exact frame you want with `,` / `.`, then press I or O to pin it.
+ */
+const clipStepPlayhead = frames => {
+  clipPauseForInspection();
+  clipPreviewActive = false;
+  const from = Math.max(0, Math.min(clipDraftDurationMs, Number(state.positionMs) || 0));
+  clipSeekTo(clipFrameStepMs(from, frames));
+  renderClipUi();
+};
+
+/** Throws the draft away and starts over. The playhead stays where it is. */
+const clipClearDraft = () => {
+  clipDraft = { inMs: null, outMs: null };
+  clipPreviewActive = false;
+  clipZoomView = null;
+  renderClipUi();
+  noteChromeActivity();
+};
+
+/**
+ * Sets In or Out to the frame already on screen.
+ *
+ * What matters here is what it does *not* do: it never seeks. Dragging a handle
+ * live-seeks the player (see bindClipHandle below), so trimming by drag costs
+ * you the frame you just spent minutes hunting for. Marking brings the point to
+ * the playhead instead of dragging the playhead to the point, and the picture
+ * never moves.
+ *
+ * Marking past the opposite point clears that opposite instead of clamping
+ * against it: someone who marks In an hour after the current Out is starting a
+ * fresh selection there, not asking for a 200ms clip.
+ */
+const clipMarkAtPlayhead = target => {
+  if (clipDraftDurationMs <= 0) return;
+  const ms = Math.max(0, Math.min(clipDraftDurationMs, Number(state.positionMs) || 0));
+  if (target === "in") {
+    if (clipDraft.outMs != null && ms >= clipDraft.outMs - CLIP_MIN_GAP_MS) clipDraft.outMs = null;
+    clipDraft.inMs = ms;
+  } else {
+    if (clipDraft.inMs != null && ms <= clipDraft.inMs + CLIP_MIN_GAP_MS) clipDraft.inMs = null;
+    clipDraft.outMs = ms;
+  }
+  clipPreviewActive = false;
+  // The one moment the zoom window should jump: the selection just moved.
+  clipZoomView = null;
+  renderClipUi();
+  noteChromeActivity();
+};
+
+/**
+ * The clipper's keyboard map. controls.js offers every keydown here before its
+ * own shortcut table, so these win; a truthy return means the key was consumed.
+ *
+ *   , .        step the playhead one frame
+ *   I O        mark In / Out at the frame on screen
+ *   X          export
+ *   R          review the selection on a loop
+ *   Backspace  clear the draft
+ *
+ * Deliberately not on the letters upstream already spends (S/T/C/E/P for the
+ * panels, K/J/L and the arrows for transport) -- a clipper build still has to
+ * reach the subtitle and audio pickers, since a clip inherits both.
+ */
+const clipHandleKey = event => {
+  if (!state.showClip || clipDraftDurationMs <= 0) return false;
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false;
+  switch (event.code) {
+    case "KeyI":
+    case "KeyO":
+      clipMarkAtPlayhead(event.code === "KeyI" ? "in" : "out");
+      break;
+    case "Comma":
+    case "Period":
+      clipStepPlayhead(event.code === "Comma" ? -1 : 1);
+      break;
+    case "KeyX":
+      if (!clipExportButton.disabled) clipExportButton.click();
+      break;
+    case "KeyR":
+      if (!clipPreviewButton.disabled) clipPreviewButton.click();
+      break;
+    case "Backspace":
+    case "Delete":
+      clipClearDraft();
+      break;
+    default:
+      return false;
+  }
+  event.preventDefault();
+  return true;
+};
+
+/**
+ * Applies a typed timecode.
+ *
+ * A typed length moves Out, never In: In is the point that was chosen against a
+ * frame, so "make this 30 seconds" means extend the end, not shift the start.
+ */
+const clipCommitTime = (target, ms) => {
+  clipPreviewActive = false;
+  if (target === "len") {
+    if (clipDraft.inMs == null) return;
+    clipDraft.outMs = Math.min(
+      clipDraftDurationMs,
+      clipDraft.inMs + Math.max(CLIP_MIN_GAP_MS, ms),
+    );
+  } else {
+    const clamped = Math.max(0, Math.min(clipDraftDurationMs, ms));
+    // Same rule as marking: a point typed past its opposite starts a new
+    // selection rather than being clamped into a sliver against it.
+    if (target === "in") {
+      if (clipDraft.outMs != null && clamped >= clipDraft.outMs - CLIP_MIN_GAP_MS) clipDraft.outMs = null;
+      clipDraft.inMs = clamped;
+    } else {
+      if (clipDraft.inMs != null && clamped <= clipDraft.inMs + CLIP_MIN_GAP_MS) clipDraft.inMs = null;
+      clipDraft.outMs = clamped;
+    }
+    // Typing a point is a deliberate jump -- show the frame it names.
+    clipPauseForInspection();
+    clipSeekTo(clamped);
+  }
+  clipZoomView = null;
+  renderClipUi();
+};
+
+/**
+ * Wires one timecode field.
+ *
+ * Every keydown is stopped from reaching controls.js: its handler treats Escape
+ * as "leave the player" before it ever checks whether a text field has focus,
+ * and Space would toggle playback mid-timecode.
+ */
+const clipBindTimeField = (input, target) => {
+  const revert = () => { input.value = clipFieldText(target); };
+  input.addEventListener("focus", () => input.select());
+  input.addEventListener("keydown", event => {
+    event.stopPropagation();
+    if (event.code === "Enter" || event.code === "NumpadEnter") {
+      input.blur();
+    } else if (event.code === "Escape") {
+      event.preventDefault();
+      revert();
+      input.blur();
+    }
+  });
+  input.addEventListener("blur", () => {
+    const ms = parseClipTime(input.value);
+    if (ms != null) clipCommitTime(target, ms);
+    // Rewrite either way. A commit normalises what was typed (`1:29:59,5`
+    // becomes `1:29:59.5`, `90` becomes `01:30.0`), and a rejected entry has to
+    // go back to what the draft actually holds rather than sitting there
+    // looking accepted.
+    revert();
+  });
+};
+
+clipBindTimeField(clipInReadout, "in");
+clipBindTimeField(clipOutReadout, "out");
+clipBindTimeField(clipLenReadout, "len");
+
+document.querySelectorAll("[data-clip-mark]").forEach(button => {
+  button.addEventListener("click", event => {
+    event.stopPropagation();
+    clipMarkAtPlayhead(button.dataset.clipMark);
+  });
+});
+
 clipNudgeRows.forEach(row => {
   const target = row.dataset.clipTarget;
-  row.querySelectorAll("button").forEach(button => {
+  // Scoped to the step buttons: the Set button shares this row but carries no
+  // delta, and would otherwise read as a step of zero -- which still seeks.
+  row.querySelectorAll("button[data-clip-nudge-frames]").forEach(button => {
     button.addEventListener("click", event => {
       event.stopPropagation();
-      const delta = Number(button.dataset.clipNudge) || 0;
+      const frames = Number(button.dataset.clipNudgeFrames) || 0;
       const current = target === "in" ? clipDraft.inMs : clipDraft.outMs;
       if (current == null) return;
       clipPreviewActive = false;
-      // Seek the player to the adjusted point so the exact frame is on screen.
-      clipSeekTo(clipApplyPoint(target, current + delta));
+      // Unlike marking, stepping *should* move the picture: you are adjusting a
+      // point by an amount there is no way to judge without seeing the frame it
+      // lands on. Pausing is what makes that frame legible.
+      clipPauseForInspection();
+      clipSeekTo(clipApplyPoint(target, clipFrameStepMs(current, frames)));
       renderClipUi();
     });
   });
@@ -488,6 +816,11 @@ clipPreviewButton.addEventListener("click", event => {
   renderClipUi();
 });
 
+clipSubsButton.addEventListener("click", event => {
+  event.stopPropagation();
+  send("clipBurnSubtitles", state.clipBurnSubtitles ? 0 : 1);
+});
+
 clipExportButton.addEventListener("click", event => {
   event.stopPropagation();
   if (!clipHasRange()) return;
@@ -514,11 +847,15 @@ bindClipRowJobAction(clipDismissButton, "clipDismiss");
  * native playback update.
  */
 const clipSyncPlayback = (durationMs, positionMs) => {
-  // (Re)initialize the trim handles to the full range when a source's duration
-  // first becomes known or the source changes; small duration jitter is ignored.
+  // Reset the trim draft when a source's duration first becomes known or the
+  // source changes; small duration jitter is ignored.
   if (durationMs > 0 && Math.abs(durationMs - clipDraftDurationMs) > 1500) {
     clipDraftDurationMs = durationMs;
-    clipDraft = { inMs: 0, outMs: durationMs };
+    // Nothing is marked until you mark it. Defaulting to the whole runtime armed
+    // Export with a two-hour "selection" nobody had chosen, and parked both
+    // handles at the far ends of the bar -- as far as reachable from wherever
+    // you actually were.
+    clipDraft = { inMs: null, outMs: null };
     clipPreviewActive = false;
     clipZoomView = null;
     // A new source means a different title, so a stale open panel would be
@@ -542,7 +879,12 @@ const clipSyncPlayback = (durationMs, positionMs) => {
 
 // controls.js reaches the clipper only through this namespace, so its call
 // sites stay safe regardless of script load order.
-window.clipUi = { render: renderClipUi, syncPlayback: clipSyncPlayback };
+window.clipUi = {
+  render: renderClipUi,
+  syncPlayback: clipSyncPlayback,
+  shouldPinChrome: clipShouldPinChrome,
+  handleKey: clipHandleKey,
+};
 
 // controls.js runs its initial render() before this file loads, so the clip row
 // needs one render of its own to show up on first paint.

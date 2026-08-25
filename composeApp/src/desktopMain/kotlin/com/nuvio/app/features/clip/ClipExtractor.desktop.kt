@@ -1,5 +1,6 @@
 package com.nuvio.app.features.clip
 
+import co.touchlab.kermit.Logger
 import com.nuvio.app.core.storage.DesktopStorage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -7,10 +8,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.createDirectories
+import kotlin.math.abs
 
 /**
  * Desktop clip extraction via the system `ffmpeg` binary.
@@ -25,8 +29,22 @@ import kotlin.io.path.createDirectories
  * Encoding prefers the platform hardware encoder (VideoToolbox on macOS,
  * NVENC/QSV/AMF elsewhere) and falls back to libx264 if the hardware attempt
  * fails, so a 30s clip still exports in seconds.
+ *
+ * The clip keeps the audio track the viewer had selected, and an active
+ * subtitle is burned into the picture -- an MP4 handed to someone else has no
+ * track picker, so what is not in the frame is lost.
  */
 internal actual object ClipExtractor {
+    private val log = Logger.withTag("ClipExtractor")
+
+    /**
+     * Probed frame rates by source URL. A rate is a property of the file, so one
+     * probe per source is enough for the life of the process -- and for a remote
+     * source the probe is an HTTP round trip, which the trim UI must not repeat
+     * every time the player re-renders.
+     */
+    private val frameRateCache = ConcurrentHashMap<String, Double>()
+
     actual val isSupported: Boolean = true
 
     /**
@@ -53,6 +71,9 @@ internal actual object ClipExtractor {
     @Volatile
     private var cachedEncoders: Set<String>? = null
 
+    @Volatile
+    private var cachedFilters: Set<String>? = null
+
     actual fun start(
         request: ClipExtractRequest,
         onProgress: (fraction: Float) -> Unit,
@@ -73,29 +94,42 @@ internal actual object ClipExtractor {
                 if (durationSec <= 0.0) error("Clip end must be after start")
 
                 val outFile = uniqueOutputFile(request)
-                val sourceHeight = probeSourceHeight(ffmpeg, request)
+                val probe = probeSource(ffmpeg, request)
                 val encoders = candidateVideoEncoders(ffmpeg)
+                val burn = prepareSubtitleBurn(
+                    ffmpeg = ffmpeg,
+                    request = request,
+                    probe = probe,
+                    startSec = startSec,
+                    durationSec = durationSec,
+                    processRef = processRef,
+                )
 
                 var lastError: String? = null
                 var succeeded = false
-                for (encoder in encoders) {
-                    ensureActive()
-                    val args = buildFfmpegArgs(
-                        ffmpeg = ffmpeg,
-                        request = request,
-                        startSec = startSec,
-                        durationSec = durationSec,
-                        outFile = outFile,
-                        videoEncoder = encoder,
-                        sourceHeight = sourceHeight,
-                    )
-                    val code = runFfmpeg(args, processRef, durationSec, onProgress) { ensureActive() }
-                    if (code == 0 && outFile.exists() && outFile.length() > 0L) {
-                        succeeded = true
-                        break
+                try {
+                    for (encoder in encoders) {
+                        ensureActive()
+                        val args = buildFfmpegArgs(
+                            ffmpeg = ffmpeg,
+                            request = request,
+                            startSec = startSec,
+                            durationSec = durationSec,
+                            outFile = outFile,
+                            videoEncoder = encoder,
+                            probe = probe,
+                            burn = burn,
+                        )
+                        val code = runFfmpeg(args, processRef, durationSec, onProgress) { ensureActive() }
+                        if (code == 0 && outFile.exists() && outFile.length() > 0L) {
+                            succeeded = true
+                            break
+                        }
+                        lastError = "ffmpeg ($encoder) exited with code $code"
+                        outFile.delete()
                     }
-                    lastError = "ffmpeg ($encoder) exited with code $code"
-                    outFile.delete()
+                } finally {
+                    burn?.tempFile?.delete()
                 }
                 if (!succeeded) error(lastError ?: "Clip export failed")
 
@@ -116,6 +150,66 @@ internal actual object ClipExtractor {
                 job.cancel()
             }
         }
+    }
+
+    actual suspend fun probeFrameRate(
+        sourceUrl: String,
+        sourceHeaders: Map<String, String>,
+    ): Double {
+        if (sourceUrl.isBlank()) return 0.0
+        frameRateCache[sourceUrl]?.let { return it }
+        val rate = withContext(Dispatchers.IO) {
+            runCatching {
+                val ffmpeg = resolveFfmpegPath() ?: return@runCatching 0.0
+                val args = mutableListOf(ffprobePath(ffmpeg), "-v", "error")
+                headersArgument(sourceHeaders)?.let { headers ->
+                    args += "-headers"
+                    args += headers
+                }
+                args += listOf(
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=avg_frame_rate,r_frame_rate",
+                    "-of", "default=noprint_wrappers=1",
+                    sourceUrl,
+                )
+                val process = ProcessBuilder(args).redirectErrorStream(false).start()
+                val output = process.inputStream.bufferedReader().readText()
+                if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                    process.destroyForcibly()
+                    return@runCatching 0.0
+                }
+                parseFrameRate(output)
+            }.getOrElse { 0.0 }
+        }
+        if (rate > 0.0) frameRateCache[sourceUrl] = rate
+        return rate
+    }
+
+    /**
+     * ffprobe reports rates as rationals -- `24000/1001`, or `0/0` when the
+     * container does not say. The division happens here at full precision: 23.976
+     * rounded to three places drifts a whole frame within a few minutes.
+     */
+    private fun parseFrameRate(output: String): Double {
+        val fields = output.lineSequence()
+            .mapNotNull { line ->
+                val separator = line.indexOf('=')
+                if (separator <= 0) null else line.substring(0, separator).trim() to
+                    line.substring(separator + 1).trim()
+            }
+            .toMap()
+        // avg_frame_rate first: r_frame_rate is the smallest rate that ticks on
+        // every frame, which comes back doubled on telecined or interlaced input.
+        for (key in listOf("avg_frame_rate", "r_frame_rate")) {
+            val parts = fields[key]?.split('/') ?: continue
+            val numerator = parts.getOrNull(0)?.toDoubleOrNull() ?: continue
+            val denominator = parts.getOrNull(1)?.toDoubleOrNull() ?: 1.0
+            if (numerator <= 0.0 || denominator <= 0.0) continue
+            val rate = numerator / denominator
+            // Outside this band it is a misparse, not a real film.
+            if (rate >= 1.0 && rate <= 480.0) return rate
+        }
+        return 0.0
     }
 
     actual fun reveal(outputFileUri: String) {
@@ -210,18 +304,12 @@ internal actual object ClipExtractor {
         durationSec: Double,
         outFile: File,
         videoEncoder: String,
-        sourceHeight: Int?,
+        probe: SourceProbe,
+        burn: SubtitleBurn?,
     ): List<String> {
-        val args = mutableListOf(
-            ffmpeg,
-            "-hide_banner",
-            "-nostdin",
-            // Robustness for remote (debrid/HTTP) sources.
-            "-reconnect", "1",
-            "-reconnect_streamed", "1",
-            "-reconnect_delay_max", "5",
-            "-rw_timeout", "15000000",
-        )
+        val args = mutableListOf(ffmpeg, "-hide_banner", "-nostdin")
+        // Robustness for remote (debrid/HTTP) sources.
+        args += remoteReadArgs()
 
         // Forward the same request headers the player uses, if any.
         headersArgument(request.sourceHeaders)?.let { headers ->
@@ -239,12 +327,39 @@ internal actual object ClipExtractor {
         args += "-t"
         args += formatSeconds(durationSec)
 
-        // First video + first audio stream only; drop subtitles/data so the MP4
-        // muxer never fails on image subs or unsupported codecs.
-        args += listOf("-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn")
+        // The audio the viewer was hearing, not whatever comes first in the
+        // file: a dual-language release plays its original track first, and a
+        // clip that silently switches language is the wrong clip.
+        val audioStream = resolveAudioStreamIndex(request.audioTrackIndex, probe)
 
-        args += encoderArgs(videoEncoder, sourceHeight)
-        // 8-bit 4:2:0 so 10-bit HEVC/HDR sources produce a universally playable file.
+        val tonemap = tonemapChain(ffmpeg, probe)
+        if (burn == null) {
+            // No graph to join, so the chain rides on -vf and the video is still
+            // mapped straight off the input.
+            if (tonemap != null) args += listOf("-vf", tonemap)
+            args += listOf("-map", "0:v:0")
+        } else {
+            // Burned-in subtitles come out of a filtergraph, so the video is
+            // mapped from its output label instead of straight off the input.
+            args += listOf(
+                "-filter_complex",
+                composeVideoGraph(tonemap, burn.filterGraph),
+                "-map",
+                "[$BURN_OUTPUT_LABEL]",
+            )
+        }
+        // Subtitle/data streams are never muxed in: the MP4 muxer chokes on
+        // image subs, and anything that survives here is already in the frame.
+        // -sn is skipped when the graph is rendering the source's subtitles, so
+        // there is no chance of it disowning the stream the overlay feeds on.
+        args += listOf("-map", "0:a:$audioStream?")
+        if (burn?.readsSourceSubtitles != true) args += "-sn"
+        args += "-dn"
+
+        args += encoderArgs(videoEncoder, probe.height)
+        // 8-bit 4:2:0 so 10-bit HEVC sources produce a universally playable file.
+        // Redundant when the tonemap chain ran -- it ends in yuv420p -- but this
+        // is also what covers a 10-bit SDR source, which needs no tone curve.
         args += listOf("-pix_fmt", "yuv420p")
         // Stereo AAC plays everywhere (sources are often DTS/TrueHD/5.1).
         args += listOf("-c:a", "aac", "-b:a", "192k", "-ac", "2")
@@ -280,6 +395,56 @@ internal actual object ClipExtractor {
         )
     }
 
+    /**
+     * Video filter chain that brings an HDR source down to SDR, or null when the
+     * source is already SDR or this ffmpeg cannot do it.
+     *
+     * Without this, `-pix_fmt yuv420p` alone just truncates PQ-encoded BT.2020
+     * to 8-bit BT.709 and reinterprets the numbers: highlights clip, everything
+     * else lands far too dark, and the whole clip reads as washed-out grey. The
+     * chain instead linearises the signal, maps the primaries, applies a real
+     * tone curve, and re-encodes to BT.709.
+     *
+     * `zscale` needs an ffmpeg built with libzimg, which Homebrew's is not; the
+     * export falls back to the old behaviour rather than failing, since a
+     * flat-looking clip still beats no clip. See the build notes for a build
+     * that has it -- the same one needed for subtitle burn-in.
+     */
+    private fun tonemapChain(ffmpeg: String, probe: SourceProbe): String? {
+        if (!probe.isHdr) return null
+        if (!hasFilter(ffmpeg, "zscale") || !hasFilter(ffmpeg, "tonemap")) {
+            log.w { "HDR source but this ffmpeg cannot tonemap (needs libzimg); exporting untonemapped" }
+            return null
+        }
+        return listOf(
+            // npl=100 is the reference SDR display the curve is aimed at.
+            "zscale=transfer=linear:npl=100",
+            // tonemap works in linear light and wants float; gbrpf32le is the
+            // format it is documented against.
+            "format=gbrpf32le",
+            "zscale=primaries=bt709",
+            // hable keeps highlight detail rather than clipping it; desat=0
+            // because the default desaturation is what makes skies look grey.
+            "tonemap=tonemap=hable:desat=0",
+            "zscale=transfer=bt709:matrix=bt709:range=tv",
+            "format=yuv420p",
+        ).joinToString(",")
+    }
+
+    /**
+     * Splices the tonemap in ahead of a subtitle burn.
+     *
+     * Order matters: subtitles are authored for SDR, so drawing them first and
+     * tonemapping afterwards would drag the text down the same curve as the
+     * picture and leave it grey. Every burn graph starts from `[0:v:0]`, so the
+     * tonemap takes that input and the burn reads its output instead.
+     */
+    private fun composeVideoGraph(tonemap: String?, burnGraph: String): String {
+        if (tonemap == null) return burnGraph
+        return "[0:v:0]$tonemap[$TONEMAP_OUTPUT_LABEL];" +
+            burnGraph.replaceFirst("[0:v:0]", "[$TONEMAP_OUTPUT_LABEL]")
+    }
+
     /** Hardware encoder (when the ffmpeg build has one), then libx264 as fallback. */
     private fun candidateVideoEncoders(ffmpeg: String): List<String> {
         val available = availableEncoders(ffmpeg)
@@ -310,32 +475,375 @@ internal actual object ClipExtractor {
     }
 
     /**
-     * Reads the source's video height with ffprobe (a small ranged read of the
-     * container header) to pick a sensible hardware-encoder bitrate. Best-effort:
-     * returns null on any failure and the encoder uses a default.
+     * What the source's stream layout looks like, as far as the export needs to
+     * know: [height] picks the hardware-encoder bitrate, [audioStreamCount]
+     * keeps a stale track selection from mapping a stream that is not there,
+     * and [subtitleCodecs] decides how a subtitle gets burned in.
+     *
+     * Every field is best-effort -- a probe that fails leaves them null/empty
+     * and each caller falls back to something sane.
      */
-    private fun probeSourceHeight(ffmpeg: String, request: ClipExtractRequest): Int? = runCatching {
-        val ffprobe = File(ffmpeg).parentFile?.resolve("ffprobe")?.takeIf { it.canExecute() }?.absolutePath
-            ?: "ffprobe"
-        val args = mutableListOf(ffprobe, "-v", "error")
+    private data class SourceProbe(
+        val height: Int? = null,
+        val audioStreamCount: Int? = null,
+        val subtitleCodecs: List<String> = emptyList(),
+        val colorTransfer: String = "",
+        val colorPrimaries: String = "",
+    ) {
+        /**
+         * True for HDR10/HDR10+/Dolby Vision (PQ) and HLG.
+         *
+         * Read off the transfer function rather than the primaries: a BT.2020
+         * SDR master exists and needs no tone curve, while the transfer
+         * characteristic is what actually makes the picture unviewable when it
+         * is thrown away.
+         */
+        val isHdr: Boolean
+            get() = colorTransfer == "smpte2084" || colorTransfer == "arib-std-b67"
+    }
+
+    /**
+     * Reads the source's stream layout with ffprobe -- a small ranged read of
+     * the container header. Best-effort: an empty probe on any failure.
+     */
+    private fun probeSource(ffmpeg: String, request: ClipExtractRequest): SourceProbe = runCatching {
+        val args = mutableListOf(ffprobePath(ffmpeg), "-v", "error")
         headersArgument(request.sourceHeaders)?.let { headers ->
             args += "-headers"
             args += headers
         }
         args += listOf(
-            "-select_streams", "v:0",
-            "-show_entries", "stream=height",
-            "-of", "csv=p=0",
+            "-show_entries", "stream=codec_type,codec_name,height,color_transfer,color_primaries",
+            "-of", "default=noprint_wrappers=0",
             request.sourceUrl,
         )
         val process = ProcessBuilder(args).redirectErrorStream(false).start()
         val output = process.inputStream.bufferedReader().readText()
         if (!process.waitFor(20, TimeUnit.SECONDS)) {
             process.destroyForcibly()
-            return@runCatching null
+            return@runCatching SourceProbe()
         }
-        output.lineSequence().firstNotNullOfOrNull { it.trim().toIntOrNull() }
-    }.getOrNull()
+        parseProbeOutput(output)
+    }.getOrElse { SourceProbe() }
+
+    /**
+     * Parses ffprobe's `[STREAM] key=value [/STREAM]` blocks. Stream order is
+     * file order, which is exactly the order ffmpeg's `0:a:N` / `0:s:N`
+     * selectors count in -- and the order mpv's track list is built in, so the
+     * player's track indexes address the same streams here.
+     */
+    private fun parseProbeOutput(output: String): SourceProbe {
+        var height: Int? = null
+        var audioStreams = 0
+        var colorTransfer = ""
+        var colorPrimaries = ""
+        val subtitleCodecs = mutableListOf<String>()
+        for (block in output.split("[STREAM]").drop(1)) {
+            val fields = block.lineSequence()
+                .mapNotNull { line ->
+                    val separator = line.indexOf('=')
+                    if (separator <= 0) null else line.substring(0, separator).trim() to
+                        line.substring(separator + 1).trim()
+                }
+                .toMap()
+            when (fields["codec_type"]) {
+                "video" -> if (height == null) {
+                    height = fields["height"]?.toIntOrNull()
+                    // ffprobe prints "unknown" for an untagged stream; treated as
+                    // SDR, which is the safe reading -- an untagged HDR master is
+                    // rare, and tonemapping an SDR picture washes it out.
+                    colorTransfer = fields["color_transfer"].orEmpty().takeIf { it != "unknown" }.orEmpty()
+                    colorPrimaries = fields["color_primaries"].orEmpty().takeIf { it != "unknown" }.orEmpty()
+                }
+                "audio" -> audioStreams++
+                "subtitle" -> subtitleCodecs += fields["codec_name"].orEmpty()
+            }
+        }
+        return SourceProbe(height, audioStreams, subtitleCodecs, colorTransfer, colorPrimaries)
+    }
+
+    /** ffprobe next to the resolved ffmpeg, falling back to PATH. */
+    private fun ffprobePath(ffmpeg: String): String =
+        File(ffmpeg).parentFile?.resolve("ffprobe")?.takeIf { it.canExecute() }?.absolutePath ?: "ffprobe"
+
+    /**
+     * The audio stream to map. A selection past the end of the probed list is
+     * dropped rather than trusted -- that only happens when the player's track
+     * list and the file have drifted apart, and stream 0 at least has sound.
+     */
+    private fun resolveAudioStreamIndex(requested: Int, probe: SourceProbe): Int {
+        if (requested < 0) return 0
+        val count = probe.audioStreamCount ?: return requested
+        return if (requested < count) requested else 0
+    }
+
+    // --- burned-in subtitles ---
+
+    /** Filtergraph label the burned video leaves on, mapped as the output's video stream. */
+    private const val BURN_OUTPUT_LABEL = "vout"
+
+    /** Label the tonemapped picture leaves on, before anything is drawn over it. */
+    private const val TONEMAP_OUTPUT_LABEL = "vtm"
+
+    /**
+     * How far before the in-point subtitle events are collected. A line that is
+     * already on screen when the clip starts was extracted long before the cut,
+     * so without a run-up it would be missing from the very frames it belongs to.
+     */
+    private const val SUBTITLE_PREROLL_SEC = 10.0
+
+    /** Codecs the `subtitles` filter cannot render: these are pictures, not text. */
+    private val bitmapSubtitleCodecs = setOf(
+        "hdmv_pgs_subtitle",
+        "dvd_subtitle",
+        "dvb_subtitle",
+        "xsub",
+    )
+
+    /**
+     * A prepared subtitle burn: the graph to hand `-filter_complex`, plus the
+     * scratch file it reads, which the caller deletes once encoding is done.
+     */
+    private data class SubtitleBurn(
+        val filterGraph: String,
+        val tempFile: File?,
+        /** True when the graph reads the source's own subtitle stream (sub2video). */
+        val readsSourceSubtitles: Boolean = false,
+    )
+
+    /**
+     * Works out how the requested subtitle gets into the picture, doing any
+     * preparation the graph needs up front.
+     *
+     * Text subtitles are pulled into a local `.ass` first: libavfilter's
+     * `subtitles` filter demuxes the file it is given from the very beginning,
+     * which over a remote source would mean downloading everything up to the
+     * clip. A short extraction pass over the clip window costs one ranged read
+     * instead.
+     *
+     * Image subtitles (PGS, VobSub) cannot be rendered by that filter at all,
+     * so they are overlaid straight from the source stream in the same pass.
+     *
+     * Returns null when there is nothing to draw -- no subtitle was asked for,
+     * or none was on screen during the window. Anything that went wrong throws
+     * instead, because a clip that quietly lost its subtitles is not the clip
+     * the viewer asked for.
+     */
+    private fun prepareSubtitleBurn(
+        ffmpeg: String,
+        request: ClipExtractRequest,
+        probe: SourceProbe,
+        startSec: Double,
+        durationSec: Double,
+        processRef: AtomicReference<Process?>,
+    ): SubtitleBurn? {
+        val delaySec = (request.subtitle?.delayMs ?: 0) / 1000.0
+        return when (val selection = request.subtitle) {
+            null -> null
+
+            is ClipSubtitleSelection.Embedded -> {
+                val codec = probe.subtitleCodecs.getOrNull(selection.trackIndex)
+                if (probe.subtitleCodecs.isNotEmpty() && codec == null) {
+                    // The player and the file disagree about how many subtitle
+                    // streams there are. Better to say so than to quietly hand
+                    // back a clip with nothing burned into it.
+                    error("The selected subtitle track is not in the source stream")
+                }
+                if (codec in bitmapSubtitleCodecs) {
+                    // sub2video: ffmpeg rasterizes the subtitle stream into frames
+                    // the overlay filter can composite, timed by the same seek as
+                    // the video, so no shifting is involved. This works for image
+                    // subtitles only -- sub2video ignores text rects, which is why
+                    // everything else goes the libass route below.
+                    SubtitleBurn(
+                        filterGraph = "[0:v:0][0:s:${selection.trackIndex}]overlay[$BURN_OUTPUT_LABEL]",
+                        tempFile = null,
+                        readsSourceSubtitles = true,
+                    )
+                } else {
+                    requireSubtitleFilter(ffmpeg)
+                    val preroll = minOf(SUBTITLE_PREROLL_SEC, startSec)
+                    val temp = createSubtitleTempFile()
+                    val extracted = runSubtitlePass(
+                        args = buildList {
+                            add(ffmpeg)
+                            add("-hide_banner")
+                            add("-nostdin")
+                            addAll(remoteReadArgs())
+                            headersArgument(request.sourceHeaders)?.let {
+                                add("-headers")
+                                add(it)
+                            }
+                            add("-ss")
+                            add(formatSeconds(startSec - preroll))
+                            add("-i")
+                            add(request.sourceUrl)
+                            add("-t")
+                            add(formatSeconds(durationSec + preroll))
+                            add("-map")
+                            add("0:s:${selection.trackIndex}")
+                            // ASS in, ASS out: copying keeps the styling the
+                            // source authored. Anything else has to be converted.
+                            add("-c:s")
+                            add(if (codec == "ass" || codec == "ssa") "copy" else "ass")
+                            add("-y")
+                            add(temp.absolutePath)
+                        },
+                        processRef = processRef,
+                        temp = temp,
+                    )
+                    when (extracted) {
+                        SubtitlePassResult.Failed -> error("Could not read the subtitle track from the source")
+                        SubtitlePassResult.Empty -> null
+                        SubtitlePassResult.Ok ->
+                            SubtitleBurn(burnFilterGraph(temp, preroll - delaySec), temp)
+                    }
+                }
+            }
+
+            is ClipSubtitleSelection.External -> {
+                requireSubtitleFilter(ffmpeg)
+                val temp = createSubtitleTempFile()
+                val fetched = runSubtitlePass(
+                    args = listOf(
+                        ffmpeg, "-hide_banner", "-nostdin",
+                        // The source's headers belong to the video host and are
+                        // not sent to whoever is serving the subtitle.
+                        "-i", selection.url,
+                        "-c:s", "ass",
+                        "-y", temp.absolutePath,
+                    ),
+                    processRef = processRef,
+                    temp = temp,
+                )
+                // A sidecar file is timed against the whole video, so the burn
+                // has to look up the clip's frames at their original positions.
+                when (fetched) {
+                    SubtitlePassResult.Failed -> error("Could not download the selected subtitle")
+                    SubtitlePassResult.Empty -> null
+                    SubtitlePassResult.Ok ->
+                        SubtitleBurn(burnFilterGraph(temp, startSec - delaySec), temp)
+                }
+            }
+        }
+    }
+
+    /**
+     * Renders [subtitleFile] onto the video. The clip's own timeline starts at
+     * zero while the subtitle file's does not, so the picture is walked forward
+     * by [offsetSec] into the subtitle's timeline for the lookup and walked
+     * back again before it reaches the encoder.
+     */
+    private fun burnFilterGraph(subtitleFile: File, offsetSec: Double): String {
+        val burn = "subtitles=filename=${filterPathArgument(subtitleFile)}"
+        if (abs(offsetSec) < 0.001) return "[0:v:0]$burn[$BURN_OUTPUT_LABEL]"
+        val sign = if (offsetSec > 0) "+" else "-"
+        val magnitude = formatSeconds(abs(offsetSec))
+        val inverse = if (offsetSec > 0) "-" else "+"
+        return "[0:v:0]setpts=PTS$sign$magnitude/TB,$burn,setpts=PTS$inverse$magnitude/TB[$BURN_OUTPUT_LABEL]"
+    }
+
+    /**
+     * Escapes a path for a filtergraph argument. Windows drive letters are the
+     * reason: an unescaped `C:` reads as the end of the filter's argument list.
+     */
+    private fun filterPathArgument(file: File): String {
+        val escaped = file.absolutePath
+            .replace('\\', '/')
+            .replace("'", "\\'")
+            .replace(":", "\\:")
+        return "'$escaped'"
+    }
+
+    private fun createSubtitleTempFile(): File =
+        File.createTempFile("nuvio-clip-", ".ass").apply { deleteOnExit() }
+
+    /**
+     * How a subtitle preparation pass ended. [Empty] and [Failed] are kept
+     * apart on purpose: a window with no dialogue in it is a perfectly good
+     * clip, while a pass that broke is something the viewer asked for and did
+     * not get.
+     */
+    private enum class SubtitlePassResult { Ok, Empty, Failed }
+
+    private fun runSubtitlePass(
+        args: List<String>,
+        processRef: AtomicReference<Process?>,
+        temp: File,
+    ): SubtitlePassResult {
+        val result = runCatching {
+            val process = ProcessBuilder(args).redirectErrorStream(true).start()
+            processRef.set(process)
+            // Drained rather than ignored: a full pipe buffer would deadlock the pass.
+            val output = process.inputStream.bufferedReader().readText()
+            if (!process.waitFor(SUBTITLE_PASS_TIMEOUT_MINUTES, TimeUnit.MINUTES)) {
+                process.destroyForcibly()
+                log.w { "Subtitle pass timed out" }
+                return@runCatching SubtitlePassResult.Failed
+            }
+            if (process.exitValue() != 0) {
+                log.w { "Subtitle pass failed: ${output.takeLast(400)}" }
+                return@runCatching SubtitlePassResult.Failed
+            }
+            // The ASS muxer writes its header either way, so the events are
+            // what say whether anything was on screen during the window.
+            if (temp.exists() && hasDialogue(temp)) {
+                SubtitlePassResult.Ok
+            } else {
+                SubtitlePassResult.Empty
+            }
+        }.getOrElse { error ->
+            log.w(error) { "Subtitle pass could not run" }
+            SubtitlePassResult.Failed
+        }
+        if (result != SubtitlePassResult.Ok) temp.delete()
+        return result
+    }
+
+    private fun hasDialogue(subtitleFile: File): Boolean = runCatching {
+        subtitleFile.useLines { lines -> lines.any { it.startsWith("Dialogue:") } }
+    }.getOrDefault(false)
+
+    /**
+     * Rendering text subtitles is libass' job, and plenty of ffmpeg builds are
+     * compiled without it. Failing here says so, instead of letting the encode
+     * die on a missing filter -- and the clip row's Subtitles toggle is the way
+     * out for anyone who just wants the clip.
+     */
+    private fun requireSubtitleFilter(ffmpeg: String) {
+        if (hasFilter(ffmpeg, "subtitles")) return
+        error(
+            "ffmpeg was built without libass and cannot render subtitles. " +
+                "Turn Subtitles off, or point NUVIO_FFMPEG_PATH at an ffmpeg built with libass.",
+        )
+    }
+
+    private fun hasFilter(ffmpeg: String, name: String): Boolean {
+        cachedFilters?.let { return name in it }
+        val filters = runCatching {
+            val process = ProcessBuilder(ffmpeg, "-hide_banner", "-filters")
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().readText()
+            process.waitFor(10, TimeUnit.SECONDS)
+            // Columns are "flags name inputs->outputs description"; the name is the second.
+            output.lineSequence()
+                .mapNotNull { line -> line.trim().split(Regex("\\s+")).getOrNull(1) }
+                .toSet()
+        }.getOrDefault(emptySet())
+        cachedFilters = filters
+        return name in filters
+    }
+
+    private const val SUBTITLE_PASS_TIMEOUT_MINUTES = 5L
+
+    /** Reconnect/timeout options shared by every remote read. */
+    private fun remoteReadArgs(): List<String> = listOf(
+        "-reconnect", "1",
+        "-reconnect_streamed", "1",
+        "-reconnect_delay_max", "5",
+        "-rw_timeout", "15000000",
+    )
 
     /** Joins headers into libavformat's CRLF-delimited `-headers` block, or null if none. */
     private fun headersArgument(headers: Map<String, String>): String? {

@@ -4,6 +4,14 @@ package com.nuvio.app.features.clip
  * Inputs for a single clip extraction. The URL and headers are the same values
  * the player is already using for playback ([PlayerScreenRuntime.activeSourceUrl] /
  * `activeSourceHeaders`), so a clip is cut from the exact stream on screen.
+ *
+ * [audioTrackIndex] is the position of the playing audio track among the
+ * source's audio streams -- the same ordinal the player's track list uses --
+ * so a clip keeps the language the viewer had selected instead of whatever
+ * happens to come first in the file. -1 means "first audio stream".
+ *
+ * [subtitle] is the subtitle to burn into the picture, or null to leave the
+ * clip clean.
  */
 internal data class ClipExtractRequest(
     val sourceUrl: String,
@@ -11,6 +19,8 @@ internal data class ClipExtractRequest(
     val startMs: Long,
     val endMs: Long,
     val title: String,
+    val audioTrackIndex: Int = -1,
+    val subtitle: ClipSubtitleSelection? = null,
 )
 
 internal interface ClipTaskHandle {
@@ -41,6 +51,18 @@ internal expect object ClipExtractor {
         onSuccess: (output: ClipOutput) -> Unit,
         onFailure: (message: String) -> Unit,
     ): ClipTaskHandle
+
+    /**
+     * Frames per second of [sourceUrl]'s video stream, or 0.0 when it cannot be
+     * determined.
+     *
+     * The trim UI steps In/Out one frame at a time, which needs the source's
+     * real rate: a fixed guess is off by a whole frame every few presses on
+     * anything that is not 24fps. The native player does not expose a rate, so
+     * this is probed from the container instead. Suspending because it reaches
+     * the network -- for a remote source it is a ranged read of the header.
+     */
+    suspend fun probeFrameRate(sourceUrl: String, sourceHeaders: Map<String, String>): Double
 
     /** Reveal the finished clip in the platform file manager. No-op where unsupported. */
     fun reveal(outputFileUri: String)

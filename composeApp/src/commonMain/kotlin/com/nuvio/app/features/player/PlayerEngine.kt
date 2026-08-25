@@ -206,6 +206,14 @@ data class PlayerControlsState(
     val clipStatusMessage: String = "",
     val clipStatusKind: String = "",
     val clipOutputDir: String = "",
+    val clipSubtitlesAvailable: Boolean = false,
+    val clipBurnSubtitles: Boolean = true,
+    /**
+     * Microseconds of one source frame, or 0 when the rate is unknown. Carried
+     * as a duration rather than a rate because that is what the chrome does with
+     * it -- a step size for the trim nudges -- and it stays an exact integer.
+     */
+    val clipFrameDurationUs: Int = 0,
     val clipJobs: List<PlayerClipJobItem> = emptyList(),
     val clipLibrary: List<PlayerClipLibraryItem> = emptyList(),
     val showP2pConsent: Boolean = false,

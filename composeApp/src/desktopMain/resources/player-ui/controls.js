@@ -2902,6 +2902,7 @@ document.addEventListener("keydown", event => {
   if (activeModal || isTextEntryTarget(event.target)) {
     return;
   }
+  if (window.clipUi?.handleKey?.(event)) return;
   const command = shortcutCommandForEvent(event);
   if (!command) {
     return;

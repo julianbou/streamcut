@@ -170,6 +170,10 @@ internal class PlayerScreenRuntime(
     // before an export command is issued.
     var clipStartMs: Long? = null
     var clipEndMs: Long? = null
+    // Defaults on: someone watching with subtitles usually wants them in the
+    // clip too, and a shared MP4 has no track picker to turn them on later.
+    // Observable, unlike the In/Out points: the chrome draws this one.
+    var clipBurnSubtitles by mutableStateOf(true)
     var playerControlsPendingP2pSwitch by mutableStateOf<PendingPlayerP2pSwitch?>(null)
     var playerControlsCloseModalsToken by mutableStateOf(0L)
     var episodeStreamsPanelState by mutableStateOf(EpisodeStreamsPanelState())

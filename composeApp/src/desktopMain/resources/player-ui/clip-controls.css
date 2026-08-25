@@ -76,12 +76,38 @@
   color: rgba(255, 255, 255, .6);
   white-space: nowrap;
 }
+/* An input rather than a label: a timecode read off one clip is the fastest way
+   to set the same point on another, and there is no mouse gesture for "44:09.5
+   exactly". Styled to read as text until it is hovered or focused. */
 .clip-io-time {
+  width: 9ch;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, .92);
   white-space: nowrap;
+  cursor: text;
+}
+.clip-io-time:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, .18);
+}
+.clip-io-time:focus {
+  outline: none;
+  border-color: var(--theme-accent);
+  background: rgba(0, 0, 0, .4);
+}
+.clip-io-time::placeholder {
+  color: rgba(255, 255, 255, .32);
+  font-weight: 600;
+}
+.clip-io-time:disabled {
+  opacity: .4;
+  cursor: default;
 }
 .clip-row-spacer {
   flex: 1;
@@ -90,6 +116,11 @@
   font-size: 12px;
   color: rgba(255, 255, 255, .72);
   white-space: nowrap;
+  /* An ffmpeg error can be a paragraph; the row keeps its shape and the
+     full text stays available in the element's tooltip. */
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .clip-inline-status[data-kind="done"] { color: #7fd88f; }
 .clip-inline-status[data-kind="error"] { color: #ff8a80; }
@@ -120,6 +151,12 @@
   background: var(--theme-accent);
   filter: brightness(1.1);
   color: #000;
+}
+/* On/off state for the subtitle burn-in toggle: on reads as accented text
+   rather than a filled button, so it never competes with Export. */
+.clip-action.toggled-on {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
 }
 .clip-action:disabled {
   opacity: .4;
@@ -168,13 +205,27 @@
   opacity: .4;
   cursor: default;
 }
+/* The primary way to set a point, so it reads as an action rather than as the
+   first of five nudges. */
+.clip-mark {
+  background: rgba(255, 255, 255, .18);
+  border-color: rgba(255, 255, 255, .28);
+  color: rgba(255, 255, 255, .95);
+  letter-spacing: .04em;
+}
+.clip-mark:hover:not(:disabled) {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: #fff;
+}
 
 /* --- zoomed trim track ---------------------------------------------------
-   Shown only when the In/Out handles sit close together on the main scrub bar,
-   where a pixel is worth several seconds. This track re-maps a narrow window
-   around the selection across the full width, so one pixel becomes tens of
-   milliseconds and frame-level trimming is possible with the mouse. The main
-   scrub bar is left untouched -- it still spans the whole runtime. */
+   The main scrub bar spans the whole runtime, so on a feature a pixel there is
+   worth several seconds -- no good for placing a cut. This track re-maps a
+   narrow window across the same width, making a pixel tens of milliseconds. It
+   is up for as long as the clip row is: the window follows the playhead until
+   something is marked, then settles around the selection. The main scrub bar is
+   left untouched. */
 .clip-zoom-wrap {
   display: flex;
   align-items: center;

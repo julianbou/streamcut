@@ -63,6 +63,24 @@ data class ClipContentRef(
 }
 
 /**
+ * The subtitle a clip is rendered with. Burning is the only option that
+ * survives sharing: an MP4 the viewer sends to someone else has no track
+ * picker, so the subtitle has to be part of the picture.
+ *
+ * [delayMs] mirrors the player's subtitle delay so a manually re-synced
+ * subtitle lands on the same frames it did on screen.
+ */
+sealed interface ClipSubtitleSelection {
+    val delayMs: Int
+
+    /** A subtitle stream inside the source, by its ordinal among subtitle streams. */
+    data class Embedded(val trackIndex: Int, override val delayMs: Int = 0) : ClipSubtitleSelection
+
+    /** A sidecar subtitle file (addon subtitles), by URL. */
+    data class External(val url: String, override val delayMs: Int = 0) : ClipSubtitleSelection
+}
+
+/**
  * Snapshot of an in-flight or finished clip, observed by the player UI.
  *
  * [id] is the job's identity for its whole life: every clip started gets its

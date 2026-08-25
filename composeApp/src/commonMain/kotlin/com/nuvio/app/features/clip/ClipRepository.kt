@@ -87,6 +87,10 @@ object ClipRepository {
      *
      * Pass [retainsP2pStream] when [sourceUrl] points at the local P2P server,
      * so it is kept running until the job settles.
+     *
+     * [audioTrackIndex] and [subtitle] carry what the viewer is watching --
+     * the selected audio language, and the subtitle to burn in -- so the file
+     * on disk matches the player instead of the source's defaults.
      */
     fun startClip(
         sourceUrl: String,
@@ -95,6 +99,8 @@ object ClipRepository {
         startMs: Long,
         endMs: Long,
         retainsP2pStream: Boolean = false,
+        audioTrackIndex: Int = -1,
+        subtitle: ClipSubtitleSelection? = null,
     ) {
         if (!isSupported) return
         if (sourceUrl.isBlank() || endMs <= startMs) return
@@ -106,6 +112,8 @@ object ClipRepository {
             startMs = startMs,
             endMs = endMs,
             title = title,
+            audioTrackIndex = audioTrackIndex,
+            subtitle = subtitle,
         )
         onMain {
             // A double-click on Export would otherwise encode the same range

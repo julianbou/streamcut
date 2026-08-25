@@ -19,6 +19,8 @@ internal actual object ClipExtractor {
         }
     }
 
+    actual suspend fun probeFrameRate(sourceUrl: String, sourceHeaders: Map<String, String>): Double = 0.0
+
     actual fun reveal(outputFileUri: String) = Unit
     actual fun openFile(outputFileUri: String) = Unit
     actual fun exists(outputFileUri: String): Boolean = false
