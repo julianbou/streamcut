@@ -66,6 +66,20 @@ object ClipRepository {
     /** Absolute path clips are currently written to. Empty where unsupported. */
     fun outputDirPath(): String = ClipExtractor.outputDirPath()
 
+    /** Free space where clips are written, for the library header. */
+    fun outputDirFreeBytes(): Long = ClipExtractor.outputDirFreeBytes()
+
+    /** Plain filesystem path for a clip's `file:` URI, for dragging and display. */
+    fun filePathOf(fileUri: String): String = ClipExtractor.filePathOf(fileUri)
+
+    /** Opens the clips folder itself in the platform file manager. */
+    fun revealOutputDir() {
+        val path = ClipExtractor.outputDirPath()
+        // openFile rather than reveal: revealing a folder selects it in its
+        // parent, which is one level away from what "Open folder" promises.
+        if (path.isNotBlank()) ClipExtractor.openFile(path)
+    }
+
     /** Absolute path used when no custom folder is set. */
     fun defaultOutputDirPath(): String = ClipExtractor.defaultOutputDirPath()
 

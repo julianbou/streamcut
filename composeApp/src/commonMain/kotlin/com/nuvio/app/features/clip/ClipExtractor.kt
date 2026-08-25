@@ -94,6 +94,17 @@ internal expect object ClipExtractor {
     /** Delete the clip file. Missing files count as deleted. */
     fun deleteFile(outputFileUri: String)
 
+    /**
+     * Plain filesystem path for a `file:` URI, or "" if there is none.
+     *
+     * Clip identity is a URI everywhere else, but dragging a file out and
+     * showing a path to a human both need the path itself.
+     */
+    fun filePathOf(fileUri: String): String
+
+    /** Free space on the volume holding the output folder, or 0 if unknown. */
+    fun outputDirFreeBytes(): Long
+
     /** Absolute path clips are written to right now (custom folder, or the default). */
     fun outputDirPath(): String
 

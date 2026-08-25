@@ -269,6 +269,12 @@ internal actual object ClipExtractor {
         }
     }
 
+    actual fun filePathOf(fileUri: String): String =
+        runCatching { fileFor(fileUri)?.absolutePath.orEmpty() }.getOrDefault("")
+
+    actual fun outputDirFreeBytes(): Long =
+        runCatching { clipsDir.usableSpace }.getOrDefault(0L)
+
     actual fun outputDirPath(): String = runCatching { clipsDir.absolutePath }.getOrDefault("")
 
     actual fun defaultOutputDirPath(): String =

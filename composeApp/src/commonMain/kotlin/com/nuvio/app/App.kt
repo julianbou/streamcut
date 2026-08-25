@@ -97,6 +97,7 @@ import coil3.request.CachePolicy
 import coil3.request.crossfade
 import coil3.svg.SvgDecoder
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.features.clip.ClipsLibraryScreen
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.auth.DeviceSessionRegistration
@@ -3915,7 +3916,11 @@ private fun AppTabHost(
                             )
                         }
 
-                        AppScreenTab.Library -> {
+                        AppScreenTab.Library -> if (!AppFeaturePolicy.viewingChromeEnabled) {
+                            // Saved shows are a viewing concept; in a clipper the
+                            // library that matters is the one on disk.
+                            ClipsLibraryScreen(topChromePadding = topChromePadding)
+                        } else {
                             AppLibraryTabContent(
                                 topChromePadding = topChromePadding,
                                 libraryScrollToTopRequests = libraryScrollToTopRequests,
@@ -4182,19 +4187,6 @@ private fun DesktopHoverSidebar(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 DesktopSidebarItem(
-                    label = stringResource(Res.string.compose_nav_home),
-                    selected = selectedTab == AppScreenTab.Home,
-                    expanded = sidebarExpanded,
-                    onClick = { selectTab(AppScreenTab.Home) },
-                ) { color ->
-                    Icon(
-                        imageVector = Icons.Filled.Home,
-                        contentDescription = stringResource(Res.string.compose_nav_home),
-                        modifier = Modifier.size(DesktopSidebarIconSize),
-                        tint = color,
-                    )
-                }
-                DesktopSidebarItem(
                     label = stringResource(Res.string.compose_nav_search),
                     selected = selectedTab == AppScreenTab.Search,
                     expanded = sidebarExpanded,
@@ -4208,7 +4200,24 @@ private fun DesktopHoverSidebar(
                     )
                 }
                 DesktopSidebarItem(
-                    label = stringResource(Res.string.compose_nav_library),
+                    label = stringResource(Res.string.compose_nav_home),
+                    selected = selectedTab == AppScreenTab.Home,
+                    expanded = sidebarExpanded,
+                    onClick = { selectTab(AppScreenTab.Home) },
+                ) { color ->
+                    Icon(
+                        imageVector = Icons.Filled.Home,
+                        contentDescription = stringResource(Res.string.compose_nav_home),
+                        modifier = Modifier.size(DesktopSidebarIconSize),
+                        tint = color,
+                    )
+                }
+                DesktopSidebarItem(
+                    label = if (AppFeaturePolicy.viewingChromeEnabled) {
+                        stringResource(Res.string.compose_nav_library)
+                    } else {
+                        "Clips"
+                    },
                     selected = selectedTab == AppScreenTab.Library,
                     expanded = sidebarExpanded,
                     onClick = { selectTab(AppScreenTab.Library) },
