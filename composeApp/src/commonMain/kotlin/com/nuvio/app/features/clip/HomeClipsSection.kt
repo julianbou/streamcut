@@ -11,25 +11,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioSectionLabel
 import nuvio.composeapp.generated.resources.Res
-import nuvio.composeapp.generated.resources.clip_action_cancel
-import nuvio.composeapp.generated.resources.clip_action_delete
-import nuvio.composeapp.generated.resources.clip_delete_one_message_format
-import nuvio.composeapp.generated.resources.clip_delete_one_title
 import nuvio.composeapp.generated.resources.clip_section_your_clips
 import org.jetbrains.compose.resources.stringResource
 
@@ -60,8 +50,6 @@ internal fun HomeClipsSection(
         return
     }
 
-    var pendingDelete by remember { mutableStateOf<ClipEntry?>(null) }
-
     Column(modifier = modifier.fillMaxWidth()) {
         NuvioSectionLabel(
             text = stringResource(Res.string.clip_section_your_clips),
@@ -78,39 +66,13 @@ internal fun HomeClipsSection(
                     modifier = Modifier.width(196.dp),
                     onClick = { ClipLibrary.open(entry.id) },
                     onReveal = { ClipLibrary.reveal(entry.id) },
-                    onDelete = { pendingDelete = entry },
+                    // No confirmation: the delete is undoable for seven
+                    // seconds, and asking twice for something already reversible
+                    // is friction, not safety.
+                    onDelete = { ClipLibrary.delete(entry.id) },
                 )
             }
         }
-    }
-
-    val deleteTarget = pendingDelete
-    if (deleteTarget != null) {
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text(stringResource(Res.string.clip_delete_one_title)) },
-            // Says where the file goes, because that is the difference between
-            // a mistake being recoverable and not.
-            text = {
-                Text(
-                    stringResource(
-                        Res.string.clip_delete_one_message_format,
-                        deleteTarget.fileName,
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    ClipLibrary.delete(deleteTarget.id)
-                    pendingDelete = null
-                }) { Text(stringResource(Res.string.clip_action_delete)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) {
-                    Text(stringResource(Res.string.clip_action_cancel))
-                }
-            },
-        )
     }
 }
 

@@ -174,7 +174,10 @@ internal fun ClipsLibraryScreen(
                         }
                     },
                     onReveal = { ClipLibrary.reveal(entry.id) },
-                    onDelete = { pendingDelete = listOf(entry) },
+                    // One clip goes without asking -- it is undoable for seven
+                    // seconds. A batch still asks: the undo window is a poor
+                    // safety net for twenty files you may not be watching.
+                    onDelete = { ClipLibrary.delete(entry.id) },
                 )
             }
         }
@@ -184,6 +187,9 @@ internal fun ClipsLibraryScreen(
     if (deleting.isNotEmpty()) {
         AlertDialog(
             onDismissRequest = { pendingDelete = emptyList() },
+            // A selection of exactly one is possible, so both wordings stay:
+            // "Move 1 clips to Trash?" is the kind of thing that makes a
+            // confirmation dialog read as machine output rather than a question.
             title = {
                 Text(
                     if (deleting.size == 1) {
@@ -207,7 +213,9 @@ internal fun ClipsLibraryScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    deleting.forEach { ClipLibrary.delete(it.id) }
+                    // One batch, one undo: deleting them one at a time would
+                    // have each delete commit the one before it.
+                    ClipLibrary.delete(deleting.map { it.id })
                     selection = emptySet()
                     pendingDelete = emptyList()
                 }) { Text(stringResource(Res.string.clip_action_delete)) }

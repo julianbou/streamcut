@@ -41,6 +41,12 @@
     <string name="clip_delete_one_message_format">%1$s will be moved to your system Trash.</string>
     <string name="clip_delete_many_message">They will be moved to your system Trash.</string>
 
+    <!-- Undo. Replaces the confirmation dialog for a single clip: a delete you
+         can take back does not also need permission asked first. -->
+    <string name="clip_undo_one_format">Deleted %1$s</string>
+    <string name="clip_undo_many_format">Deleted %1$d clips</string>
+    <string name="clip_undo_action">Undo</string>
+
     <!-- The empty state, which doubles as the only onboarding the app has -->
     <string name="clip_empty_title">No clips yet</string>
     <string name="clip_empty_step_find">Find a title and start playing it</string>

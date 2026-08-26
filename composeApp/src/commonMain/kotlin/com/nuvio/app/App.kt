@@ -131,6 +131,7 @@ import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.platformExitApp
 import com.nuvio.app.core.ui.configurePlatformImageLoader
 import com.nuvio.app.core.ui.NuvioToastHost
+import com.nuvio.app.features.clip.ClipUndoBar
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.NuvioFloatingPrompt
 import com.nuvio.app.core.ui.ProfileMeshBackground
@@ -3805,6 +3806,14 @@ private fun MainAppContent(
             NuvioToastHost(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
+                    .zIndex(20f),
+            )
+
+            // Mounted here rather than on the clip surfaces: the undo window
+            // outlives the screen the delete happened on.
+            ClipUndoBar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
                     .zIndex(20f),
             )
 

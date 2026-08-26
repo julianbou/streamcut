@@ -72,8 +72,13 @@ internal actual object ClipExtractor {
     @Volatile
     private var cachedEncoders: Set<String>? = null
 
+    // Keyed by path: resolveFfmpegPath asks several binaries what they can do,
+    // and a single shared set would answer for the wrong one. The map is
+    // already thread-safe, so it needs no @Volatile of its own.
+    private val cachedFilters = ConcurrentHashMap<String, Set<String>>()
+
     @Volatile
-    private var cachedFilters: Set<String>? = null
+    private var cachedFfmpegPath: String? = null
 
     actual fun start(
         request: ClipExtractRequest,
@@ -1006,7 +1011,7 @@ internal actual object ClipExtractor {
     }
 
     private fun hasFilter(ffmpeg: String, name: String): Boolean {
-        cachedFilters?.let { return name in it }
+        cachedFilters[ffmpeg]?.let { return name in it }
         val filters = runCatching {
             val process = ProcessBuilder(ffmpeg, "-hide_banner", "-filters")
                 .redirectErrorStream(true)
@@ -1018,7 +1023,7 @@ internal actual object ClipExtractor {
                 .mapNotNull { line -> line.trim().split(Regex("\\s+")).getOrNull(1) }
                 .toSet()
         }.getOrDefault(emptySet())
-        cachedFilters = filters
+        cachedFilters[ffmpeg] = filters
         return name in filters
     }
 
@@ -1065,17 +1070,57 @@ internal actual object ClipExtractor {
         return candidate
     }
 
+    /**
+     * Which ffmpeg to cut with, chosen by what it can do rather than by where
+     * it is.
+     *
+     * The first ffmpeg on the machine is not necessarily a usable one: the
+     * stock Homebrew build ships without libzimg and libass, so it cannot tone
+     * map HDR and cannot burn in subtitles. Picking it because it comes first
+     * in a list costs the user two features and says nothing about why -- an
+     * HDR clip just comes out grey. So every candidate is asked for its filters
+     * and the first fully-equipped one wins, whoever it belongs to.
+     *
+     * NUVIO_FFMPEG_PATH still overrides everything, unexamined: someone who
+     * names a binary means that binary.
+     */
     private fun resolveFfmpegPath(): String? {
-        val candidates = buildList {
-            System.getenv("NUVIO_FFMPEG_PATH")?.takeIf { it.isNotBlank() }?.let { add(it) }
-            add("/opt/homebrew/bin/ffmpeg")
-            add("/usr/local/bin/ffmpeg")
-            add("/usr/bin/ffmpeg")
+        cachedFfmpegPath?.let { return it }
+        val explicit = System.getenv("NUVIO_FFMPEG_PATH")?.takeIf { it.isNotBlank() }
+        if (explicit != null && File(explicit).canExecute()) {
+            cachedFfmpegPath = explicit
+            return explicit
         }
-        candidates.firstOrNull { File(it).canExecute() }?.let { return it }
-        // Fall back to PATH resolution; if it is missing, the process start throws.
-        return "ffmpeg"
+        val installed = FFMPEG_CANDIDATES.filter { File(it).canExecute() }
+        val resolved = installed.firstOrNull { path -> REQUIRED_FILTERS.all { hasFilter(path, it) } }
+            ?: installed.firstOrNull()
+            // Fall back to PATH resolution; if it is missing, the process start throws.
+            ?: "ffmpeg"
+        if (resolved !in installed.take(1)) {
+            log.i { "Using ffmpeg at $resolved" }
+        }
+        cachedFfmpegPath = resolved
+        return resolved
     }
+
+    /**
+     * Where to look, best-installed first.
+     *
+     * The application bundles at the end are not ours, and are read, never
+     * touched -- they are simply where a jellyfin-ffmpeg (libzimg + libass)
+     * already exists on a Mac that has one of these apps. A shipped build must
+     * still carry its own; this list is what keeps a development machine from
+     * silently exporting grey HDR.
+     */
+    private val FFMPEG_CANDIDATES = listOf(
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/bin/ffmpeg",
+        "/Applications/Stremio.app/Contents/MacOS/ffmpeg",
+    )
+
+    /** The filters whose absence silently degrades an export rather than failing it. */
+    private val REQUIRED_FILTERS = listOf("zscale", "subtitles")
 
     /** Millisecond precision with a dot decimal separator, independent of locale. */
     private fun formatSeconds(value: Double): String {
