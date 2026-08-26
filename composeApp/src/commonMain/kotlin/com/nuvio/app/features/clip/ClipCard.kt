@@ -37,6 +37,13 @@ import androidx.compose.ui.unit.sp
 import com.nuvio.app.core.ui.NuvioAsyncImage
 import com.nuvio.app.core.ui.fileDragSource
 import com.nuvio.app.core.ui.secondaryClick
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.clip_action_delete
+import nuvio.composeapp.generated.resources.clip_action_delete_short
+import nuvio.composeapp.generated.resources.clip_action_play
+import nuvio.composeapp.generated.resources.clip_action_reveal
+import nuvio.composeapp.generated.resources.clip_action_reveal_short
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * One clip, as it appears in the home row and in the clips grid.
@@ -111,8 +118,14 @@ internal fun ClipCard(
                         .padding(6.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    ClipHoverAction(label = "Show", onClick = onReveal)
-                    ClipHoverAction(label = "Delete", onClick = onDelete)
+                    ClipHoverAction(
+                        label = stringResource(Res.string.clip_action_reveal_short),
+                        onClick = onReveal,
+                    )
+                    ClipHoverAction(
+                        label = stringResource(Res.string.clip_action_delete_short),
+                        onClick = onDelete,
+                    )
                 }
             }
 
@@ -125,21 +138,21 @@ internal fun ClipCard(
 
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text("Play") },
+                    text = { Text(stringResource(Res.string.clip_action_play)) },
                     onClick = {
                         menuOpen = false
                         onClick()
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Show in file manager") },
+                    text = { Text(stringResource(Res.string.clip_action_reveal)) },
                     onClick = {
                         menuOpen = false
                         onReveal()
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("Move to Trash") },
+                    text = { Text(stringResource(Res.string.clip_action_delete)) },
                     onClick = {
                         menuOpen = false
                         onDelete()

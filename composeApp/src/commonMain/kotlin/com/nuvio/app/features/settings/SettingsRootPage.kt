@@ -87,6 +87,11 @@ internal fun LazyListScope.settingsRootContent(
     onSwitchProfileClick: (() -> Unit)? = null,
     showDownloadsEntry: Boolean = true,
     showNotificationsEntry: Boolean = true,
+    /**
+     * Watch tracking (Trakt, Simkl). Off in the clipper build: it syncs what you
+     * have watched, and nothing here watches anything to the end.
+     */
+    showTrackingEntry: Boolean = true,
     showAccountSection: Boolean = true,
     showGeneralSection: Boolean = true,
     showAboutSection: Boolean = true,
@@ -117,14 +122,16 @@ internal fun LazyListScope.settingsRootContent(
                         isTablet = isTablet,
                         onClick = onAccountClick,
                     )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_tracking),
-                        description = stringResource(Res.string.compose_settings_root_tracking_description),
-                        icon = Icons.Default.Sync,
-                        isTablet = isTablet,
-                        onClick = onTrackingClick,
-                    )
+                    if (showTrackingEntry) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_page_tracking),
+                            description = stringResource(Res.string.compose_settings_root_tracking_description),
+                            icon = Icons.Default.Sync,
+                            isTablet = isTablet,
+                            onClick = onTrackingClick,
+                        )
+                    }
                 }
             }
         }

@@ -45,6 +45,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.ui.NuvioAsyncImage as AsyncImage
 import com.nuvio.app.core.ui.NuvioDesktopImageScaling
 import com.nuvio.app.core.ui.NuvioTokens
@@ -259,7 +260,10 @@ fun DesktopDetailHero(
             DetailActionButtons(
                 modifier = Modifier.widthIn(max = 520.dp),
                 playLabel = playButtonLabel,
-                secondaryActions = listOf(
+                // "Watched" and "Add to library" are viewing bookkeeping, and in
+                // the clipper build the library tab holds clips -- so a title
+                // saved here would go somewhere the user cannot reach.
+                secondaryActions = if (!AppFeaturePolicy.viewingChromeEnabled) emptyList() else listOf(
                     DetailSecondaryAction(
                         label = if (isWatched) {
                             stringResource(Res.string.hero_mark_unwatched)

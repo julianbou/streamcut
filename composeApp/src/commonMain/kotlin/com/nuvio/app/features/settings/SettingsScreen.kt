@@ -520,6 +520,7 @@ private fun MobileSettingsScreen(
             liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
             switchProfileAvailable = onSwitchProfile != null,
             checkForUpdatesAvailable = onCheckForUpdatesClick != null,
+            viewingChromeEnabled = AppFeaturePolicy.viewingChromeEnabled,
         )
 
         fun openSearchTarget(target: SettingsSearchTarget) {
@@ -609,6 +610,7 @@ private fun MobileSettingsScreen(
                             onSwitchProfileClick = onSwitchProfile,
                             showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
                             showNotificationsEntry = AppFeaturePolicy.notificationsEnabled,
+                            showTrackingEntry = AppFeaturePolicy.viewingChromeEnabled,
                             showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
                         )
                     }
@@ -932,6 +934,7 @@ private fun TabletSettingsScreen(
                 liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
                 switchProfileAvailable = onSwitchProfile != null,
                 checkForUpdatesAvailable = onCheckForUpdatesClick != null,
+                viewingChromeEnabled = AppFeaturePolicy.viewingChromeEnabled,
             )
 
             fun openSearchTarget(target: SettingsSearchTarget) {
@@ -1038,6 +1041,7 @@ private fun TabletSettingsScreen(
                                     onSwitchProfileClick = onSwitchProfile,
                                     showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
                                     showNotificationsEntry = AppFeaturePolicy.notificationsEnabled,
+                                    showTrackingEntry = AppFeaturePolicy.viewingChromeEnabled,
                                     showAccountSection = activeCategory == SettingsCategory.Account,
                                     showGeneralSection = activeCategory == SettingsCategory.General,
                                     showAboutSection = activeCategory == SettingsCategory.About,

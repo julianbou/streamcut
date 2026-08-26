@@ -1,6 +1,5 @@
 package com.nuvio.app.features.clip
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,9 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,14 +21,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.ui.NuvioSectionLabel
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.clip_action_cancel
+import nuvio.composeapp.generated.resources.clip_action_delete
+import nuvio.composeapp.generated.resources.clip_delete_one_message_format
+import nuvio.composeapp.generated.resources.clip_delete_one_title
+import nuvio.composeapp.generated.resources.clip_section_your_clips
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * "Your clips" at the top of home: every clip exported on this machine, newest
@@ -52,7 +52,11 @@ internal fun HomeClipsSection(
     LaunchedEffect(Unit) { ClipLibrary.ensureLoaded() }
     val entries by ClipLibrary.entries.collectAsStateWithLifecycle()
     if (entries.isEmpty()) {
-        ClipsEmptyState(sectionPadding = sectionPadding, modifier = modifier)
+        Column(modifier = modifier.fillMaxWidth().padding(horizontal = sectionPadding)) {
+            NuvioSectionLabel(text = stringResource(Res.string.clip_section_your_clips))
+            Spacer(modifier = Modifier.height(10.dp))
+            ClipsEmptyCard()
+        }
         return
     }
 
@@ -60,7 +64,7 @@ internal fun HomeClipsSection(
 
     Column(modifier = modifier.fillMaxWidth()) {
         NuvioSectionLabel(
-            text = "Your clips",
+            text = stringResource(Res.string.clip_section_your_clips),
             modifier = Modifier.padding(horizontal = sectionPadding),
         )
         Spacer(modifier = Modifier.height(10.dp))
@@ -84,79 +88,29 @@ internal fun HomeClipsSection(
     if (deleteTarget != null) {
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Move this clip to Trash?") },
+            title = { Text(stringResource(Res.string.clip_delete_one_title)) },
             // Says where the file goes, because that is the difference between
             // a mistake being recoverable and not.
-            text = { Text("${deleteTarget.fileName} will be moved to your system Trash.") },
+            text = {
+                Text(
+                    stringResource(
+                        Res.string.clip_delete_one_message_format,
+                        deleteTarget.fileName,
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     ClipLibrary.delete(deleteTarget.id)
                     pendingDelete = null
-                }) { Text("Move to Trash") }
+                }) { Text(stringResource(Res.string.clip_action_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(Res.string.clip_action_cancel))
+                }
             },
         )
-    }
-}
-
-/**
- * What home shows before the first clip exists.
- *
- * The row used to delete itself when empty, so a first run gave no evidence the
- * app clips anything at all -- the one moment a user most needs telling. This
- * doubles as the onboarding: the three steps, and where the files will land.
- */
-@Composable
-private fun ClipsEmptyState(
-    sectionPadding: Dp,
-    modifier: Modifier = Modifier,
-) {
-    val outputDir = remember { ClipRepository.outputDirPath() }
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = sectionPadding),
-    ) {
-        NuvioSectionLabel(text = "Your clips")
-        Spacer(modifier = Modifier.height(10.dp))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color.White.copy(alpha = 0.05f))
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-        ) {
-            Text(
-                text = "No clips yet",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            listOf(
-                "Find a title and start playing it",
-                "Press I and O to mark the in and out points",
-                "Press X to export",
-            ).forEachIndexed { index, step ->
-                Text(
-                    text = "${index + 1}.  $step",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
-                    modifier = Modifier.padding(vertical = 2.dp),
-                )
-            }
-            if (outputDir.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = "Clips are saved to $outputDir",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
     }
 }
 

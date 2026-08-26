@@ -38,12 +38,38 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import nuvio.composeapp.generated.resources.Res
+import nuvio.composeapp.generated.resources.clip_action_cancel
+import nuvio.composeapp.generated.resources.clip_action_clear
+import nuvio.composeapp.generated.resources.clip_action_delete
+import nuvio.composeapp.generated.resources.clip_action_reveal
+import nuvio.composeapp.generated.resources.clip_delete_many_message
+import nuvio.composeapp.generated.resources.clip_delete_many_title_format
+import nuvio.composeapp.generated.resources.clip_delete_one_message_format
+import nuvio.composeapp.generated.resources.clip_delete_one_title
+import nuvio.composeapp.generated.resources.clip_empty_saved_to_format
+import nuvio.composeapp.generated.resources.clip_empty_step_export
+import nuvio.composeapp.generated.resources.clip_empty_step_find
+import nuvio.composeapp.generated.resources.clip_empty_step_format
+import nuvio.composeapp.generated.resources.clip_empty_step_mark
+import nuvio.composeapp.generated.resources.clip_empty_title
+import nuvio.composeapp.generated.resources.clip_library_count_format
+import nuvio.composeapp.generated.resources.clip_library_filter_placeholder
+import nuvio.composeapp.generated.resources.clip_library_free_format
+import nuvio.composeapp.generated.resources.clip_library_open_folder
+import nuvio.composeapp.generated.resources.clip_library_selected_format
+import nuvio.composeapp.generated.resources.clip_library_sort_largest
+import nuvio.composeapp.generated.resources.clip_library_sort_longest
+import nuvio.composeapp.generated.resources.clip_library_sort_newest
+import nuvio.composeapp.generated.resources.clip_library_title
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 /** How the grid is ordered. Newest first is the default: the last cut is the one being looked for. */
-private enum class ClipSort(val label: String) {
-    Newest("Newest"),
-    Longest("Longest"),
-    Largest("Largest"),
+private enum class ClipSort(val label: StringResource) {
+    Newest(Res.string.clip_library_sort_newest),
+    Longest(Res.string.clip_library_sort_longest),
+    Largest(Res.string.clip_library_sort_largest),
 }
 
 /**
@@ -120,7 +146,7 @@ internal fun ClipsLibraryScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (entries.isEmpty()) {
-            ClipsLibraryEmpty()
+            ClipsEmptyCard()
             return@Column
         }
 
@@ -159,14 +185,23 @@ internal fun ClipsLibraryScreen(
         AlertDialog(
             onDismissRequest = { pendingDelete = emptyList() },
             title = {
-                Text(if (deleting.size == 1) "Move this clip to Trash?" else "Move ${deleting.size} clips to Trash?")
+                Text(
+                    if (deleting.size == 1) {
+                        stringResource(Res.string.clip_delete_one_title)
+                    } else {
+                        stringResource(Res.string.clip_delete_many_title_format, deleting.size)
+                    },
+                )
             },
             text = {
                 Text(
                     if (deleting.size == 1) {
-                        "${deleting.first().fileName} will be moved to your system Trash."
+                        stringResource(
+                            Res.string.clip_delete_one_message_format,
+                            deleting.first().fileName,
+                        )
                     } else {
-                        "They will be moved to your system Trash."
+                        stringResource(Res.string.clip_delete_many_message)
                     },
                 )
             },
@@ -175,10 +210,10 @@ internal fun ClipsLibraryScreen(
                     deleting.forEach { ClipLibrary.delete(it.id) }
                     selection = emptySet()
                     pendingDelete = emptyList()
-                }) { Text("Move to Trash") }
+                }) { Text(stringResource(Res.string.clip_action_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = emptyList() }) { Text("Cancel") }
+                TextButton(onClick = { pendingDelete = emptyList() }) { Text(stringResource(Res.string.clip_action_cancel)) }
             },
         )
     }
@@ -205,18 +240,25 @@ private fun ClipsLibraryHeader(
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "Clips",
+                text = stringResource(Res.string.clip_library_title),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = if (shown == total) "$total" else "$shown of $total",
+                text = if (shown == total) {
+                    "$total"
+                } else {
+                    stringResource(Res.string.clip_library_count_format, shown, total)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
             )
             Spacer(modifier = Modifier.weight(1f))
-            ClipsChip(label = "Open folder", onClick = { ClipRepository.revealOutputDir() })
+            ClipsChip(
+                label = stringResource(Res.string.clip_library_open_folder),
+                onClick = { ClipRepository.revealOutputDir() },
+            )
         }
 
         if (outputDir.isNotBlank()) {
@@ -224,7 +266,8 @@ private fun ClipsLibraryHeader(
             Text(
                 text = listOfNotNull(
                     outputDir,
-                    formatClipBytes(freeBytes).takeIf { it.isNotBlank() }?.let { "$it free" },
+                    formatClipBytes(freeBytes).takeIf { it.isNotBlank() }
+                        ?.let { stringResource(Res.string.clip_library_free_format, it) },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
@@ -242,7 +285,7 @@ private fun ClipsLibraryHeader(
             ClipsSearchField(query = query, onQueryChange = onQueryChange)
             ClipSort.entries.forEach { option ->
                 ClipsChip(
-                    label = option.label,
+                    label = stringResource(option.label),
                     selected = option == sort,
                     onClick = { onSortChange(option) },
                 )
@@ -258,13 +301,22 @@ private fun ClipsLibraryHeader(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "${selection.size} selected",
+                    text = stringResource(Res.string.clip_library_selected_format, selection.size),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                ClipsChip(label = "Show in file manager", onClick = onRevealSelection)
-                ClipsChip(label = "Move to Trash", onClick = onDeleteSelection)
-                ClipsChip(label = "Clear", onClick = onClearSelection)
+                ClipsChip(
+                    label = stringResource(Res.string.clip_action_reveal),
+                    onClick = onRevealSelection,
+                )
+                ClipsChip(
+                    label = stringResource(Res.string.clip_action_delete),
+                    onClick = onDeleteSelection,
+                )
+                ClipsChip(
+                    label = stringResource(Res.string.clip_action_clear),
+                    onClick = onClearSelection,
+                )
             }
         }
     }
@@ -281,7 +333,7 @@ private fun ClipsSearchField(query: String, onQueryChange: (String) -> Unit) {
     ) {
         if (query.isEmpty()) {
             Text(
-                text = "Filter by title",
+                text = stringResource(Res.string.clip_library_filter_placeholder),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
             )
@@ -316,31 +368,56 @@ private fun ClipsChip(label: String, selected: Boolean = false, onClick: () -> U
     )
 }
 
+/**
+ * What the app shows before the first clip exists, on home and on the clips
+ * page alike.
+ *
+ * The row used to delete itself when empty, so a first run gave no evidence the
+ * app clips anything at all -- the one moment a user most needs telling. This
+ * doubles as the onboarding: the three keystrokes, and where the files land.
+ * Shared between the two surfaces so the steps cannot drift apart from each
+ * other, which they had already started to do.
+ */
 @Composable
-private fun ClipsLibraryEmpty() {
+internal fun ClipsEmptyCard(modifier: Modifier = Modifier) {
+    val outputDir = remember { ClipRepository.outputDirPath() }
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = 0.05f))
             .padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
         Text(
-            text = "No clips yet",
+            text = stringResource(Res.string.clip_empty_title),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(modifier = Modifier.height(10.dp))
         listOf(
-            "Find a title and start playing it",
-            "Press I and O to mark the in and out points",
-            "Press X to export",
+            Res.string.clip_empty_step_find,
+            Res.string.clip_empty_step_mark,
+            Res.string.clip_empty_step_export,
         ).forEachIndexed { index, step ->
             Text(
-                text = "${index + 1}.  $step",
+                text = stringResource(
+                    Res.string.clip_empty_step_format,
+                    index + 1,
+                    stringResource(step),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
                 modifier = Modifier.padding(vertical = 2.dp),
+            )
+        }
+        if (outputDir.isNotBlank()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = stringResource(Res.string.clip_empty_saved_to_format, outputDir),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

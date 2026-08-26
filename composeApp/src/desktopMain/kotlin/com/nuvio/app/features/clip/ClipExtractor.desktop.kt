@@ -1044,10 +1044,18 @@ internal actual object ClipExtractor {
     }
 
     private fun uniqueOutputFile(request: ClipExtractRequest): File {
-        val base = request.title.ifBlank { "clip" }.sanitizeFileName()
-        val startLabel = formatTimeLabel(request.startMs)
-        val endLabel = formatTimeLabel(request.endMs)
-        val stem = "$base ${startLabel}-$endLabel"
+        // Naming is the user's, not the exporter's -- see ClipFilenameTemplate.
+        // The stamp is taken once so {date} and {time} cannot disagree across a
+        // midnight boundary within one filename.
+        val stamp = ClipClock.localStamp(ClipClock.nowEpochMs())
+        val stem = ClipFilenameTemplate.render(
+            template = ClipFilenameSettings.template(),
+            title = request.title,
+            startMs = request.startMs,
+            endMs = request.endMs,
+            dateLabel = stamp.date,
+            timeLabel = stamp.time,
+        )
         var candidate = File(clipsDir, "$stem.mp4")
         var index = 1
         while (candidate.exists()) {
@@ -1074,21 +1082,6 @@ internal actual object ClipExtractor {
         val ms = (value * 1000).toLong().coerceAtLeast(0L)
         return "${ms / 1000}.${(ms % 1000).toString().padStart(3, '0')}"
     }
-
-    private fun formatTimeLabel(ms: Long): String {
-        val totalSeconds = (ms / 1000).coerceAtLeast(0L)
-        val h = totalSeconds / 3600
-        val m = (totalSeconds % 3600) / 60
-        val s = totalSeconds % 60
-        return if (h > 0) {
-            "${h}h${m.toString().padStart(2, '0')}m${s.toString().padStart(2, '0')}s"
-        } else {
-            "${m}m${s.toString().padStart(2, '0')}s"
-        }
-    }
-
-    private fun String.sanitizeFileName(): String =
-        replace(Regex("[^A-Za-z0-9._ -]"), "_").trim().take(120).ifBlank { "clip" }
 
     /** Parses an ffmpeg progress line, returning the reported output time in seconds. */
     private fun parseFfmpegTimeSeconds(line: String): Double? {

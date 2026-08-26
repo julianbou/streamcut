@@ -38,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.isDesktop
 import com.nuvio.app.core.ui.AppTheme
 import com.nuvio.app.isIos
@@ -207,13 +208,18 @@ internal fun LazyListScope.appearanceSettingsContent(
                         isTablet = isTablet,
                         onClick = { showDesktopNavigationSheet = true },
                     )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.compose_settings_page_hover_preview),
-                        description = stringResource(Res.string.settings_appearance_hover_preview_description),
-                        isTablet = isTablet,
-                        onClick = onHoverPreviewClick,
-                    )
+                    // Poster hover previews are off in the clipper build, so
+                    // this page would only offer settings for something that
+                    // never happens.
+                    if (AppFeaturePolicy.viewingChromeEnabled) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.compose_settings_page_hover_preview),
+                            description = stringResource(Res.string.settings_appearance_hover_preview_description),
+                            isTablet = isTablet,
+                            onClick = onHoverPreviewClick,
+                        )
+                    }
                 }
                 if (AppIconPlatform.isSupported) {
                     SettingsGroupDivider(isTablet = isTablet)

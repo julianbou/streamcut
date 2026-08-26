@@ -31,6 +31,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.core.ui.NuvioActionLabel
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.features.home.HomeCatalogSettingsItem
@@ -86,14 +87,18 @@ internal fun LazyListScope.homescreenSettingsContent(
             isTablet = isTablet,
         ) {
             SettingsGroup(isTablet = isTablet) {
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_homescreen_show_hero),
-                    description = stringResource(Res.string.settings_homescreen_show_hero_description),
-                    checked = heroEnabled,
-                    isTablet = isTablet,
-                    onCheckedChange = HomeCatalogSettingsRepository::setHeroEnabled,
-                )
-                SettingsGroupDivider(isTablet = isTablet)
+                // The hero is gated off in the clipper build, so this switch
+                // would report a state the home screen ignores.
+                if (AppFeaturePolicy.viewingChromeEnabled) {
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_homescreen_show_hero),
+                        description = stringResource(Res.string.settings_homescreen_show_hero_description),
+                        checked = heroEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = HomeCatalogSettingsRepository::setHeroEnabled,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                }
                 SettingsSwitchRow(
                     title = stringResource(Res.string.layout_catalog_type),
                     description = stringResource(Res.string.layout_catalog_type_sub),
@@ -114,7 +119,7 @@ internal fun LazyListScope.homescreenSettingsContent(
     }
     item {
         val catalogOnlyItems = items.filter { !it.isCollection }
-        if (heroEnabled && catalogOnlyItems.isNotEmpty()) {
+        if (heroEnabled && AppFeaturePolicy.viewingChromeEnabled && catalogOnlyItems.isNotEmpty()) {
             var heroSourcesExpanded by remember { mutableStateOf(false) }
             SettingsSection(
                 title = stringResource(Res.string.settings_homescreen_section_hero_sources),

@@ -21,4 +21,13 @@ internal actual object ClipStorage {
     actual fun saveOutputDir(path: String?) {
         store.putString("clip_output_dir", path?.takeIf { it.isNotBlank() })
     }
+
+    // A machine preference too, for the same reason as the folder: the naming
+    // that suits how you file clips does not change per profile.
+    actual fun loadFilenameTemplate(): String? =
+        store.getString("clip_filename_template")?.takeIf { it.isNotBlank() }
+
+    actual fun saveFilenameTemplate(template: String?) {
+        store.putString("clip_filename_template", template?.takeIf { it.isNotBlank() })
+    }
 }

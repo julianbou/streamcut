@@ -15,4 +15,8 @@ internal expect object ClipStorage {
     /** Absolute path of the user's chosen clips folder, or null for the default. */
     fun loadOutputDir(): String?
     fun saveOutputDir(path: String?)
+
+    /** The user's clip-filename template, or null to use [ClipFilenameTemplate.Default]. */
+    fun loadFilenameTemplate(): String?
+    fun saveFilenameTemplate(template: String?)
 }
