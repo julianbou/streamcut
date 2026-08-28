@@ -45,6 +45,7 @@ internal actual object ClipExtractor {
      * every time the player re-renders.
      */
     private val frameRateCache = ConcurrentHashMap<String, Double>()
+    private val bitrateCache = ConcurrentHashMap<String, Long>()
 
     actual val isSupported: Boolean = true
 
@@ -156,6 +157,49 @@ internal actual object ClipExtractor {
                 job.cancel()
             }
         }
+    }
+
+    /**
+     * The source's bitrate in bits per second, or 0 when it cannot be read.
+     *
+     * Used to size the filmstrip: a still costs roughly one GOP of the source,
+     * so bitrate is what decides whether a strip is a few hundred megabytes or
+     * a few gigabytes. Same shape as [probeFrameRate] -- one ffprobe per URL,
+     * cached, off the main thread.
+     */
+    internal suspend fun probeBitrateBps(
+        sourceUrl: String,
+        sourceHeaders: Map<String, String>,
+    ): Long {
+        if (sourceUrl.isBlank()) return 0L
+        bitrateCache[sourceUrl]?.let { return it }
+        val bitrate = withContext(Dispatchers.IO) {
+            runCatching {
+                val ffmpeg = resolveFfmpegPath() ?: return@runCatching 0L
+                val args = mutableListOf(ffprobePath(ffmpeg), "-v", "error")
+                headersArgument(sourceHeaders)?.let { headers ->
+                    args += "-headers"
+                    args += headers
+                }
+                args += listOf(
+                    // Format bitrate rather than the video stream's: containers
+                    // often leave the stream entry empty, and the difference
+                    // (audio, subtitles) does not change the decision here.
+                    "-show_entries", "format=bit_rate",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    sourceUrl,
+                )
+                val process = ProcessBuilder(args).redirectErrorStream(false).start()
+                val output = process.inputStream.bufferedReader().readText()
+                if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                    process.destroyForcibly()
+                    return@runCatching 0L
+                }
+                output.trim().lines().firstOrNull()?.trim()?.toLongOrNull() ?: 0L
+            }.getOrDefault(0L)
+        }
+        if (bitrate > 0L) bitrateCache[sourceUrl] = bitrate
+        return bitrate
     }
 
     actual suspend fun probeFrameRate(

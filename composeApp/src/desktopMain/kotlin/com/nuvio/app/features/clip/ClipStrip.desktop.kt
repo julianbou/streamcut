@@ -24,17 +24,32 @@ import kotlin.math.abs
 private val log = Logger.withTag("ClipStrip")
 
 /**
- * Roughly how many stills a strip should have, whatever the film's length.
+ * Roughly what a strip is allowed to cost in downloaded bytes.
  *
- * The number is a browsing decision, not a technical one: a few hundred
- * thumbnails is what a person can actually scroll through looking for a scene.
- * A feature film lands near this; a short one is capped by [MIN_SPACING_MS]
- * instead, since below about fifteen seconds consecutive stills start repeating
- * each other and cost bytes for nothing.
+ * A still costs about one GOP of the source, whatever its resolution --
+ * measured at 7 MB a frame on a 2.5 Mb/s source and 13 MB on a 25 Mb/s 4K one.
+ * So frame count cannot be a fixed number: 300 frames of a 4K film is several
+ * gigabytes and minutes of waiting, while 300 frames of a 2 Mb/s episode is
+ * barely noticeable. Fixing the budget instead and deriving the count from the
+ * source's bitrate makes the wait roughly the same whatever you are browsing.
  */
-private const val TARGET_FRAMES = 300
-private const val MIN_SPACING_MS = 15_000L
-private const val MAX_FRAMES = 600
+private const val STRIP_BYTE_BUDGET = 700L * 1024 * 1024
+
+/** What one still costs, in seconds of source, absent a way to measure the real GOP. */
+private const val ASSUMED_GOP_SECONDS = 4.0
+
+/**
+ * Spacings a strip is allowed to use, in milliseconds.
+ *
+ * Quantised rather than continuous so that a title always lands on the same
+ * rung and keeps its cache. A probe that returns a slightly different bitrate
+ * next time must not orphan every frame already on disk.
+ */
+internal val SPACING_LADDER = listOf(
+    15_000L, 20_000L, 30_000L, 45_000L, 60_000L, 90_000L, 120_000L, 180_000L, 240_000L,
+)
+
+private const val MAX_FRAMES = 400
 
 /** Wide enough to recognise a scene, small enough that the whole strip is ~1 MB. */
 private const val THUMB_WIDTH = 200
@@ -61,6 +76,10 @@ actual object ClipStrip {
     @Volatile
     private var focusIndex = -1
 
+    /** The title the open session belongs to, and whether it is fetching. */
+    private var openKey: String? = null
+    private var building = false
+
     actual fun open(
         cacheKey: String,
         sourceUrl: String,
@@ -68,28 +87,36 @@ actual object ClipStrip {
         durationMs: Long,
         buildMissing: Boolean,
     ) {
-        close()
         if (!isSupported || sourceUrl.isBlank() || durationMs <= 0L) return
+        // Opening the player publishes the cached strip, and pressing Scenes
+        // builds it. Without this the first kept cancelling the second: any
+        // recomposition re-ran the publish-only open, which closed the job
+        // mid-build and left the strip stuck part-finished.
+        if (cacheKey == openKey && job?.isActive == true && (building || !buildMissing)) return
+        close()
 
-        val spacingMs = (durationMs / TARGET_FRAMES).coerceAtLeast(MIN_SPACING_MS)
-        // The last sample is pulled back from the end: a seek past the final
-        // keyframe returns nothing, and a strip that ends in a gap looks broken
-        // rather than finished.
-        val count = ((durationMs - spacingMs) / spacingMs).toInt().coerceIn(1, MAX_FRAMES)
         val session = sessions.incrementAndGet()
         focusIndex = -1
 
-        val cacheDir = File(stripRoot, "${cacheKey.sanitized()}-$spacingMs").also { it.mkdirs() }
-        val publishDir = publishDirFor(session) ?: return
-
-        _state.value = ClipStripState(
-            session = session,
-            count = count,
-            ready = 0,
-            spacingMs = spacingMs.toInt(),
-        )
+        openKey = cacheKey
+        building = buildMissing
+        _state.value = ClipStripState(session = session)
 
         job = scope.launch {
+            // Probed before the grid exists, because the grid's size depends on
+            // it. One ffprobe, cached per URL, and a source that will not answer
+            // simply gets the finest spacing.
+            val spacingMs = spacingFor(durationMs, ClipExtractor.probeBitrateBps(sourceUrl, headers))
+            // The last sample is pulled back from the end: a seek past the final
+            // keyframe returns nothing, and a strip that ends in a gap looks
+            // broken rather than finished.
+            val count = ((durationMs - spacingMs) / spacingMs).toInt().coerceIn(1, MAX_FRAMES)
+            val cacheDir = File(stripRoot, "${cacheKey.sanitized()}-$spacingMs").also { it.mkdirs() }
+            val publishDir = publishDirFor(session) ?: return@launch
+            _state.update(session) {
+                it.copy(count = count, spacingMs = spacingMs.toInt())
+            }
+
             // Whatever this title already has, published before anything is
             // fetched -- so a strip built earlier is on screen at once, and the
             // hover preview works without a download.
@@ -151,6 +178,8 @@ actual object ClipStrip {
     actual fun close() {
         job?.cancel()
         job = null
+        openKey = null
+        building = false
         _state.value = ClipStripState()
     }
 
@@ -219,6 +248,29 @@ actual object ClipStrip {
         runCatching { Files.createLink(link.toPath(), source.toPath()) }
             .recoverCatching { source.copyTo(link, overwrite = true) }
             .onFailure { log.w(it) { "Could not publish strip frame ${source.name}" } }
+    }
+
+    /**
+     * How far apart the stills should be for a source of this size.
+     *
+     * A still costs about one GOP, so the bitrate decides what a strip costs;
+     * the spacing is then whatever keeps the whole thing inside
+     * [STRIP_BYTE_BUDGET]. An unreadable bitrate gets the finest rung, which is
+     * the old fixed behaviour.
+     */
+    internal fun spacingFor(durationMs: Long, bitrateBps: Long): Long {
+        val wanted = if (bitrateBps <= 0L) {
+            // Nothing to reason from, so fall back to the frame cap alone.
+            durationMs / MAX_FRAMES
+        } else {
+            val bytesPerFrame = (bitrateBps / 8.0) * ASSUMED_GOP_SECONDS
+            val affordable = (STRIP_BYTE_BUDGET / bytesPerFrame).toLong().coerceAtLeast(1L)
+            durationMs / affordable
+        }
+        // Always snapped to a rung, including the fallback above: a spacing off
+        // the ladder would give the title a cache directory of its own that no
+        // later run agrees with, and every frame would be fetched again.
+        return SPACING_LADDER.firstOrNull { it >= wanted } ?: SPACING_LADDER.last()
     }
 
     /**

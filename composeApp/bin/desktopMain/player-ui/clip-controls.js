@@ -1063,9 +1063,45 @@ document.body.appendChild(clipHoverPreview);
 const clipHoverShot = clipHoverPreview.querySelector(".clip-hover-shot");
 const clipHoverTime = clipHoverPreview.querySelector(".clip-hover-time");
 
+/**
+ * Which frames of the open session exist, learned by whoever asks first.
+ *
+ * Shared between the grid and the hover preview: browsing the strip teaches the
+ * scrub bar what it can show, and vice versa. Cleared when the session changes,
+ * since the numbers mean nothing across a different strip.
+ */
+const clipFramePresent = new Set();
+const clipFrameMissing = new Set();
+
+/** The session the two sets above describe. */
+let clipFrameSession = 0;
+
+/**
+ * Forgets what was known when the session changes.
+ *
+ * Called from the hover path as well as the grid, because a title can be opened
+ * and hovered without the strip ever being shown -- and frame 12 of one film
+ * says nothing about frame 12 of the next.
+ */
+const clipFrameKnowledgeFor = session => {
+  if (session === clipFrameSession) return;
+  clipFrameSession = session;
+  clipFramePresent.clear();
+  clipFrameMissing.clear();
+};
+
 /** Used only for the first hover, before the element has ever been laid out. */
 const CLIP_HOVER_FALLBACK_WIDTH = 186;
 const CLIP_HOVER_FALLBACK_HEIGHT = 125;
+
+/**
+ * How far either side of the hovered moment to accept a substitute frame.
+ *
+ * A half-built strip has gaps, and hiding the preview whenever the exact frame
+ * is missing made it blink in and out as the cursor moved -- which read as "the
+ * hover does not work". Two steps is close enough to still be the same scene.
+ */
+const CLIP_HOVER_NEIGHBOURS = 2;
 
 /** The frame currently in the preview, so an unchanged one is not reloaded. */
 let clipHoverIndex = -1;
@@ -1075,14 +1111,30 @@ const clipHoverHide = () => {
   clipHoverIndex = -1;
 };
 
+/**
+ * The nearest frame to [index] that is known to exist, or the index itself when
+ * nothing is known yet -- an untried frame is worth attempting, and the attempt
+ * is what fills in [clipFramePresent] for next time.
+ */
+const clipHoverNearest = index => {
+  if (clipFramePresent.has(index)) return index;
+  for (let step = 1; step <= CLIP_HOVER_NEIGHBOURS; step += 1) {
+    if (clipFramePresent.has(index - step)) return index - step;
+    if (clipFramePresent.has(index + step)) return index + step;
+  }
+  return clipFrameMissing.has(index) ? -1 : index;
+};
+
 const clipHoverMove = event => {
   const spacingMs = Number(state.clipStripSpacingMs) || 0;
   const session = Number(state.clipStripSession) || 0;
   const count = Number(state.clipStripCount) || 0;
   if (session <= 0 || spacingMs <= 0 || clipDraftDurationMs <= 0) return clipHoverHide();
+  clipFrameKnowledgeFor(session);
 
   const ms = clipTrackMsFromEvent(event);
-  const index = Math.max(0, Math.min(count - 1, Math.round(ms / spacingMs)));
+  const target = Math.max(0, Math.min(count - 1, Math.round(ms / spacingMs)));
+  const index = clipHoverNearest(target);
   clipHoverTime.textContent = formatTime(ms);
 
   // Anchored to the cursor but kept inside the window: sideways so it does not
@@ -1097,11 +1149,13 @@ const clipHoverMove = event => {
     `${Math.max(half + 8, Math.min(window.innerWidth - half - 8, event.clientX))}px`;
   clipHoverPreview.style.top = `${above >= 8 ? above : rect.bottom + 12}px`;
 
+  if (index < 0) return clipHoverHide();
   if (index === clipHoverIndex) return;
   clipHoverIndex = index;
   const img = new Image();
   img.className = "clip-hover-img";
   img.addEventListener("load", () => {
+    clipFramePresent.add(index);
     // Discarded if the cursor has already moved on: frames load out of order
     // and a late arrival must not replace a newer one.
     if (clipHoverIndex !== index) return;
@@ -1110,6 +1164,7 @@ const clipHoverMove = event => {
     clipHoverPreview.hidden = false;
   });
   img.addEventListener("error", () => {
+    clipFrameMissing.add(index);
     if (clipHoverIndex === index) clipHoverHide();
   });
   img.src = `strip/${session}/${index}.jpg`;
@@ -1163,6 +1218,7 @@ const clipStripCountLabel = clipStripOverlay.querySelector(".clip-strip-count");
 const clipStripBuild = (session, count, spacingMs) => {
   clipStripSession = session;
   clipStripFocusSent = -1;
+  clipFrameKnowledgeFor(session);
   clipStripGrid.textContent = "";
   clipStripCells = [];
   for (let index = 0; index < count; index += 1) {
@@ -1201,11 +1257,14 @@ const clipStripAttempt = entry => {
   img.addEventListener("load", () => {
     entry.pending = false;
     entry.loaded = true;
+    clipFramePresent.add(entry.index);
+    clipFrameMissing.delete(entry.index);
     entry.shot.textContent = "";
     entry.shot.appendChild(img);
   });
   img.addEventListener("error", () => {
     entry.pending = false;
+    clipFrameMissing.add(entry.index);
   });
   img.src = `strip/${clipStripSession}/${entry.index}.jpg`;
 };

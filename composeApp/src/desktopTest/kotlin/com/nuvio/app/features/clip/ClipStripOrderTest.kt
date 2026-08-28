@@ -64,3 +64,49 @@ class ClipStripOrderTest {
     }
 }
 
+
+/**
+ * A still costs about one GOP whatever its resolution, so the source's bitrate
+ * is what decides whether a strip is a few hundred megabytes or a few
+ * gigabytes. These are the cases where getting that wrong is felt.
+ */
+class ClipStripSpacingTest {
+
+    private val twoHours = 7_200_000L
+
+    @Test
+    fun `a modest stream gets the finest grid`() {
+        // 2 Mb/s: ~1 MB a frame, so even hundreds of frames stay well inside
+        // the budget and there is no reason to coarsen.
+        assertEquals(15_000L, ClipStrip.spacingFor(twoHours, 2_000_000L))
+    }
+
+    @Test
+    fun `4K coarsens rather than costing gigabytes`() {
+        val spacing = ClipStrip.spacingFor(twoHours, 40_000_000L)
+        assertTrue(spacing > 15_000L, "40 Mb/s should not use the finest grid, got $spacing")
+        // The point of coarsening: the strip has to stay affordable.
+        val frames = twoHours / spacing
+        val estimatedBytes = frames * (40_000_000L / 8) * 4
+        assertTrue(estimatedBytes <= 900L * 1024 * 1024, "estimated ${estimatedBytes / 1_000_000} MB")
+    }
+
+    @Test
+    fun `an unreadable bitrate still produces a usable strip`() {
+        val spacing = ClipStrip.spacingFor(twoHours, 0L)
+        assertTrue(spacing >= 15_000L)
+        assertTrue(twoHours / spacing in 1..400)
+    }
+
+    @Test
+    fun `spacing only ever lands on the ladder, so a title keeps its cache`() {
+        // Reads the real ladder rather than restating it: a copy here would
+        // pass while saying nothing the moment the ladder changed.
+        val ladder = SPACING_LADDER.toSet()
+        listOf(0L, 1_000_000L, 8_000_000L, 25_000_000L, 40_000_000L, 90_000_000L, 200_000_000L)
+            .forEach { bitrate ->
+                val spacing = ClipStrip.spacingFor(twoHours, bitrate)
+                assertTrue(spacing in ladder, "bitrate $bitrate produced off-ladder spacing $spacing")
+            }
+    }
+}
