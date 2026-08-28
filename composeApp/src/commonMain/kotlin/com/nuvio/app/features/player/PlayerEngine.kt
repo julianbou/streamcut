@@ -218,6 +218,16 @@ data class PlayerControlsState(
     val clipAspect: Int = 0,
     /** File-size cap in MB, or 0 for none. */
     val clipTargetSizeMb: Int = 0,
+    /**
+     * The filmstrip, as four numbers -- see
+     * [com.nuvio.app.features.clip.ClipStripState]. Numbers because that is
+     * what the bridge carries, and because the page can derive every frame's
+     * timestamp and URL from them without being sent a list.
+     */
+    val clipStripSession: Int = 0,
+    val clipStripCount: Int = 0,
+    val clipStripReady: Int = 0,
+    val clipStripSpacingMs: Int = 0,
     val clipJobs: List<PlayerClipJobItem> = emptyList(),
     val clipLibrary: List<PlayerClipLibraryItem> = emptyList(),
     val showP2pConsent: Boolean = false,

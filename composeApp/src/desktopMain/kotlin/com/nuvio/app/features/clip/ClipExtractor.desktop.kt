@@ -1084,6 +1084,12 @@ internal actual object ClipExtractor {
      * NUVIO_FFMPEG_PATH still overrides everything, unexamined: someone who
      * names a binary means that binary.
      */
+    /** The chosen ffmpeg, for other clip-side tools that shell out. See [resolveFfmpegPath]. */
+    internal fun ffmpegPath(): String? = resolveFfmpegPath()
+
+    /** Header block for a source, shared with the filmstrip builder. */
+    internal fun headersArgumentFor(headers: Map<String, String>): String? = headersArgument(headers)
+
     private fun resolveFfmpegPath(): String? {
         cachedFfmpegPath?.let { return it }
         val explicit = System.getenv("NUVIO_FFMPEG_PATH")?.takeIf { it.isNotBlank() }

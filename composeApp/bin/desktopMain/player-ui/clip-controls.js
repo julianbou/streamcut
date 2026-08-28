@@ -57,6 +57,7 @@ const clipLibraryButton = document.getElementById("clipLibraryButton");
 const clipLibraryPanel = document.getElementById("clipLibraryPanel");
 const clipLibraryList = document.getElementById("clipLibraryList");
 const clipLibraryPath = document.getElementById("clipLibraryPath");
+const clipStripButton = document.getElementById("clipStripButton");
 
 // --- clipper mode ---
 //
@@ -72,7 +73,8 @@ const isClipperMode = () => state.viewingChromeEnabled === false;
  * Marking in/out means staring at the timeline without moving the mouse, which
  * is exactly what the idle timer reads as "user is watching, hide everything".
  */
-const clipShouldPinChrome = () => Boolean(state.showClip) && clipTrimStarted();
+const clipShouldPinChrome = () =>
+  clipStripVisible || (Boolean(state.showClip) && clipTrimStarted());
 
 /** The three editable timecodes, paired with the draft point each one names. */
 const clipTimeFields = [
@@ -444,6 +446,8 @@ const renderClipRangeChips = () => {
 
 const renderClipUi = () => {
   document.body.classList.toggle("clipper-mode", isClipperMode());
+  // Declared later in the file; safe because every render happens after load.
+  clipStripRender();
   const show = Boolean(state.showClip);
   const hasDuration = show && clipDraftDurationMs > 0;
   // Each point is drawn on its own. Marking In leaves a single marker and no
@@ -456,7 +460,9 @@ const renderClipUi = () => {
   clipRange.hidden = !ready;
   clipHandleIn.hidden = !hasIn;
   clipHandleOut.hidden = !hasOut;
+  if (clipStripButton) clipStripButton.hidden = !hasDuration;
   if (!show) {
+    clipStripHide();
     clipFormatPanel.hidden = true;
     clipZoomWrap.hidden = true;
     clipJobsPanel.hidden = true;
@@ -724,6 +730,16 @@ const clipMarkAtPlayhead = target => {
  * reach the subtitle and audio pickers, since a clip inherits both.
  */
 const clipHandleKey = event => {
+  // Before the showClip guard: the strip covers the screen, so Escape has to
+  // reach it whatever the chrome underneath is doing.
+  if (clipStripVisible) {
+    if (event.code === "Escape" || event.code === "KeyB") {
+      clipStripHide();
+      event.preventDefault();
+      return true;
+    }
+    return false;
+  }
   if (!state.showClip || clipDraftDurationMs <= 0) return false;
   if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false;
   switch (event.code) {
@@ -737,6 +753,9 @@ const clipHandleKey = event => {
       break;
     case "KeyA":
       clipAddRange();
+      break;
+    case "KeyB":
+      clipStripShow();
       break;
     case "KeyX":
       if (!clipExportButton.disabled) clipExportButton.click();
@@ -1026,6 +1045,163 @@ const bindClipRowJobAction = (button, event) => {
 bindClipRowJobAction(clipCancelButton, "clipCancel");
 bindClipRowJobAction(clipRevealButton, "clipReveal");
 bindClipRowJobAction(clipDismissButton, "clipDismiss");
+
+// --- filmstrip: finding a scene without scrubbing for it ------------------
+//
+// A two-hour film scrubbed for one moment means seek, watch, seek again. The
+// strip answers the same question by looking: one still every few seconds
+// across the whole runtime, scrolled and clicked.
+//
+// Frames arrive as files written by Kotlin into a folder beside this page,
+// coarse-first rather than left to right, so the strip is complete-but-sparse
+// almost immediately and sharpens while you read it. Nothing about them crosses
+// the bridge except four numbers -- which session folder, how many frames, how
+// many exist, how far apart -- and every URL and timestamp is derived from
+// those. That is why the session is a number: the bridge carries no strings.
+
+const CLIP_STRIP_RETRY_MS = 900;
+/** How far outside the viewport to keep frames loaded, in pixels. */
+const CLIP_STRIP_OVERSCAN = 500;
+
+let clipStripVisible = false;
+let clipStripCells = [];
+let clipStripSession = 0;
+let clipStripRetryTimer = 0;
+
+const clipStripOverlay = document.createElement("div");
+clipStripOverlay.className = "clip-strip";
+clipStripOverlay.hidden = true;
+clipStripOverlay.innerHTML = `
+  <div class="clip-strip-bar">
+    <span class="clip-strip-title">Find a scene</span>
+    <span class="clip-strip-count"></span>
+    <div class="clip-row-spacer"></div>
+    <button class="clip-action" type="button" data-clip-strip-close>Close</button>
+  </div>
+  <div class="clip-strip-grid"></div>
+`;
+document.body.appendChild(clipStripOverlay);
+
+const clipStripGrid = clipStripOverlay.querySelector(".clip-strip-grid");
+const clipStripCountLabel = clipStripOverlay.querySelector(".clip-strip-count");
+
+/** Lays out one cell per frame. Pictures arrive later; the grid does not wait. */
+const clipStripBuild = (session, count, spacingMs) => {
+  clipStripSession = session;
+  clipStripGrid.textContent = "";
+  clipStripCells = [];
+  for (let index = 0; index < count; index += 1) {
+    const ms = index * spacingMs;
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "clip-strip-cell";
+    const shot = document.createElement("span");
+    shot.className = "clip-strip-shot";
+    const label = document.createElement("span");
+    label.className = "clip-strip-time";
+    label.textContent = formatTime(ms);
+    cell.append(shot, label);
+    cell.addEventListener("click", () => {
+      send("clipStripSeek", ms);
+      clipStripHide();
+    });
+    clipStripGrid.appendChild(cell);
+    clipStripCells.push({ index, cell, shot, loaded: false, pending: false });
+  }
+};
+
+/**
+ * Tries to show one frame.
+ *
+ * A fresh <img> every attempt on purpose: the file may simply not have been
+ * written yet, and a `file:` URL that failed once stays failed on the element
+ * that asked for it.
+ */
+const clipStripAttempt = entry => {
+  if (entry.loaded || entry.pending) return;
+  entry.pending = true;
+  const img = new Image();
+  img.className = "clip-strip-img";
+  img.decoding = "async";
+  img.addEventListener("load", () => {
+    entry.pending = false;
+    entry.loaded = true;
+    entry.shot.textContent = "";
+    entry.shot.appendChild(img);
+  });
+  img.addEventListener("error", () => {
+    entry.pending = false;
+  });
+  img.src = `strip/${clipStripSession}/${entry.index}.jpg`;
+};
+
+/** Loads what is on screen, and a little either side of it. */
+const clipStripRefresh = () => {
+  if (!clipStripVisible) return;
+  const top = clipStripGrid.scrollTop - CLIP_STRIP_OVERSCAN;
+  const bottom = clipStripGrid.scrollTop + clipStripGrid.clientHeight + CLIP_STRIP_OVERSCAN;
+  clipStripCells.forEach(entry => {
+    if (entry.loaded) return;
+    const cellTop = entry.cell.offsetTop;
+    if (cellTop + entry.cell.offsetHeight < top || cellTop > bottom) return;
+    clipStripAttempt(entry);
+  });
+};
+
+/** Keeps retrying while frames are still being written, then stops. */
+const clipStripTick = () => {
+  clipStripRetryTimer = 0;
+  clipStripRefresh();
+  if (!clipStripVisible) return;
+  if (clipStripCells.every(entry => entry.loaded)) return;
+  clipStripRetryTimer = setTimeout(clipStripTick, CLIP_STRIP_RETRY_MS);
+};
+
+clipStripGrid.addEventListener("scroll", clipStripRefresh, { passive: true });
+
+const clipStripShow = () => {
+  if (clipStripVisible || clipDraftDurationMs <= 0) return;
+  clipStripVisible = true;
+  clipStripOverlay.hidden = false;
+  send("clipStripOpen", 0);
+  // Kotlin answers with the session numbers on its next state push, but a
+  // reopened strip already has them -- so render now rather than showing an
+  // empty grid until the next playback tick happens to arrive.
+  renderClipUi();
+  noteChromeActivity();
+};
+
+const clipStripHide = () => {
+  if (!clipStripVisible) return;
+  clipStripVisible = false;
+  clipStripOverlay.hidden = true;
+  if (clipStripRetryTimer) {
+    clearTimeout(clipStripRetryTimer);
+    clipStripRetryTimer = 0;
+  }
+  send("clipStripClose", 0);
+  noteChromeActivity();
+};
+
+/** Called from renderClipUi, so the strip follows the same state as everything else. */
+const clipStripRender = () => {
+  if (!clipStripVisible) return;
+  const session = Number(state.clipStripSession) || 0;
+  const count = Number(state.clipStripCount) || 0;
+  const ready = Number(state.clipStripReady) || 0;
+  const spacingMs = Number(state.clipStripSpacingMs) || 0;
+  if (session > 0 && count > 0 && spacingMs > 0 &&
+      (session !== clipStripSession || count !== clipStripCells.length)) {
+    clipStripBuild(session, count, spacingMs);
+  }
+  clipStripCountLabel.textContent = count > 0 && ready >= count
+    ? `${count} frames`
+    : `building - ${ready} of ${count}`;
+  if (!clipStripRetryTimer) clipStripTick();
+};
+
+clipStripOverlay.querySelector("[data-clip-strip-close]").addEventListener("click", clipStripHide);
+if (clipStripButton) clipStripButton.addEventListener("click", clipStripShow);
 
 /**
  * Keeps the trim draft in step with playback. Called from controls.js on every

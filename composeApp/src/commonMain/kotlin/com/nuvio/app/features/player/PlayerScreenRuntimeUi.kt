@@ -1,6 +1,7 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -12,6 +13,7 @@ import com.nuvio.app.features.clip.ClipJob
 import com.nuvio.app.features.clip.ClipLibrary
 import com.nuvio.app.features.clip.ClipRepository
 import com.nuvio.app.features.clip.ClipStatus
+import com.nuvio.app.features.clip.ClipStrip
 import com.nuvio.app.features.clip.ClipSubtitleSelection
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -254,6 +256,11 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
     val clipSummary = remember(clipJobsForThisContent, clipOutputDirLabel) {
         summarizeClipJobs(clipJobsForThisContent, clipOutputDirLabel)
     }
+    val clipStripState by ClipStrip.state.collectAsState()
+    // The strip is per title, and its frames outlive the playback session, so a
+    // change of source closes the one on screen rather than letting a half-built
+    // strip of the previous film stay open over the new one.
+    DisposableEffect(playerSurfaceSourceUrl) { onDispose { ClipStrip.close() } }
     val playerControlsState = PlayerControlsState(
         title = title,
         episodeText = episodeText,
@@ -380,6 +387,10 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipFrameDurationUs = clipFrameDurationUs,
         clipAspect = clipAspect.ordinal,
         clipTargetSizeMb = clipTargetSizeMb,
+        clipStripSession = clipStripState.session,
+        clipStripCount = clipStripState.count,
+        clipStripReady = clipStripState.ready,
+        clipStripSpacingMs = clipStripState.spacingMs,
         // Newest first, matching the order the chrome sends indexes back in.
         clipJobs = clipJobsForThisContent.map { job ->
             PlayerClipJobItem(
@@ -1074,6 +1085,24 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
         // The index is the address, the same way the clip library rows work:
         // Kotlin resolves it against the per-title, newest-first job list it
         // just sent, so job ids stay out of the DOM.
+        // The strip is built from the same source the export cuts from, but
+        // keyed by content rather than URL: torrent and debrid links carry
+        // tokens that change every session, and a strip keyed by one of those
+        // would be rebuilt from scratch every time the film was opened.
+        "clipStripOpen" -> {
+            ClipStrip.open(
+                cacheKey = buildClipContentRef().key,
+                sourceUrl = clipSourceUrl(),
+                headers = activeSourceHeaders,
+                durationMs = playbackSnapshot.durationMs,
+            )
+        }
+        "clipStripClose" -> ClipStrip.close()
+        "clipStripSeek" -> {
+            val target = value.takeIf { it.isFinite() && it >= 0.0 }?.toLong() ?: return true
+            playerController?.seekTo(target)
+            scheduleProgressSyncAfterSeek()
+        }
         "clipCancel" -> ClipRepository.cancel(clipJobIdAt(value))
         "clipDismiss" -> ClipRepository.dismiss(clipJobIdAt(value))
         "clipReveal" -> ClipRepository.revealOutput(clipJobIdAt(value))

@@ -558,3 +558,101 @@ body.clipper-mode #subtitleStyleRail { display: none !important; }
 /* "Fit" changes what you see but not what you export, which is actively
  * misleading when the frame is the deliverable. */
 body.clipper-mode .action-pill .action[data-command="resize"] { display: none !important; }
+
+/* --- filmstrip -----------------------------------------------------------
+   A full-screen browser, not an overlay strip: finding a scene in a two-hour
+   film is the whole task while it is open, and a band along the bottom would
+   show a dozen frames where this shows a hundred. */
+.clip-strip {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: rgba(6, 7, 10, 0.97);
+  backdrop-filter: blur(18px);
+}
+
+.clip-strip[hidden] {
+  display: none;
+}
+
+.clip-strip-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.clip-strip-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.clip-strip-count {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.clip-strip-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  /* Auto-fill rather than a fixed count: the window is resizable, and a still
+     stops being recognisable much below this. */
+  grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+  gap: 10px;
+  padding: 16px 22px 28px;
+  align-content: start;
+}
+
+.clip-strip-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.clip-strip-shot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  /* The placeholder is the grid: an empty cell has to hold its space so the
+     strip does not reflow under the cursor as frames land out of order. */
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid transparent;
+  transition: border-color 90ms ease;
+}
+
+.clip-strip-cell:hover .clip-strip-shot,
+.clip-strip-cell:focus-visible .clip-strip-shot {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.clip-strip-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.clip-strip-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.clip-strip-cell:hover .clip-strip-time {
+  color: rgba(255, 255, 255, 0.95);
+}
