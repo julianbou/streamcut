@@ -1170,8 +1170,14 @@ const clipHoverMove = event => {
   img.src = `strip/${session}/${index}.jpg`;
 };
 
-scrubWrap.addEventListener("mousemove", clipHoverMove);
-scrubWrap.addEventListener("mouseleave", clipHoverHide);
+// Pointer events, not mouse events. Everything else in this chrome -- the
+// activity tracker in controls.js, every drag handler here -- is written
+// against pointer events, because that is what the native player delivers;
+// `mousemove` simply never fires in the app. A browser synthesises both, which
+// is why this looked correct in the harness and did nothing in the player.
+scrubWrap.addEventListener("pointermove", clipHoverMove);
+scrubWrap.addEventListener("pointerleave", clipHoverHide);
+scrubWrap.addEventListener("pointercancel", clipHoverHide);
 
 // --- filmstrip: finding a scene without scrubbing for it ------------------
 //

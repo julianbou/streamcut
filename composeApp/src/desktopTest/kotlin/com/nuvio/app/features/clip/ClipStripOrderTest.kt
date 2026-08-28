@@ -77,8 +77,15 @@ class ClipStripSpacingTest {
     @Test
     fun `a modest stream gets the finest grid`() {
         // 2 Mb/s: ~1 MB a frame, so even hundreds of frames stay well inside
-        // the budget and there is no reason to coarsen.
-        assertEquals(15_000L, ClipStrip.spacingFor(twoHours, 2_000_000L))
+        // the budget and there is no reason to coarsen beyond the floor.
+        assertEquals(SPACING_LADDER.first(), ClipStrip.spacingFor(twoHours, 2_000_000L))
+    }
+
+    @Test
+    fun `a coarser source always gets a coarser grid, never a finer one`() {
+        val spacings = listOf(2_000_000L, 10_000_000L, 25_000_000L, 60_000_000L, 120_000_000L)
+            .map { ClipStrip.spacingFor(twoHours, it) }
+        assertEquals(spacings.sorted(), spacings, "spacing should not decrease as bitrate rises: $spacings")
     }
 
     @Test
@@ -94,7 +101,9 @@ class ClipStripSpacingTest {
     @Test
     fun `an unreadable bitrate still produces a usable strip`() {
         val spacing = ClipStrip.spacingFor(twoHours, 0L)
-        assertTrue(spacing >= 15_000L)
+        // Not the finest rung: not knowing what a frame costs is a reason to
+        // fetch fewer of them, not more.
+        assertTrue(spacing > SPACING_LADDER.first(), "unknown bitrate should be cautious, got $spacing")
         assertTrue(twoHours / spacing in 1..400)
     }
 

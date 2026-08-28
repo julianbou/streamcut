@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createDirectories
@@ -46,8 +47,17 @@ private const val ASSUMED_GOP_SECONDS = 4.0
  * next time must not orphan every frame already on disk.
  */
 internal val SPACING_LADDER = listOf(
-    15_000L, 20_000L, 30_000L, 45_000L, 60_000L, 90_000L, 120_000L, 180_000L, 240_000L,
+    30_000L, 45_000L, 60_000L, 90_000L, 120_000L, 180_000L, 240_000L,
 )
+
+/**
+ * The rung to use when the bitrate cannot be read.
+ *
+ * Deliberately not the finest. Not knowing what a frame costs is a reason to
+ * fetch fewer, not more -- the finest grid on an unknown 4K source is exactly
+ * the case that takes forever.
+ */
+private const val UNKNOWN_BITRATE_SPACING_MS = 60_000L
 
 private const val MAX_FRAMES = 400
 
@@ -59,7 +69,16 @@ private const val THUMB_WIDTH = 200
  * request, so several in flight overlap that setup rather than competing for
  * bandwidth.
  */
-private const val CONCURRENCY = 4
+private const val CONCURRENCY = 3
+
+/**
+ * A frame that failed goes to the back of the queue, once.
+ *
+ * Streaming hosts return 5XX under a burst of range requests, and a frame
+ * dropped on the first attempt would otherwise leave a permanent hole -- the
+ * strip stalling short of complete with no way to finish it.
+ */
+private const val FRAME_ATTEMPTS = 2
 
 actual object ClipStrip {
 
@@ -133,6 +152,7 @@ actual object ClipStrip {
 
             val ffmpeg = ClipExtractor.ffmpegPath() ?: return@launch
             val headerArg = ClipExtractor.headersArgumentFor(headers)
+            val attempts = ConcurrentHashMap<Int, Int>()
             val order = bisectionOrder(count)
                 .filterNot { File(cacheDir, "$it.jpg").isUsable() }
                 .toMutableList()
@@ -154,6 +174,13 @@ actual object ClipStrip {
                                 atMs = index * spacingMs,
                                 target = target,
                             )
+                        }
+                        if (!target.isUsable()) {
+                            val tries = (attempts[index] ?: 0) + 1
+                            attempts[index] = tries
+                            // Re-queued at the back rather than retried here, so
+                            // one unlucky region does not hold up the rest.
+                            if (tries < FRAME_ATTEMPTS) synchronized(order) { order.add(index) }
                         }
                         if (target.isUsable()) {
                             publish(target, File(publishDir, "$index.jpg"))
@@ -260,8 +287,7 @@ actual object ClipStrip {
      */
     internal fun spacingFor(durationMs: Long, bitrateBps: Long): Long {
         val wanted = if (bitrateBps <= 0L) {
-            // Nothing to reason from, so fall back to the frame cap alone.
-            durationMs / MAX_FRAMES
+            UNKNOWN_BITRATE_SPACING_MS
         } else {
             val bytesPerFrame = (bitrateBps / 8.0) * ASSUMED_GOP_SECONDS
             val affordable = (STRIP_BYTE_BUDGET / bytesPerFrame).toLong().coerceAtLeast(1L)
