@@ -63,3 +63,34 @@ class ClipStripOrderTest {
         assertEquals(listOf(0, 1), ClipStrip.bisectionOrder(2))
     }
 }
+
+/**
+ * Whether a source accepts the tuned seek options is discovered by reading
+ * ffmpeg's own words, so the exact wording is worth pinning: get it wrong and
+ * the strip silently builds nothing, which is what it did.
+ */
+class ClipStripTuningFallbackTest {
+
+    @Test
+    fun `names the option ffmpeg could not place`() {
+        // Verbatim from ffmpeg 7.1 given -blocksize on an input that has no
+        // protocol to consume it.
+        val output = """
+            Option blocksize not found.
+            Error opening input file testsrc2=size=320x180:duration=1.
+            Error opening input files: Option not found
+        """.trimIndent()
+        assertEquals("blocksize", rejectedTuningOption(output))
+    }
+
+    @Test
+    fun `ignores an option this code never passes`() {
+        assertEquals(null, rejectedTuningOption("Option frobnicate not found."))
+    }
+
+    @Test
+    fun `an ordinary failure is not mistaken for a rejected option`() {
+        assertEquals(null, rejectedTuningOption("Connection to tcp://host failed: Connection refused"))
+        assertEquals(null, rejectedTuningOption(""))
+    }
+}

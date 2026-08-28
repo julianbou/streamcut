@@ -41,6 +41,40 @@ private const val CONCURRENCY = 2
 /** Wide enough to recognise a scene, small enough that the whole strip is ~1 MB. */
 private const val THUMB_WIDTH = 200
 
+/**
+ * Input options that make an isolated seek cheap, in the order they are given
+ * up when a source will not take them.
+ *
+ * All optimisations, none required. `-blocksize` stops ffmpeg reading far past
+ * the frame it was asked for -- 7.4 MB a frame becomes 2.6 MB over a network --
+ * and `-skip_frame nokey` decodes keyframes only, 58x less work for identical
+ * output. But whether an input consumes them depends on how it is opened, and
+ * one that does not fails outright with "Option blocksize not found" rather
+ * than ignoring them. That was every frame of a real https stream, against
+ * measurements taken over plain http where they applied cleanly.
+ */
+private val TUNING = listOf(
+    "blocksize" to "16384",
+    "probesize" to "65536",
+    "analyzeduration" to "0",
+    "skip_frame" to "nokey",
+)
+
+/** ffmpeg's wording for an input option that nothing consumed. */
+private val REJECTED_OPTION = Regex("Option ([A-Za-z_]+) not found")
+
+/**
+ * The tuning option [output] says ffmpeg could not place, if it names one.
+ *
+ * Only options this code actually passed are returned, so an unrelated message
+ * that happens to match the wording cannot make the builder drop a flag it
+ * never sent -- or loop retrying one it cannot remove.
+ */
+internal fun rejectedTuningOption(output: String): String? =
+    REJECTED_OPTION.find(output)?.groupValues?.get(1)?.takeIf { name ->
+        TUNING.any { it.first == name }
+    }
+
 actual object ClipStrip {
 
     actual val isSupported: Boolean get() = ClipExtractor.isSupported
@@ -52,6 +86,14 @@ actual object ClipStrip {
     private var job: Job? = null
     private val sessions = AtomicInteger(0)
 
+    /**
+     * Input options this source turned out not to accept, dropped from every
+     * later frame. Latched rather than re-tested per frame: it is a property of
+     * the source, and finding out again would double the cost of every still.
+     */
+    @Volatile
+    private var rejectedOptions = emptySet<String>()
+
     actual fun open(cacheKey: String, sourceUrl: String, headers: Map<String, String>, durationMs: Long) {
         close()
         if (!isSupported || sourceUrl.isBlank() || durationMs <= 0L) return
@@ -62,6 +104,8 @@ actual object ClipStrip {
         // rather than finished.
         val count = ((durationMs - spacingMs) / spacingMs).toInt().coerceIn(1, MAX_FRAMES)
         val session = sessions.incrementAndGet()
+        // A property of the source, so it is re-tested when the source changes.
+        rejectedOptions = emptySet()
 
         val cacheDir = File(stripRoot, "${cacheKey.sanitized()}-$spacingMs").also { it.mkdirs() }
         val publishDir = publishDirFor(session) ?: return
@@ -120,13 +164,21 @@ actual object ClipStrip {
     }
 
     /**
-     * One still, with the flags that make an isolated seek cheap.
+     * One still, tuned if this source will accept it.
      *
-     * `-ss` before `-i` is a container-index seek, so its cost does not grow
-     * with position. `-blocksize` is the one that matters most over a network:
-     * without it ffmpeg reads far past the frame it was asked for, which
-     * measured 7.4 MB a frame instead of 2.6 MB. `-skip_frame nokey` decodes
-     * only keyframes, which is 58x less work and lands on a clean frame.
+     * The tuning is an optimisation, never a requirement. `-ss` before `-i` is
+     * a container-index seek, so cost does not grow with position, and that
+     * part is free everywhere. The rest is not: `-blocksize` stops ffmpeg
+     * reading far past the frame it was asked for (7.4 MB a frame becomes
+     * 2.6 MB over a network) and `-skip_frame nokey` decodes keyframes only,
+     * 58x less work for identical output -- but whether a given input consumes
+     * those options depends on how it is opened, and an input that does not
+     * fails outright with "Option blocksize not found" rather than ignoring
+     * them. That was every frame of a real https stream, against measurements
+     * taken over plain http where they applied cleanly.
+     *
+     * So: try tuned, and the first time a source rejects the options, drop them
+     * for the rest of the strip. Costlier frames beat no frames.
      */
     private fun captureFrame(
         ffmpeg: String,
@@ -135,36 +187,73 @@ actual object ClipStrip {
         atMs: Long,
         target: File,
     ) {
-        runCatching {
-            val args = buildList {
-                add(ffmpeg)
-                add("-hide_banner")
-                add("-nostdin")
-                add("-loglevel"); add("error")
-                add("-blocksize"); add("16384")
-                add("-probesize"); add("65536")
-                add("-analyzeduration"); add("0")
-                add("-skip_frame"); add("nokey")
-                headerArg?.let { add("-headers"); add(it) }
-                add("-ss"); add(formatSeconds(atMs))
-                add("-i"); add(sourceUrl)
-                add("-frames:v"); add("1")
-                add("-vf"); add("scale=$THUMB_WIDTH:-2")
-                add("-q:v"); add("6")
-                add("-y"); add(target.absolutePath)
+        // At most one retry per frame, and in practice only the first frame of
+        // a strip pays it: whatever it learns is latched for the rest.
+        repeat(2) {
+            val result = runFfmpegFrame(ffmpeg, headerArg, sourceUrl, atMs, target, rejectedOptions)
+            if (result !is FrameResult.RejectedOption) return
+            rejectedOptions = rejectedOptions + result.option
+            log.w { "This source will not take -${result.option}; dropping it for the rest of the strip" }
+        }
+    }
+
+    private sealed interface FrameResult {
+        data object Ok : FrameResult
+        data object Failed : FrameResult
+        data class RejectedOption(val option: String) : FrameResult
+    }
+
+    private fun runFfmpegFrame(
+        ffmpeg: String,
+        headerArg: String?,
+        sourceUrl: String,
+        atMs: Long,
+        target: File,
+        skip: Set<String>,
+    ): FrameResult = runCatching {
+        val args = buildList {
+            add(ffmpeg)
+            add("-hide_banner")
+            add("-nostdin")
+            add("-loglevel"); add("error")
+            TUNING.forEach { (name, value) ->
+                if (name !in skip) {
+                    add("-$name"); add(value)
+                }
             }
-            val process = ProcessBuilder(args).redirectErrorStream(true).start()
-            // Drained, not ignored: a full pipe buffer would deadlock the wait.
-            val output = process.inputStream.bufferedReader().readText()
-            if (!process.waitFor(45, TimeUnit.SECONDS)) {
-                process.destroyForcibly()
-                log.w { "Strip frame at ${atMs}ms timed out" }
-                return
+            headerArg?.let { add("-headers"); add(it) }
+            add("-ss"); add(formatSeconds(atMs))
+            add("-i"); add(sourceUrl)
+            add("-frames:v"); add("1")
+            add("-vf"); add("scale=$THUMB_WIDTH:-2")
+            add("-q:v"); add("6")
+            add("-y"); add(target.absolutePath)
+        }
+        val process = ProcessBuilder(args).redirectErrorStream(true).start()
+        // Drained, not ignored: a full pipe buffer would deadlock the wait.
+        val output = process.inputStream.bufferedReader().readText()
+        if (!process.waitFor(45, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            log.w { "Strip frame at ${atMs}ms timed out" }
+            return@runCatching FrameResult.Failed
+        }
+        if (target.isUsable()) return@runCatching FrameResult.Ok
+        // ffmpeg names the option it could not place, so only that one is
+        // dropped -- losing -blocksize costs bytes, but losing -skip_frame
+        // as well would cost 58x the CPU for no reason.
+        val rejected = rejectedTuningOption(output)
+        when {
+            rejected != null -> FrameResult.RejectedOption(rejected)
+            else -> {
+                if (output.isNotBlank()) {
+                    log.w { "Strip frame at ${atMs}ms failed: ${output.trim().take(200)}" }
+                }
+                FrameResult.Failed
             }
-            if (!target.isUsable() && output.isNotBlank()) {
-                log.w { "Strip frame at ${atMs}ms failed: ${output.trim().take(200)}" }
-            }
-        }.onFailure { log.w(it) { "Strip frame at ${atMs}ms threw" } }
+        }
+    }.getOrElse {
+        log.w(it) { "Strip frame at ${atMs}ms threw" }
+        FrameResult.Failed
     }
 
     /**
