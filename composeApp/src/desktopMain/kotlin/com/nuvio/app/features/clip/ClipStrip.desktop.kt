@@ -19,6 +19,7 @@ import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.createDirectories
+import kotlin.math.abs
 
 private val log = Logger.withTag("ClipStrip")
 
@@ -35,45 +36,15 @@ private const val TARGET_FRAMES = 300
 private const val MIN_SPACING_MS = 15_000L
 private const val MAX_FRAMES = 600
 
-/** Two at a time: more only splits the same bandwidth into slower pieces. */
-private const val CONCURRENCY = 2
-
 /** Wide enough to recognise a scene, small enough that the whole strip is ~1 MB. */
 private const val THUMB_WIDTH = 200
 
 /**
- * Input options that make an isolated seek cheap, in the order they are given
- * up when a source will not take them.
- *
- * All optimisations, none required. `-blocksize` stops ffmpeg reading far past
- * the frame it was asked for -- 7.4 MB a frame becomes 2.6 MB over a network --
- * and `-skip_frame nokey` decodes keyframes only, 58x less work for identical
- * output. But whether an input consumes them depends on how it is opened, and
- * one that does not fails outright with "Option blocksize not found" rather
- * than ignoring them. That was every frame of a real https stream, against
- * measurements taken over plain http where they applied cleanly.
+ * Two at a time was cautious; a frame is a fresh process, connection and range
+ * request, so several in flight overlap that setup rather than competing for
+ * bandwidth.
  */
-private val TUNING = listOf(
-    "blocksize" to "16384",
-    "probesize" to "65536",
-    "analyzeduration" to "0",
-    "skip_frame" to "nokey",
-)
-
-/** ffmpeg's wording for an input option that nothing consumed. */
-private val REJECTED_OPTION = Regex("Option ([A-Za-z_]+) not found")
-
-/**
- * The tuning option [output] says ffmpeg could not place, if it names one.
- *
- * Only options this code actually passed are returned, so an unrelated message
- * that happens to match the wording cannot make the builder drop a flag it
- * never sent -- or loop retrying one it cannot remove.
- */
-internal fun rejectedTuningOption(output: String): String? =
-    REJECTED_OPTION.find(output)?.groupValues?.get(1)?.takeIf { name ->
-        TUNING.any { it.first == name }
-    }
+private const val CONCURRENCY = 4
 
 actual object ClipStrip {
 
@@ -86,15 +57,17 @@ actual object ClipStrip {
     private var job: Job? = null
     private val sessions = AtomicInteger(0)
 
-    /**
-     * Input options this source turned out not to accept, dropped from every
-     * later frame. Latched rather than re-tested per frame: it is a property of
-     * the source, and finding out again would double the cost of every still.
-     */
+    /** Where the user is looking, or -1. Read by the workers on every take. */
     @Volatile
-    private var rejectedOptions = emptySet<String>()
+    private var focusIndex = -1
 
-    actual fun open(cacheKey: String, sourceUrl: String, headers: Map<String, String>, durationMs: Long) {
+    actual fun open(
+        cacheKey: String,
+        sourceUrl: String,
+        headers: Map<String, String>,
+        durationMs: Long,
+        buildMissing: Boolean,
+    ) {
         close()
         if (!isSupported || sourceUrl.isBlank() || durationMs <= 0L) return
 
@@ -104,8 +77,7 @@ actual object ClipStrip {
         // rather than finished.
         val count = ((durationMs - spacingMs) / spacingMs).toInt().coerceIn(1, MAX_FRAMES)
         val session = sessions.incrementAndGet()
-        // A property of the source, so it is re-tested when the source changes.
-        rejectedOptions = emptySet()
+        focusIndex = -1
 
         val cacheDir = File(stripRoot, "${cacheKey.sanitized()}-$spacingMs").also { it.mkdirs() }
         val publishDir = publishDirFor(session) ?: return
@@ -118,10 +90,25 @@ actual object ClipStrip {
         )
 
         job = scope.launch {
+            // Whatever this title already has, published before anything is
+            // fetched -- so a strip built earlier is on screen at once, and the
+            // hover preview works without a download.
+            val done = AtomicInteger(0)
+            (0 until count).forEach { index ->
+                val cached = File(cacheDir, "$index.jpg")
+                if (cached.isUsable()) {
+                    publish(cached, File(publishDir, "$index.jpg"))
+                    done.incrementAndGet()
+                }
+            }
+            _state.update(session) { it.copy(ready = done.get()) }
+            if (!buildMissing || done.get() >= count) return@launch
+
             val ffmpeg = ClipExtractor.ffmpegPath() ?: return@launch
             val headerArg = ClipExtractor.headersArgumentFor(headers)
-            val order = ArrayDeque(bisectionOrder(count))
-            val done = AtomicInteger(0)
+            val order = bisectionOrder(count)
+                .filterNot { File(cacheDir, "$it.jpg").isUsable() }
+                .toMutableList()
 
             // Workers pull from one shared queue rather than taking a slice
             // each, so a slow region does not leave the rest of the film
@@ -130,7 +117,7 @@ actual object ClipStrip {
                 launch {
                     while (true) {
                         ensureActive()
-                        val index = synchronized(order) { order.removeFirstOrNull() } ?: break
+                        val index = synchronized(order) { takeNext(order) } ?: break
                         val target = File(cacheDir, "$index.jpg")
                         if (!target.isUsable()) {
                             captureFrame(
@@ -157,6 +144,10 @@ actual object ClipStrip {
         }
     }
 
+    actual fun focus(index: Int) {
+        focusIndex = index
+    }
+
     actual fun close() {
         job?.cancel()
         job = null
@@ -164,21 +155,20 @@ actual object ClipStrip {
     }
 
     /**
-     * One still, tuned if this source will accept it.
+     * One still, by the cheapest means measured.
      *
-     * The tuning is an optimisation, never a requirement. `-ss` before `-i` is
-     * a container-index seek, so cost does not grow with position, and that
-     * part is free everywhere. The rest is not: `-blocksize` stops ffmpeg
-     * reading far past the frame it was asked for (7.4 MB a frame becomes
-     * 2.6 MB over a network) and `-skip_frame nokey` decodes keyframes only,
-     * 58x less work for identical output -- but whether a given input consumes
-     * those options depends on how it is opened, and an input that does not
-     * fails outright with "Option blocksize not found" rather than ignoring
-     * them. That was every frame of a real https stream, against measurements
-     * taken over plain http where they applied cleanly.
+     * `-ss` before `-i` is a container-index seek, so the cost does not grow
+     * with position -- seeking to the last minute is as quick as the first.
+     * Beyond that, nothing helps. Measured over HTTP against a 20-minute
+     * source, a plain seek costs 7.0 MB a frame and every flag that looked
+     * promising was neutral or worse: small probesize 7.9, noaccurate_seek 7.8,
+     * and `-skip_frame nokey` -- which is 58x less CPU on a full pass -- costs
+     * 14.3, double, because the decoder discards frames until the next keyframe
+     * and ffmpeg keeps reading to find one. What is left is inherent: ffmpeg
+     * reads a couple of GOPs around the seek point, and there is no knob for it.
      *
-     * So: try tuned, and the first time a source rejects the options, drop them
-     * for the rest of the strip. Costlier frames beat no frames.
+     * That is the whole cost model. A frame is a couple of GOPs, so a strip is
+     * (frames x 2 GOPs) of the film, and on a 4K source those GOPs are large.
      */
     private fun captureFrame(
         ffmpeg: String,
@@ -187,73 +177,32 @@ actual object ClipStrip {
         atMs: Long,
         target: File,
     ) {
-        // At most one retry per frame, and in practice only the first frame of
-        // a strip pays it: whatever it learns is latched for the rest.
-        repeat(2) {
-            val result = runFfmpegFrame(ffmpeg, headerArg, sourceUrl, atMs, target, rejectedOptions)
-            if (result !is FrameResult.RejectedOption) return
-            rejectedOptions = rejectedOptions + result.option
-            log.w { "This source will not take -${result.option}; dropping it for the rest of the strip" }
-        }
-    }
-
-    private sealed interface FrameResult {
-        data object Ok : FrameResult
-        data object Failed : FrameResult
-        data class RejectedOption(val option: String) : FrameResult
-    }
-
-    private fun runFfmpegFrame(
-        ffmpeg: String,
-        headerArg: String?,
-        sourceUrl: String,
-        atMs: Long,
-        target: File,
-        skip: Set<String>,
-    ): FrameResult = runCatching {
-        val args = buildList {
-            add(ffmpeg)
-            add("-hide_banner")
-            add("-nostdin")
-            add("-loglevel"); add("error")
-            TUNING.forEach { (name, value) ->
-                if (name !in skip) {
-                    add("-$name"); add(value)
-                }
+        runCatching {
+            val args = buildList {
+                add(ffmpeg)
+                add("-hide_banner")
+                add("-nostdin")
+                add("-loglevel"); add("error")
+                headerArg?.let { add("-headers"); add(it) }
+                add("-ss"); add(formatSeconds(atMs))
+                add("-i"); add(sourceUrl)
+                add("-frames:v"); add("1")
+                add("-vf"); add("scale=$THUMB_WIDTH:-2")
+                add("-q:v"); add("6")
+                add("-y"); add(target.absolutePath)
             }
-            headerArg?.let { add("-headers"); add(it) }
-            add("-ss"); add(formatSeconds(atMs))
-            add("-i"); add(sourceUrl)
-            add("-frames:v"); add("1")
-            add("-vf"); add("scale=$THUMB_WIDTH:-2")
-            add("-q:v"); add("6")
-            add("-y"); add(target.absolutePath)
-        }
-        val process = ProcessBuilder(args).redirectErrorStream(true).start()
-        // Drained, not ignored: a full pipe buffer would deadlock the wait.
-        val output = process.inputStream.bufferedReader().readText()
-        if (!process.waitFor(45, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            log.w { "Strip frame at ${atMs}ms timed out" }
-            return@runCatching FrameResult.Failed
-        }
-        if (target.isUsable()) return@runCatching FrameResult.Ok
-        // ffmpeg names the option it could not place, so only that one is
-        // dropped -- losing -blocksize costs bytes, but losing -skip_frame
-        // as well would cost 58x the CPU for no reason.
-        val rejected = rejectedTuningOption(output)
-        when {
-            rejected != null -> FrameResult.RejectedOption(rejected)
-            else -> {
-                if (output.isNotBlank()) {
-                    log.w { "Strip frame at ${atMs}ms failed: ${output.trim().take(200)}" }
-                }
-                FrameResult.Failed
+            val process = ProcessBuilder(args).redirectErrorStream(true).start()
+            // Drained, not ignored: a full pipe buffer would deadlock the wait.
+            val output = process.inputStream.bufferedReader().readText()
+            if (!process.waitFor(90, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                log.w { "Strip frame at ${atMs}ms timed out" }
+                return
             }
-        }
-    }.getOrElse {
-        log.w(it) { "Strip frame at ${atMs}ms threw" }
-        FrameResult.Failed
+            if (!target.isUsable() && output.isNotBlank()) {
+                log.w { "Strip frame at ${atMs}ms failed: ${output.trim().take(200)}" }
+            }
+        }.onFailure { log.w(it) { "Strip frame at ${atMs}ms threw" } }
     }
 
     /**
@@ -270,6 +219,20 @@ actual object ClipStrip {
         runCatching { Files.createLink(link.toPath(), source.toPath()) }
             .recoverCatching { source.copyTo(link, overwrite = true) }
             .onFailure { log.w(it) { "Could not publish strip frame ${source.name}" } }
+    }
+
+    /**
+     * The next frame to fetch: nearest to wherever the user is looking, or the
+     * next in bisection order when they are not looking anywhere in particular.
+     *
+     * A linear scan, which for a few hundred frames costs nothing and keeps the
+     * queue a plain list that [bisectionOrder] can fill in one go.
+     */
+    private fun takeNext(order: MutableList<Int>): Int? {
+        if (order.isEmpty()) return null
+        val focus = focusIndex
+        if (focus < 0) return order.removeAt(0)
+        return order.removeAt(order.indices.minBy { abs(order[it] - focus) })
     }
 
     /**

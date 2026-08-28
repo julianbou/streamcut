@@ -656,3 +656,50 @@ body.clipper-mode .action-pill .action[data-command="resize"] { display: none !i
 .clip-strip-cell:hover .clip-strip-time {
   color: rgba(255, 255, 255, 0.95);
 }
+
+/* --- hover preview on the scrub bar --------------------------------------
+   Sits above the bar and follows the cursor. Fixed rather than absolute so it
+   is not clipped by the controls' own overflow. */
+.clip-hover-preview {
+  position: fixed;
+  z-index: 55;
+  /* Horizontal centring only -- the vertical side is placed in JS, which
+     knows whether there is room above the bar. */
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px;
+  border-radius: 9px;
+  background: rgba(6, 7, 10, 0.94);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.clip-hover-preview[hidden] {
+  display: none;
+}
+
+.clip-hover-shot {
+  display: block;
+  width: 176px;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.clip-hover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.clip-hover-time {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
+}

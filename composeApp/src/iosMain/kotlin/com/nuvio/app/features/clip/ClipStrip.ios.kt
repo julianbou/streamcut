@@ -11,6 +11,13 @@ actual object ClipStrip {
     private val _state = MutableStateFlow(ClipStripState())
     actual val state: StateFlow<ClipStripState> = _state.asStateFlow()
 
-    actual fun open(cacheKey: String, sourceUrl: String, headers: Map<String, String>, durationMs: Long) = Unit
+    actual fun open(
+        cacheKey: String,
+        sourceUrl: String,
+        headers: Map<String, String>,
+        durationMs: Long,
+        buildMissing: Boolean,
+    ) = Unit
+    actual fun focus(index: Int) = Unit
     actual fun close() = Unit
 }

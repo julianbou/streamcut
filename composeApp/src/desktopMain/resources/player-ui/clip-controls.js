@@ -1046,6 +1046,78 @@ bindClipRowJobAction(clipCancelButton, "clipCancel");
 bindClipRowJobAction(clipRevealButton, "clipReveal");
 bindClipRowJobAction(clipDismissButton, "clipDismiss");
 
+// --- hover preview on the scrub bar -------------------------------------
+//
+// The same frames the strip is made of, shown one at a time where the cursor
+// is. It costs nothing extra: whatever the strip has already fetched for this
+// title is on disk and published, so hovering is a file read. Which also means
+// it only shows what exists -- before a strip has been built for a title there
+// is nothing to show, and hovering will not start a download to fix that.
+
+const clipHoverPreview = document.createElement("div");
+clipHoverPreview.className = "clip-hover-preview";
+clipHoverPreview.hidden = true;
+clipHoverPreview.innerHTML = `<span class="clip-hover-shot"></span><span class="clip-hover-time"></span>`;
+document.body.appendChild(clipHoverPreview);
+
+const clipHoverShot = clipHoverPreview.querySelector(".clip-hover-shot");
+const clipHoverTime = clipHoverPreview.querySelector(".clip-hover-time");
+
+/** Used only for the first hover, before the element has ever been laid out. */
+const CLIP_HOVER_FALLBACK_WIDTH = 186;
+const CLIP_HOVER_FALLBACK_HEIGHT = 125;
+
+/** The frame currently in the preview, so an unchanged one is not reloaded. */
+let clipHoverIndex = -1;
+
+const clipHoverHide = () => {
+  clipHoverPreview.hidden = true;
+  clipHoverIndex = -1;
+};
+
+const clipHoverMove = event => {
+  const spacingMs = Number(state.clipStripSpacingMs) || 0;
+  const session = Number(state.clipStripSession) || 0;
+  const count = Number(state.clipStripCount) || 0;
+  if (session <= 0 || spacingMs <= 0 || clipDraftDurationMs <= 0) return clipHoverHide();
+
+  const ms = clipTrackMsFromEvent(event);
+  const index = Math.max(0, Math.min(count - 1, Math.round(ms / spacingMs)));
+  clipHoverTime.textContent = formatTime(ms);
+
+  // Anchored to the cursor but kept inside the window: sideways so it does not
+  // hang off the edge when you inspect the very start or end of a film, and
+  // vertically because the controls are not always near the bottom -- above the
+  // bar by default, below it when there is no room above.
+  const rect = scrubWrap.getBoundingClientRect();
+  const half = clipHoverPreview.offsetWidth / 2 || CLIP_HOVER_FALLBACK_WIDTH / 2;
+  const height = clipHoverPreview.offsetHeight || CLIP_HOVER_FALLBACK_HEIGHT;
+  const above = rect.top - height - 12;
+  clipHoverPreview.style.left =
+    `${Math.max(half + 8, Math.min(window.innerWidth - half - 8, event.clientX))}px`;
+  clipHoverPreview.style.top = `${above >= 8 ? above : rect.bottom + 12}px`;
+
+  if (index === clipHoverIndex) return;
+  clipHoverIndex = index;
+  const img = new Image();
+  img.className = "clip-hover-img";
+  img.addEventListener("load", () => {
+    // Discarded if the cursor has already moved on: frames load out of order
+    // and a late arrival must not replace a newer one.
+    if (clipHoverIndex !== index) return;
+    clipHoverShot.textContent = "";
+    clipHoverShot.appendChild(img);
+    clipHoverPreview.hidden = false;
+  });
+  img.addEventListener("error", () => {
+    if (clipHoverIndex === index) clipHoverHide();
+  });
+  img.src = `strip/${session}/${index}.jpg`;
+};
+
+scrubWrap.addEventListener("mousemove", clipHoverMove);
+scrubWrap.addEventListener("mouseleave", clipHoverHide);
+
 // --- filmstrip: finding a scene without scrubbing for it ------------------
 //
 // A two-hour film scrubbed for one moment means seek, watch, seek again. The
@@ -1067,6 +1139,8 @@ let clipStripVisible = false;
 let clipStripCells = [];
 let clipStripSession = 0;
 let clipStripRetryTimer = 0;
+/** Last index reported to Kotlin, so scrolling does not spam the bridge. */
+let clipStripFocusSent = -1;
 
 const clipStripOverlay = document.createElement("div");
 clipStripOverlay.className = "clip-strip";
@@ -1088,6 +1162,7 @@ const clipStripCountLabel = clipStripOverlay.querySelector(".clip-strip-count");
 /** Lays out one cell per frame. Pictures arrive later; the grid does not wait. */
 const clipStripBuild = (session, count, spacingMs) => {
   clipStripSession = session;
+  clipStripFocusSent = -1;
   clipStripGrid.textContent = "";
   clipStripCells = [];
   for (let index = 0; index < count; index += 1) {
@@ -1135,17 +1210,33 @@ const clipStripAttempt = entry => {
   img.src = `strip/${clipStripSession}/${entry.index}.jpg`;
 };
 
-/** Loads what is on screen, and a little either side of it. */
+/**
+ * Loads what is on screen, and a little either side of it -- and tells Kotlin
+ * where to fetch next.
+ *
+ * Without that second part the builder works through the film in its own order
+ * while you sit staring at an empty patch of grid. The frames cost the same
+ * either way; which ones arrive first is the difference.
+ */
 const clipStripRefresh = () => {
   if (!clipStripVisible) return;
   const top = clipStripGrid.scrollTop - CLIP_STRIP_OVERSCAN;
   const bottom = clipStripGrid.scrollTop + clipStripGrid.clientHeight + CLIP_STRIP_OVERSCAN;
+  let firstVisible = -1;
+  let lastVisible = -1;
   clipStripCells.forEach(entry => {
-    if (entry.loaded) return;
     const cellTop = entry.cell.offsetTop;
     if (cellTop + entry.cell.offsetHeight < top || cellTop > bottom) return;
-    clipStripAttempt(entry);
+    if (firstVisible < 0) firstVisible = entry.index;
+    lastVisible = entry.index;
+    if (!entry.loaded) clipStripAttempt(entry);
   });
+  if (firstVisible < 0) return;
+  const middle = Math.round((firstVisible + lastVisible) / 2);
+  if (middle !== clipStripFocusSent) {
+    clipStripFocusSent = middle;
+    send("clipStripFocus", middle);
+  }
 };
 
 /** Keeps retrying while frames are still being written, then stops. */

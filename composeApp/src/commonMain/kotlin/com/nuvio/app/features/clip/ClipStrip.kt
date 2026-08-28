@@ -49,8 +49,29 @@ expect object ClipStrip {
      * not a source URL, which for torrents and debrid links carries tokens that
      * change every time. Frames already on disk are kept, so reopening a film
      * costs nothing.
+     *
+     * [buildMissing] separates the two things this does. False only publishes
+     * what is already cached, which costs nothing and is what makes the scrub
+     * bar's hover preview work the instant a title is opened again. True also
+     * fetches the frames that are missing, which costs real bandwidth and so
+     * happens only when the user asks for it.
      */
-    fun open(cacheKey: String, sourceUrl: String, headers: Map<String, String>, durationMs: Long)
+    fun open(
+        cacheKey: String,
+        sourceUrl: String,
+        headers: Map<String, String>,
+        durationMs: Long,
+        buildMissing: Boolean,
+    )
+
+    /**
+     * Fetch near [index] next.
+     *
+     * Total cost is unchanged -- the same frames are fetched either way -- but
+     * on a big source the difference between "the part I am looking at fills in
+     * now" and "it fills in eventually" is most of what slow feels like.
+     */
+    fun focus(index: Int)
 
     /** Stop building and forget the session. Frames already written stay cached. */
     fun close()

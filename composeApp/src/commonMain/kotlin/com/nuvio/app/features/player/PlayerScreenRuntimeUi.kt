@@ -257,6 +257,23 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         summarizeClipJobs(clipJobsForThisContent, clipOutputDirLabel)
     }
     val clipStripState by ClipStrip.state.collectAsState()
+    // Publishes any strip this title already has, without fetching anything --
+    // which is what lets the scrub bar's hover preview work the moment a film
+    // you have browsed before is opened again. Keyed on whether the duration is
+    // known rather than its value, so the constant ticking of playback does not
+    // restart it (and would cancel a build in progress if it did).
+    LaunchedEffect(playerSurfaceSourceUrl, playbackSnapshot.durationMs > 0L) {
+        val url = playerSurfaceSourceUrl.orEmpty()
+        val durationMs = playbackSnapshot.durationMs
+        if (!ClipStrip.isSupported || url.isBlank() || durationMs <= 0L) return@LaunchedEffect
+        ClipStrip.open(
+            cacheKey = buildClipContentRef().key,
+            sourceUrl = url,
+            headers = activeSourceHeaders,
+            durationMs = durationMs,
+            buildMissing = false,
+        )
+    }
     // The strip is per title, and its frames outlive the playback session, so a
     // change of source closes the one on screen rather than letting a half-built
     // strip of the previous film stay open over the new one.
@@ -1095,9 +1112,11 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                 sourceUrl = clipSourceUrl(),
                 headers = activeSourceHeaders,
                 durationMs = playbackSnapshot.durationMs,
+                buildMissing = true,
             )
         }
         "clipStripClose" -> ClipStrip.close()
+        "clipStripFocus" -> ClipStrip.focus(value.toInt())
         "clipStripSeek" -> {
             val target = value.takeIf { it.isFinite() && it >= 0.0 }?.toLong() ?: return true
             playerController?.seekTo(target)
