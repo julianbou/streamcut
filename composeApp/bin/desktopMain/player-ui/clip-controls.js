@@ -1133,7 +1133,8 @@ const clipHoverMove = event => {
   clipFrameKnowledgeFor(session);
 
   const ms = clipTrackMsFromEvent(event);
-  const target = Math.max(0, Math.min(count - 1, Math.round(ms / spacingMs)));
+  // -1 because frame i sits at (i+1) spacings, as above.
+  const target = Math.max(0, Math.min(count - 1, Math.round(ms / spacingMs) - 1));
   const index = clipHoverNearest(target);
   clipHoverTime.textContent = formatTime(ms);
 
@@ -1170,14 +1171,29 @@ const clipHoverMove = event => {
   img.src = `strip/${session}/${index}.jpg`;
 };
 
-// Pointer events, not mouse events. Everything else in this chrome -- the
-// activity tracker in controls.js, every drag handler here -- is written
-// against pointer events, because that is what the native player delivers;
-// `mousemove` simply never fires in the app. A browser synthesises both, which
-// is why this looked correct in the harness and did nothing in the player.
-scrubWrap.addEventListener("pointermove", clipHoverMove);
-scrubWrap.addEventListener("pointerleave", clipHoverHide);
-scrubWrap.addEventListener("pointercancel", clipHoverHide);
+// Bound to the document, and hit-tested by geometry rather than by which
+// element the event names.
+//
+// Two reasons, both learned the hard way. Pointer events, not mouse events:
+// everything else in this chrome is written against them because that is what
+// the native player delivers, and `mousemove` never fires in the app at all --
+// a browser synthesises it, which is why a harness cannot catch that. And
+// document-level, because an event landing on the scrub bar can still be
+// retargeted or swallowed by whatever sits over it; controls.js already tracks
+// activity this way, which is proof the document sees the moves.
+const CLIP_HOVER_MARGIN = 10;
+
+document.addEventListener("pointermove", event => {
+  const rect = scrubWrap.getBoundingClientRect();
+  const inside =
+    rect.width > 0 &&
+    event.clientX >= rect.left - CLIP_HOVER_MARGIN &&
+    event.clientX <= rect.right + CLIP_HOVER_MARGIN &&
+    event.clientY >= rect.top - CLIP_HOVER_MARGIN &&
+    event.clientY <= rect.bottom + CLIP_HOVER_MARGIN;
+  if (inside) clipHoverMove(event); else clipHoverHide();
+});
+document.addEventListener("pointercancel", clipHoverHide);
 
 // --- filmstrip: finding a scene without scrubbing for it ------------------
 //
@@ -1228,7 +1244,9 @@ const clipStripBuild = (session, count, spacingMs) => {
   clipStripGrid.textContent = "";
   clipStripCells = [];
   for (let index = 0; index < count; index += 1) {
-    const ms = index * spacingMs;
+    // One spacing in, matching where Kotlin actually seeks: a film's first
+    // frame is usually black and tells you nothing.
+    const ms = (index + 1) * spacingMs;
     const cell = document.createElement("button");
     cell.type = "button";
     cell.className = "clip-strip-cell";
