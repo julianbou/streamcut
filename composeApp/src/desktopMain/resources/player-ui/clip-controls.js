@@ -1077,6 +1077,34 @@ const clipFrameMissing = new Set();
 let clipFrameSession = 0;
 
 /**
+ * The last real session seen for the title on screen.
+ *
+ * Belt and braces against a momentary zero in the state: the frames are files
+ * on disk, so a session that was valid a moment ago is still valid, and
+ * blanking the preview because one state push arrived mid-reopen is worse than
+ * showing the frame that is still sitting there. Cleared when the source
+ * changes, which is the only time the old session really is meaningless.
+ */
+let clipHoverSession = 0;
+
+/**
+ * Reports how far the hover path gets, once per code.
+ *
+ * The hover has now been wrong three times, each time in a way a browser
+ * harness could not see -- a browser synthesises events the player does not
+ * send, and resolves URLs the player may not. Kotlin logs these, so the answer
+ * comes from the app rather than from another guess. Once per code because
+ * pointermove fires continuously; the interesting thing is the furthest point
+ * reached, not how often.
+ */
+const clipHoverSeen = new Set();
+const clipHoverTrace = code => {
+  if (clipHoverSeen.has(code)) return;
+  clipHoverSeen.add(code);
+  send("clipStripTrace", code);
+};
+
+/**
  * Forgets what was known when the session changes.
  *
  * Called from the hover path as well as the grid, because a title can be opened
@@ -1127,9 +1155,17 @@ const clipHoverNearest = index => {
 
 const clipHoverMove = event => {
   const spacingMs = Number(state.clipStripSpacingMs) || 0;
-  const session = Number(state.clipStripSession) || 0;
+  const reported = Number(state.clipStripSession) || 0;
+  if (reported > 0) clipHoverSession = reported;
+  const session = reported > 0 ? reported : clipHoverSession;
   const count = Number(state.clipStripCount) || 0;
-  if (session <= 0 || spacingMs <= 0 || clipDraftDurationMs <= 0) return clipHoverHide();
+  if (session <= 0 || spacingMs <= 0 || clipDraftDurationMs <= 0) {
+    // Which of the three is missing, so the log distinguishes "no strip yet"
+    // from "no duration yet".
+    clipHoverTrace(session <= 0 ? 30 : spacingMs <= 0 ? 31 : 32);
+    return clipHoverHide();
+  }
+  clipHoverTrace(3);
   clipFrameKnowledgeFor(session);
 
   const ms = clipTrackMsFromEvent(event);
@@ -1156,6 +1192,7 @@ const clipHoverMove = event => {
   const img = new Image();
   img.className = "clip-hover-img";
   img.addEventListener("load", () => {
+    clipHoverTrace(5);
     clipFramePresent.add(index);
     // Discarded if the cursor has already moved on: frames load out of order
     // and a late arrival must not replace a newer one.
@@ -1165,9 +1202,11 @@ const clipHoverMove = event => {
     clipHoverPreview.hidden = false;
   });
   img.addEventListener("error", () => {
+    clipHoverTrace(6);
     clipFrameMissing.add(index);
     if (clipHoverIndex === index) clipHoverHide();
   });
+  clipHoverTrace(4);
   img.src = `strip/${session}/${index}.jpg`;
 };
 
@@ -1184,6 +1223,7 @@ const clipHoverMove = event => {
 const CLIP_HOVER_MARGIN = 10;
 
 document.addEventListener("pointermove", event => {
+  clipHoverTrace(1);
   const rect = scrubWrap.getBoundingClientRect();
   const inside =
     rect.width > 0 &&
@@ -1191,7 +1231,12 @@ document.addEventListener("pointermove", event => {
     event.clientX <= rect.right + CLIP_HOVER_MARGIN &&
     event.clientY >= rect.top - CLIP_HOVER_MARGIN &&
     event.clientY <= rect.bottom + CLIP_HOVER_MARGIN;
-  if (inside) clipHoverMove(event); else clipHoverHide();
+  if (inside) {
+    clipHoverTrace(2);
+    clipHoverMove(event);
+  } else {
+    clipHoverHide();
+  }
 });
 document.addEventListener("pointercancel", clipHoverHide);
 
@@ -1398,6 +1443,8 @@ const clipSyncPlayback = (durationMs, positionMs) => {
     // showing the previous one's clips until the next full render.
     clipLibraryOpen = false;
     clipJobsOpen = false;
+    // A different film: the previous title's frame numbers mean nothing now.
+    clipHoverSession = 0;
   }
   clipZoomUpdatePlayhead(positionMs);
   if (

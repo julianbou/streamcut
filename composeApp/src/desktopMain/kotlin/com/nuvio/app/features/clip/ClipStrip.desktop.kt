@@ -39,11 +39,14 @@ private const val STRIP_FRAMES = 15
 private const val THUMB_WIDTH = 200
 
 /**
- * Three at a time: each frame is a fresh process, connection and range request,
- * so a few in flight overlap that setup. Not more -- the log showed streaming
- * hosts answering a heavier burst with 5XX.
+ * Six at a time. Each frame is a fresh process, connection and range request,
+ * and streaming hosts generally throttle a single connection rather than the
+ * account -- so with only fifteen frames to fetch, the width of the fan-out is
+ * most of what decides how long the strip takes. A burst this size does draw
+ * the occasional 5XX, which is why a failed frame is re-queued rather than
+ * dropped.
  */
-private const val CONCURRENCY = 3
+private const val CONCURRENCY = 6
 
 /**
  * A frame that failed goes to the back of the queue, once.
@@ -52,7 +55,7 @@ private const val CONCURRENCY = 3
  * dropped on the first attempt would otherwise leave a permanent hole -- the
  * strip stalling short of complete with no way to finish it.
  */
-private const val FRAME_ATTEMPTS = 2
+private const val FRAME_ATTEMPTS = 3
 
 actual object ClipStrip {
 
@@ -86,8 +89,13 @@ actual object ClipStrip {
         // recomposition re-ran the publish-only open, which closed the job
         // mid-build and left the strip stuck part-finished.
         if (cacheKey == openKey && job?.isActive == true && (building || !buildMissing)) return
-        close()
 
+        // Deliberately not close(): that publishes a session of 0 on its way
+        // past, and the page reads 0 as "this title has no strip" and blanks
+        // the scrub-bar preview. Reopening goes straight from the old session
+        // to the new one, so subscribers never see the gap.
+        job?.cancel()
+        job = null
         val session = sessions.incrementAndGet()
         focusIndex = -1
 
