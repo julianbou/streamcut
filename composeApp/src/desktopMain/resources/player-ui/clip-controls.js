@@ -1077,15 +1077,15 @@ const clipFrameMissing = new Set();
 let clipFrameSession = 0;
 
 /**
- * The last real session seen for the title on screen.
+ * The last complete strip description seen for the title on screen.
  *
- * Belt and braces against a momentary zero in the state: the frames are files
- * on disk, so a session that was valid a moment ago is still valid, and
- * blanking the preview because one state push arrived mid-reopen is worse than
- * showing the frame that is still sitting there. Cleared when the source
- * changes, which is the only time the old session really is meaningless.
+ * All three numbers, not just the session: closing the Scenes view resets the
+ * state, and a session that survives a zeroed spacing is no use because the
+ * spacing is what turns a cursor position into a frame number. The frames are
+ * files on disk and stay valid for as long as the film does, so the page keeps
+ * the last good triple and clears it when the source changes.
  */
-let clipHoverSession = 0;
+let clipHoverStrip = { session: 0, count: 0, spacingMs: 0 };
 
 /**
  * Reports how far the hover path gets, once per code.
@@ -1154,11 +1154,13 @@ const clipHoverNearest = index => {
 };
 
 const clipHoverMove = event => {
-  const spacingMs = Number(state.clipStripSpacingMs) || 0;
-  const reported = Number(state.clipStripSession) || 0;
-  if (reported > 0) clipHoverSession = reported;
-  const session = reported > 0 ? reported : clipHoverSession;
-  const count = Number(state.clipStripCount) || 0;
+  const live = {
+    session: Number(state.clipStripSession) || 0,
+    count: Number(state.clipStripCount) || 0,
+    spacingMs: Number(state.clipStripSpacingMs) || 0,
+  };
+  if (live.session > 0 && live.count > 0 && live.spacingMs > 0) clipHoverStrip = live;
+  const { session, count, spacingMs } = live.session > 0 && live.spacingMs > 0 ? live : clipHoverStrip;
   if (session <= 0 || spacingMs <= 0 || clipDraftDurationMs <= 0) {
     // Which of the three is missing, so the log distinguishes "no strip yet"
     // from "no duration yet".
@@ -1398,7 +1400,10 @@ const clipStripHide = () => {
     clearTimeout(clipStripRetryTimer);
     clipStripRetryTimer = 0;
   }
-  send("clipStripClose", 0);
+  // Deliberately tells Kotlin nothing. Closing the view is not closing the
+  // strip: its frames are what the scrub-bar preview reads, and tearing them
+  // down here is what made the hover stop working the moment Scenes was opened
+  // and shut again. The strip belongs to the title, and goes when it does.
   noteChromeActivity();
 };
 
@@ -1444,7 +1449,7 @@ const clipSyncPlayback = (durationMs, positionMs) => {
     clipLibraryOpen = false;
     clipJobsOpen = false;
     // A different film: the previous title's frame numbers mean nothing now.
-    clipHoverSession = 0;
+    clipHoverStrip = { session: 0, count: 0, spacingMs: 0 };
   }
   clipZoomUpdatePlayhead(positionMs);
   if (

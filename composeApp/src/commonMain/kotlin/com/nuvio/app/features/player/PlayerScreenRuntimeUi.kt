@@ -1115,7 +1115,6 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                 buildMissing = true,
             )
         }
-        "clipStripClose" -> ClipStrip.close()
         "clipStripFocus" -> ClipStrip.focus(value.toInt())
         // Temporary: reports how far the scrub-bar hover preview gets. See the
         // codes in clip-controls.js -- the page cannot log anywhere we can read,
