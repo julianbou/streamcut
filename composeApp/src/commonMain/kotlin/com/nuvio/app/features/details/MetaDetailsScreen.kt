@@ -709,10 +709,25 @@ fun MetaDetailsScreen(
                         }
                     }
                 }
-                val playText = stringResource(Res.string.action_play)
-                val resumeText = stringResource(Res.string.action_resume)
-                val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes, playText, resumeText) {
+                // The clipper build never offers to "Play" or "Resume": pressing
+                // this opens the title to cut from, and the next thing that
+                // happens is marking, not watching. The resume position is kept
+                // -- it is where you left off scanning -- only the promise the
+                // label makes changes. Everything below stays as upstream wrote
+                // it so their edits keep applying.
+                val clipperEntryPoint = !AppFeaturePolicy.viewingChromeEnabled
+                val playText = stringResource(
+                    if (clipperEntryPoint) Res.string.clip_details_action else Res.string.action_play,
+                )
+                val resumeText = stringResource(
+                    if (clipperEntryPoint) Res.string.clip_details_action_resume else Res.string.action_resume,
+                )
+                val playButtonLabel = remember(movieProgress, seriesAction, meta.type, hasEpisodes, playText, resumeText, clipperEntryPoint) {
                     when {
+                        // A series action's label is built upstream from the
+                        // episode ("Play S02E05"), so in the clipper build it is
+                        // the one case that has to be overridden wholesale.
+                        clipperEntryPoint -> if (movieProgress != null) resumeText else playText
                         (meta.type == "series" || hasEpisodes) && seriesAction != null ->
                             seriesAction.label
                         meta.type != "series" && !hasEpisodes && movieProgress != null ->
@@ -2157,7 +2172,9 @@ private fun ConfiguredMetaSections(
             MetaScreenSectionKey.ACTIONS -> {
                 DetailActionButtons(
                     playLabel = playButtonLabel,
-                    secondaryActions = buildList {
+                    // See DesktopDetailHero: watched/saved state has nowhere to
+                    // surface once the library tab holds clips.
+                    secondaryActions = if (!AppFeaturePolicy.viewingChromeEnabled) emptyList() else buildList {
                         add(DetailSecondaryAction(
                             label = if (isWatched) {
                                 stringResource(Res.string.hero_mark_unwatched)

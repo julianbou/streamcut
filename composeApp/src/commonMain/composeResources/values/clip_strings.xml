@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Every user-facing string the clipper adds.
+
+  Kept out of strings.xml on purpose: that file is upstream Nuvio's and is
+  edited on nearly every release, so clipper keys living in it would conflict on
+  every merge. Compose Resources merges all XML files in a values directory, so
+  a separate file costs nothing. Same reasoning as clip-controls.js.
+
+  Only the default locale is filled in. Compose Resources falls back to the
+  default for any key a translation is missing, so the other 25 locales keep
+  working and can be filled in later without touching code.
+-->
+<resources>
+    <!-- Home and library -->
+    <string name="clip_section_your_clips">Your clips</string>
+    <string name="clip_library_title">Clips</string>
+    <string name="clip_library_count_format">%1$d of %2$d</string>
+    <string name="clip_library_open_folder">Open folder</string>
+    <string name="clip_library_free_format">%1$s free</string>
+    <string name="clip_library_filter_placeholder">Filter by title</string>
+    <string name="clip_library_sort_newest">Newest</string>
+    <string name="clip_library_sort_longest">Longest</string>
+    <string name="clip_library_sort_largest">Largest</string>
+    <string name="clip_library_selected_format">%1$d selected</string>
+
+    <!-- Actions on a clip -->
+    <string name="clip_action_play">Play</string>
+    <string name="clip_action_reveal">Show in file manager</string>
+    <string name="clip_action_reveal_short">Show</string>
+    <string name="clip_action_delete">Move to Trash</string>
+    <string name="clip_action_delete_short">Delete</string>
+    <string name="clip_action_clear">Clear</string>
+    <string name="clip_action_cancel">Cancel</string>
+    <string name="clip_action_save">Save</string>
+
+    <!-- Deletion. Says where the file goes: that is the difference between a
+         mistake being recoverable and not. -->
+    <string name="clip_delete_one_title">Move this clip to Trash?</string>
+    <string name="clip_delete_many_title_format">Move %1$d clips to Trash?</string>
+    <string name="clip_delete_one_message_format">%1$s will be moved to your system Trash.</string>
+    <string name="clip_delete_many_message">They will be moved to your system Trash.</string>
+
+    <!-- Undo. Replaces the confirmation dialog for a single clip: a delete you
+         can take back does not also need permission asked first. -->
+    <string name="clip_undo_one_format">Deleted %1$s</string>
+    <string name="clip_undo_many_format">Deleted %1$d clips</string>
+    <string name="clip_undo_action">Undo</string>
+
+    <!-- The empty state, which doubles as the only onboarding the app has -->
+    <string name="clip_empty_title">No clips yet</string>
+    <string name="clip_empty_step_find">Find a title and start playing it</string>
+    <string name="clip_empty_step_mark">Press I and O to mark the in and out points</string>
+    <string name="clip_empty_step_export">Press X to export</string>
+    <string name="clip_empty_step_format">%1$d.  %2$s</string>
+    <string name="clip_empty_saved_to_format">Clips are saved to %1$s</string>
+
+    <!-- Settings -->
+    <string name="clip_settings_section">Clips</string>
+    <string name="clip_settings_folder_title">Clips folder</string>
+    <string name="clip_settings_folder_default_format">%1$s (default)</string>
+    <string name="clip_settings_folder_error">Can\'t write to that folder — keeping the previous one</string>
+    <string name="clip_settings_folder_reset_title">Reset to default folder</string>
+    <string name="clip_settings_filename_title">Clip file names</string>
+    <string name="clip_settings_filename_dialog_title">Clip file names</string>
+    <string name="clip_settings_filename_tokens">Available: {title} {start} {end} {duration} {date} {time}</string>
+    <string name="clip_settings_filename_preview_format">Example: %1$s</string>
+    <string name="clip_settings_filename_reset">Use the default</string>
+
+    <!-- Details page. The clipper build never says "Play": pressing this opens
+         the title to cut from, and "Resume" describes watching, not clipping. -->
+    <string name="clip_details_action">Clip</string>
+    <string name="clip_details_action_resume">Clip from here</string>
+</resources>

@@ -19,10 +19,14 @@ internal actual object ClipExtractor {
         }
     }
 
+    actual suspend fun probeFrameRate(sourceUrl: String, sourceHeaders: Map<String, String>): Double = 0.0
+
     actual fun reveal(outputFileUri: String) = Unit
     actual fun openFile(outputFileUri: String) = Unit
     actual fun exists(outputFileUri: String): Boolean = false
     actual fun deleteFile(outputFileUri: String) = Unit
+    actual fun filePathOf(fileUri: String): String = ""
+    actual fun outputDirFreeBytes(): Long = 0L
     actual fun outputDirPath(): String = ""
     actual fun defaultOutputDirPath(): String = ""
     actual fun setOutputDirPath(path: String?): Boolean = false

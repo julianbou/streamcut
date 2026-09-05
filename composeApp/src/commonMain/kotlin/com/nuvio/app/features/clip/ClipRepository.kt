@@ -66,6 +66,20 @@ object ClipRepository {
     /** Absolute path clips are currently written to. Empty where unsupported. */
     fun outputDirPath(): String = ClipExtractor.outputDirPath()
 
+    /** Free space where clips are written, for the library header. */
+    fun outputDirFreeBytes(): Long = ClipExtractor.outputDirFreeBytes()
+
+    /** Plain filesystem path for a clip's `file:` URI, for dragging and display. */
+    fun filePathOf(fileUri: String): String = ClipExtractor.filePathOf(fileUri)
+
+    /** Opens the clips folder itself in the platform file manager. */
+    fun revealOutputDir() {
+        val path = ClipExtractor.outputDirPath()
+        // openFile rather than reveal: revealing a folder selects it in its
+        // parent, which is one level away from what "Open folder" promises.
+        if (path.isNotBlank()) ClipExtractor.openFile(path)
+    }
+
     /** Absolute path used when no custom folder is set. */
     fun defaultOutputDirPath(): String = ClipExtractor.defaultOutputDirPath()
 
@@ -87,6 +101,10 @@ object ClipRepository {
      *
      * Pass [retainsP2pStream] when [sourceUrl] points at the local P2P server,
      * so it is kept running until the job settles.
+     *
+     * [audioTrackIndex] and [subtitle] carry what the viewer is watching --
+     * the selected audio language, and the subtitle to burn in -- so the file
+     * on disk matches the player instead of the source's defaults.
      */
     fun startClip(
         sourceUrl: String,
@@ -95,6 +113,10 @@ object ClipRepository {
         startMs: Long,
         endMs: Long,
         retainsP2pStream: Boolean = false,
+        audioTrackIndex: Int = -1,
+        subtitle: ClipSubtitleSelection? = null,
+        aspect: ClipAspect = ClipAspect.Source,
+        targetSizeMb: Int = 0,
     ) {
         if (!isSupported) return
         if (sourceUrl.isBlank() || endMs <= startMs) return
@@ -106,6 +128,10 @@ object ClipRepository {
             startMs = startMs,
             endMs = endMs,
             title = title,
+            audioTrackIndex = audioTrackIndex,
+            subtitle = subtitle,
+            aspect = aspect,
+            targetSizeMb = targetSizeMb,
         )
         onMain {
             // A double-click on Export would otherwise encode the same range
@@ -218,6 +244,10 @@ object ClipRepository {
                             outputFileUri = output.fileUri,
                             fileName = output.fileName,
                             createdAtEpochMs = ClipClock.nowEpochMs(),
+                            thumbnailUri = output.thumbnailUri,
+                            fileSizeBytes = output.fileSizeBytes,
+                            width = output.width,
+                            height = output.height,
                         ),
                     )
                     trimFinished(job.contentKey)

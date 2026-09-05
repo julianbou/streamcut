@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedback
+import com.nuvio.app.features.clip.ClipAspect
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -170,6 +171,14 @@ internal class PlayerScreenRuntime(
     // before an export command is issued.
     var clipStartMs: Long? = null
     var clipEndMs: Long? = null
+    // Defaults on: someone watching with subtitles usually wants them in the
+    // clip too, and a shared MP4 has no track picker to turn them on later.
+    // Observable, unlike the In/Out points: the chrome draws this one.
+    var clipBurnSubtitles by mutableStateOf(true)
+    // Output shape and size cap. Both persist across exports within a session,
+    // because someone cutting for one destination is cutting several.
+    var clipAspect by mutableStateOf(ClipAspect.Source)
+    var clipTargetSizeMb by mutableStateOf(0)
     var playerControlsPendingP2pSwitch by mutableStateOf<PendingPlayerP2pSwitch?>(null)
     var playerControlsCloseModalsToken by mutableStateOf(0L)
     var episodeStreamsPanelState by mutableStateOf(EpisodeStreamsPanelState())

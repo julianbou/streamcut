@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.p2p.P2pStreamLease
@@ -462,6 +463,13 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         skipIntervals,
         playerSettingsUiState.autoSkipSegmentTypes,
     ) {
+        // Nothing moves the playhead on its own in a clipper build: an auto-skip
+        // mid-trim silently relocates the frame the user was judging, and the skip
+        // prompt itself covers the picture.
+        if (!AppFeaturePolicy.viewingChromeEnabled) {
+            activeSkipInterval = null
+            return@LaunchedEffect
+        }
         if (skipIntervals.isEmpty()) {
             activeSkipInterval = null
             return@LaunchedEffect
@@ -532,6 +540,12 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         playerSettingsUiState.nextEpisodeThresholdPercent,
         playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
     ) {
+        // Rolling into the next episode throws away the in/out draft, so a clipper
+        // build never advances by itself and never offers the card.
+        if (!AppFeaturePolicy.viewingChromeEnabled) {
+            showNextEpisodeCard = false
+            return@LaunchedEffect
+        }
         if (nextEpisodeInfo == null || playbackSnapshot.durationMs <= 0L) {
             showNextEpisodeCard = false
             return@LaunchedEffect
@@ -555,6 +569,7 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
     }
 
     LaunchedEffect(playbackSnapshot.isEnded, nextEpisodeInfo) {
+        if (!AppFeaturePolicy.viewingChromeEnabled) return@LaunchedEffect
         if (playbackSnapshot.isEnded && nextEpisodeInfo != null && !showNextEpisodeCard) {
             showNextEpisodeCard = true
             if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {

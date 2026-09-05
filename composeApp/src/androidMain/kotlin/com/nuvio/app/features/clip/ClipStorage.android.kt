@@ -6,4 +6,6 @@ internal actual object ClipStorage {
     actual fun saveLibraryPayload(payload: String) = Unit
     actual fun loadOutputDir(): String? = null
     actual fun saveOutputDir(path: String?) = Unit
+    actual fun loadFilenameTemplate(): String? = null
+    actual fun saveFilenameTemplate(template: String?) = Unit
 }

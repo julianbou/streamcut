@@ -2,6 +2,7 @@ package com.nuvio.app.features.player.desktop
 
 import androidx.compose.ui.graphics.Color
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.player.PlayerControlAddonSubtitleItem
 import com.nuvio.app.features.player.PlayerControlEpisodeItem
 import com.nuvio.app.features.player.PlayerControlFilterItem
@@ -934,6 +935,11 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("controlsVisible", controlsVisible)
         append(',')
+        // Build-time, not per-frame state, so it is read off the policy object here
+        // instead of riding on PlayerControlsState -- that keeps the clipper out of
+        // upstream's data class entirely.
+        appendJsonField("viewingChromeEnabled", AppFeaturePolicy.viewingChromeEnabled)
+        append(',')
         appendJsonArrayField("parentalWarnings", parentalWarnings) { appendParentalWarningJson(it) }
         append(',')
         appendJsonField("showParentalGuide", showParentalGuide)
@@ -1031,6 +1037,24 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         appendJsonField("clipStatusKind", clipStatusKind)
         append(',')
         appendJsonField("clipOutputDir", clipOutputDir)
+        append(',')
+        appendJsonField("clipSubtitlesAvailable", clipSubtitlesAvailable)
+        append(',')
+        appendJsonField("clipFrameDurationUs", clipFrameDurationUs)
+        append(',')
+        appendJsonField("clipAspect", clipAspect)
+        append(',')
+        appendJsonField("clipTargetSizeMb", clipTargetSizeMb)
+        append(',')
+        appendJsonField("clipStripSession", clipStripSession)
+        append(',')
+        appendJsonField("clipStripCount", clipStripCount)
+        append(',')
+        appendJsonField("clipStripReady", clipStripReady)
+        append(',')
+        appendJsonField("clipStripSpacingMs", clipStripSpacingMs)
+        append(',')
+        appendJsonField("clipBurnSubtitles", clipBurnSubtitles)
         append(',')
         appendJsonArrayField("clipJobs", clipJobs) { appendClipJobItemJson(it) }
         append(',')

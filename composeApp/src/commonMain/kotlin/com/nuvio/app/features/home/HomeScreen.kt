@@ -42,6 +42,7 @@ import com.nuvio.app.features.details.MetaVideo
 import com.nuvio.app.features.details.SeriesPrimaryAction
 import com.nuvio.app.features.details.seriesPrimaryAction
 import com.nuvio.app.features.home.components.HomeCatalogRowSection
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.clip.homeClipsSection
 import com.nuvio.app.features.home.components.HomeContinueWatchingSection
 import com.nuvio.app.features.home.components.HomeEmptyStateCard
@@ -779,7 +780,10 @@ fun HomeScreen(
     }
 
     val hasActiveAddons = enabledAddons.any { it.manifest != null }
-    val showHeroSlot = homeSettingsUiState.heroEnabled
+    // A clipper opens home to find a title to cut from, not to be sold one. The
+    // hero also drives hover-autoplay trailers, which spend bandwidth and
+    // startup time on playback that is never the playback you came for.
+    val showHeroSlot = homeSettingsUiState.heroEnabled && AppFeaturePolicy.viewingChromeEnabled
     val isResolvingHeroSources = enabledAddons.any { it.isRefreshing } || homeUiState.isLoading
     val showHeroSkeleton = showHeroSlot &&
         homeUiState.heroItems.isEmpty() &&
@@ -869,6 +873,11 @@ fun HomeScreen(
             topPadding = if (showHeroSlot) 0.dp else null,
             listState = homeListState,
         ) {
+            // Above the hero, not below it: in a clipper the clips are the page
+            // and the catalog is the tool for finding the next one. In a viewing
+            // build the hero is present and this sits under it, as before.
+            homeClipsSection(sectionPadding = homeSectionPadding)
+
             if (showHeroSlot) {
                 item {
                     when {
@@ -898,8 +907,6 @@ fun HomeScreen(
                     }
                 }
             }
-
-            homeClipsSection(sectionPadding = homeSectionPadding)
 
             when {
                 !hasActiveAddons && !hasRenderableCollectionRows -> {
@@ -1042,6 +1049,10 @@ private fun LazyListScope.homeContinueWatchingSections(
     onItemLongPress: ((ContinueWatchingItem) -> Unit)?,
     disintegrationRequest: DisintegrationRequest<String>?,
 ) {
+    // Resuming an episode where you left off is a viewing idea. The clipper
+    // analogue is reopening a source at a position with a trim draft intact,
+    // which is a different feature; until that exists, this is just noise.
+    if (!AppFeaturePolicy.viewingChromeEnabled) return
     if (!preferences.isVisible) return
 
     if (continueWatchingItems.isNotEmpty()) {

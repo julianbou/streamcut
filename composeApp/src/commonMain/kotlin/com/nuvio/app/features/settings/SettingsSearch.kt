@@ -90,6 +90,7 @@ internal fun settingsSearchEntries(
     liquidGlassNativeTabBarSupported: Boolean,
     switchProfileAvailable: Boolean,
     checkForUpdatesAvailable: Boolean,
+    viewingChromeEnabled: Boolean = true,
 ): List<SettingsSearchEntry> {
     val accountCategory = stringResource(SettingsCategory.Account.labelRes)
     val generalCategory = stringResource(SettingsCategory.General.labelRes)
@@ -965,8 +966,29 @@ internal fun settingsSearchEntries(
         )
     }
 
+    // Filtered by page rather than by key: search must not be a back door into
+    // a page whose entry row is hidden, and doing it here means a row added to
+    // one of these pages later disappears with the rest instead of leaking.
+    if (!viewingChromeEnabled) {
+        entries.removeAll { entry ->
+            (entry.target as? SettingsSearchTarget.Page)?.page in ViewingOnlySettingsPages
+        }
+    }
+
     return entries
 }
+
+/**
+ * Settings pages that exist only to serve watching: watch tracking, episode
+ * alerts, the Continue Watching row and poster hover previews. All four are
+ * gated off elsewhere in the clipper build.
+ */
+private val ViewingOnlySettingsPages = setOf(
+    SettingsPage.TraktAuthentication,
+    SettingsPage.Notifications,
+    SettingsPage.ContinueWatching,
+    SettingsPage.HoverPreview,
+)
 
 private data class PlaybackSearchRow(
     val key: String,

@@ -381,14 +381,19 @@ private fun PlaybackSettingsSection(
                     isTablet = isTablet,
                     onCheckedChange = PlayerSettingsRepository::setShowLoadingOverlay,
                 )
-                SettingsGroupDivider(isTablet = isTablet)
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_playback_parental_guide),
-                    description = stringResource(Res.string.settings_playback_parental_guide_description),
-                    checked = autoPlayPlayerSettings.showParentalGuide,
-                    isTablet = isTablet,
-                    onCheckedChange = PlayerSettingsRepository::setShowParentalGuide,
-                )
+                // The parental-guidance overlay is gated off in the clipper
+                // build -- nothing may cover a frame you are trying to judge --
+                // so this switch had nothing left to switch.
+                if (AppFeaturePolicy.viewingChromeEnabled) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_playback_parental_guide),
+                        description = stringResource(Res.string.settings_playback_parental_guide_description),
+                        checked = autoPlayPlayerSettings.showParentalGuide,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setShowParentalGuide,
+                    )
+                }
                 if (externalPlayerSupported) {
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsNavigationRow(

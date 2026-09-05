@@ -1,13 +1,20 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.nuvio.app.features.clip.ClipAspect
 import com.nuvio.app.features.clip.ClipContentRef
+import com.nuvio.app.features.clip.ClipExtractor
 import com.nuvio.app.features.clip.ClipJob
 import com.nuvio.app.features.clip.ClipLibrary
 import com.nuvio.app.features.clip.ClipRepository
 import com.nuvio.app.features.clip.ClipStatus
+import com.nuvio.app.features.clip.ClipStrip
+import com.nuvio.app.features.clip.ClipSubtitleSelection
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -234,9 +241,43 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipLibraryEntries.filter { it.contentKey == clipContent.key }
     }
     val clipOutputDirLabel = remember(clipLibraryEntries) { ClipRepository.outputDirPath() }
+    // The trim row steps In/Out by whole frames, which needs the source's frame
+    // rate. The native player exposes no such property, so it is read off the
+    // container instead: one probe per source, off the main thread, and zero
+    // until it lands -- the chrome falls back to a time step meanwhile.
+    var clipFrameDurationUs by remember { mutableStateOf(0) }
+    LaunchedEffect(playerSurfaceSourceUrl, activeSourceHeaders) {
+        clipFrameDurationUs = 0
+        val probeUrl = playerSurfaceSourceUrl.orEmpty()
+        if (!ClipRepository.isSupported || probeUrl.isBlank()) return@LaunchedEffect
+        val fps = ClipExtractor.probeFrameRate(probeUrl, activeSourceHeaders)
+        if (fps > 0.0) clipFrameDurationUs = (1_000_000.0 / fps).roundToInt()
+    }
     val clipSummary = remember(clipJobsForThisContent, clipOutputDirLabel) {
         summarizeClipJobs(clipJobsForThisContent, clipOutputDirLabel)
     }
+    val clipStripState by ClipStrip.state.collectAsState()
+    // Publishes any strip this title already has, without fetching anything --
+    // which is what lets the scrub bar's hover preview work the moment a film
+    // you have browsed before is opened again. Keyed on whether the duration is
+    // known rather than its value, so the constant ticking of playback does not
+    // restart it (and would cancel a build in progress if it did).
+    LaunchedEffect(playerSurfaceSourceUrl, playbackSnapshot.durationMs > 0L) {
+        val url = playerSurfaceSourceUrl.orEmpty()
+        val durationMs = playbackSnapshot.durationMs
+        if (!ClipStrip.isSupported || url.isBlank() || durationMs <= 0L) return@LaunchedEffect
+        ClipStrip.open(
+            cacheKey = buildClipContentRef().key,
+            sourceUrl = url,
+            headers = activeSourceHeaders,
+            durationMs = durationMs,
+            buildMissing = false,
+        )
+    }
+    // The strip is per title, and its frames outlive the playback session, so a
+    // change of source closes the one on screen rather than letting a half-built
+    // strip of the previous film stay open over the new one.
+    DisposableEffect(playerSurfaceSourceUrl) { onDispose { ClipStrip.close() } }
     val playerControlsState = PlayerControlsState(
         title = title,
         episodeText = episodeText,
@@ -358,6 +399,15 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipStatusMessage = clipSummary.message,
         clipStatusKind = clipSummary.kind,
         clipOutputDir = clipOutputDirLabel,
+        clipSubtitlesAvailable = activeClipSubtitle(delayMs = 0) != null,
+        clipBurnSubtitles = clipBurnSubtitles,
+        clipFrameDurationUs = clipFrameDurationUs,
+        clipAspect = clipAspect.ordinal,
+        clipTargetSizeMb = clipTargetSizeMb,
+        clipStripSession = clipStripState.session,
+        clipStripCount = clipStripState.count,
+        clipStripReady = clipStripState.ready,
+        clipStripSpacingMs = clipStripState.spacingMs,
         // Newest first, matching the order the chrome sends indexes back in.
         clipJobs = clipJobsForThisContent.map { job ->
             PlayerClipJobItem(
@@ -859,6 +909,34 @@ private fun PlayerScreenRuntime.clipJobIdAt(value: Double): String {
 private fun PlayerScreenRuntime.clipSourceUrl(): String =
     if (activeTorrentInfoHash != null) p2pResolvedSourceUrl.orEmpty() else activeSourceUrl
 
+/**
+ * The audio track a clip inherits: whichever one is playing. Its index is the
+ * track's position among the source's audio streams, which is what ffmpeg
+ * addresses on the other side.
+ */
+private fun PlayerScreenRuntime.activeClipAudioTrackIndex(): Int =
+    audioTracks.firstOrNull { it.index == selectedAudioIndex }?.index
+        ?: audioTracks.firstOrNull { it.isSelected }?.index
+        ?: -1
+
+/**
+ * The subtitle a clip is burned with, or null when nothing is on screen.
+ *
+ * Addon subtitles are sidecar files and travel by URL; an embedded track
+ * travels by its index in the source, the same way the audio track does.
+ */
+private fun PlayerScreenRuntime.activeClipSubtitle(delayMs: Int): ClipSubtitleSelection? {
+    if (useCustomSubtitles) {
+        val url = selectedAddonSubtitle?.url
+            ?: selectedAddonSubtitleId?.takeIf { it.startsWith("http", ignoreCase = true) }
+        return url?.let { ClipSubtitleSelection.External(it, delayMs) }
+    }
+    val track = subtitleTracks.firstOrNull { it.index == selectedSubtitleIndex }
+        ?: subtitleTracks.firstOrNull { it.isSelected }
+        ?: return null
+    return ClipSubtitleSelection.Embedded(track.index, delayMs)
+}
+
 /** Resolves a clip-list index sent by the player chrome to a library id. */
 private fun PlayerScreenRuntime.clipLibraryIdAt(value: Double): String {
     val index = value.takeIf { it.isFinite() && it >= 0.0 }?.toInt() ?: return ""
@@ -992,6 +1070,17 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
         "clipEnd" -> {
             clipEndMs = value.takeIf { it.isFinite() && it >= 0.0 }?.let { (it * 1000).toLong() }
         }
+        "clipBurnSubtitles" -> {
+            clipBurnSubtitles = value != 0.0
+        }
+        "clipSetAspect" -> {
+            clipAspect = ClipAspect.fromOrdinal(value.toInt())
+        }
+        "clipSetSizeMb" -> {
+            // Clamped rather than rejected: the field is free text, and a cap
+            // below a megabyte cannot produce a watchable clip anyway.
+            clipTargetSizeMb = value.toInt().coerceIn(0, 4096)
+        }
         "clipExport" -> {
             val start = clipStartMs
             val end = clipEndMs
@@ -1003,12 +1092,39 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                     startMs = start,
                     endMs = end,
                     retainsP2pStream = activeTorrentInfoHash != null,
+                    audioTrackIndex = activeClipAudioTrackIndex(),
+                    subtitle = if (clipBurnSubtitles) activeClipSubtitle(subtitleDelayMs) else null,
+                    aspect = clipAspect,
+                    targetSizeMb = clipTargetSizeMb,
                 )
             }
         }
         // The index is the address, the same way the clip library rows work:
         // Kotlin resolves it against the per-title, newest-first job list it
         // just sent, so job ids stay out of the DOM.
+        // The strip is built from the same source the export cuts from, but
+        // keyed by content rather than URL: torrent and debrid links carry
+        // tokens that change every session, and a strip keyed by one of those
+        // would be rebuilt from scratch every time the film was opened.
+        "clipStripOpen" -> {
+            ClipStrip.open(
+                cacheKey = buildClipContentRef().key,
+                sourceUrl = clipSourceUrl(),
+                headers = activeSourceHeaders,
+                durationMs = playbackSnapshot.durationMs,
+                buildMissing = true,
+            )
+        }
+        "clipStripFocus" -> ClipStrip.focus(value.toInt())
+        // Temporary: reports how far the scrub-bar hover preview gets. See the
+        // codes in clip-controls.js -- the page cannot log anywhere we can read,
+        // so it reports through the one channel that reaches us.
+        "clipStripTrace" -> playerControlsLog.i { "clipStripTrace ${value.toInt()}" }
+        "clipStripSeek" -> {
+            val target = value.takeIf { it.isFinite() && it >= 0.0 }?.toLong() ?: return true
+            playerController?.seekTo(target)
+            scheduleProgressSyncAfterSeek()
+        }
         "clipCancel" -> ClipRepository.cancel(clipJobIdAt(value))
         "clipDismiss" -> ClipRepository.dismiss(clipJobIdAt(value))
         "clipReveal" -> ClipRepository.revealOutput(clipJobIdAt(value))

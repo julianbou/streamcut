@@ -61,6 +61,92 @@
   background: var(--theme-accent);
 }
 
+/* Set-aside ranges, drawn under the active selection on both tracks. Dimmer
+   than the live one on purpose: they are decided, the bright bar is the one
+   still being argued with. */
+.clip-range-list {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.clip-range-item {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--theme-accent) 70%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--theme-accent) 70%, transparent);
+}
+
+/* Output format popover. Sits above the clip row like the library/exports
+   panels, so the row itself does not grow every time a knob is added. */
+.clip-format-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(20, 20, 26, .96);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+}
+.clip-format-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.clip-format-label {
+  min-width: 64px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .55);
+}
+.clip-format-options {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.clip-format-note {
+  flex: 1 1 100%;
+  padding-left: 74px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, .5);
+  font-variant-numeric: tabular-nums;
+}
+/* Shared with the Subtitles toggle in the clip row. */
+.clip-nudge.toggled-on {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: #fff;
+}
+
+.clip-range-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.clip-range-chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--theme-accent) 18%, transparent);
+  color: rgba(255, 255, 255, .9);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.clip-range-chip:hover {
+  background: color-mix(in srgb, #ff5f5f 30%, transparent);
+  border-color: #ff5f5f;
+}
+
 /* Clip control row under the timeline */
 .clip-row {
   display: flex;
@@ -76,12 +162,38 @@
   color: rgba(255, 255, 255, .6);
   white-space: nowrap;
 }
+/* An input rather than a label: a timecode read off one clip is the fastest way
+   to set the same point on another, and there is no mouse gesture for "44:09.5
+   exactly". Styled to read as text until it is hovered or focused. */
 .clip-io-time {
+  width: 9ch;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, .92);
   white-space: nowrap;
+  cursor: text;
+}
+.clip-io-time:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, .18);
+}
+.clip-io-time:focus {
+  outline: none;
+  border-color: var(--theme-accent);
+  background: rgba(0, 0, 0, .4);
+}
+.clip-io-time::placeholder {
+  color: rgba(255, 255, 255, .32);
+  font-weight: 600;
+}
+.clip-io-time:disabled {
+  opacity: .4;
+  cursor: default;
 }
 .clip-row-spacer {
   flex: 1;
@@ -90,6 +202,11 @@
   font-size: 12px;
   color: rgba(255, 255, 255, .72);
   white-space: nowrap;
+  /* An ffmpeg error can be a paragraph; the row keeps its shape and the
+     full text stays available in the element's tooltip. */
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .clip-inline-status[data-kind="done"] { color: #7fd88f; }
 .clip-inline-status[data-kind="error"] { color: #ff8a80; }
@@ -120,6 +237,12 @@
   background: var(--theme-accent);
   filter: brightness(1.1);
   color: #000;
+}
+/* On/off state for the subtitle burn-in toggle: on reads as accented text
+   rather than a filled button, so it never competes with Export. */
+.clip-action.toggled-on {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
 }
 .clip-action:disabled {
   opacity: .4;
@@ -168,13 +291,27 @@
   opacity: .4;
   cursor: default;
 }
+/* The primary way to set a point, so it reads as an action rather than as the
+   first of five nudges. */
+.clip-mark {
+  background: rgba(255, 255, 255, .18);
+  border-color: rgba(255, 255, 255, .28);
+  color: rgba(255, 255, 255, .95);
+  letter-spacing: .04em;
+}
+.clip-mark:hover:not(:disabled) {
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: #fff;
+}
 
 /* --- zoomed trim track ---------------------------------------------------
-   Shown only when the In/Out handles sit close together on the main scrub bar,
-   where a pixel is worth several seconds. This track re-maps a narrow window
-   around the selection across the full width, so one pixel becomes tens of
-   milliseconds and frame-level trimming is possible with the mouse. The main
-   scrub bar is left untouched -- it still spans the whole runtime. */
+   The main scrub bar spans the whole runtime, so on a feature a pixel there is
+   worth several seconds -- no good for placing a cut. This track re-maps a
+   narrow window across the same width, making a pixel tens of milliseconds. It
+   is up for as long as the clip row is: the window follows the playhead until
+   something is marked, then settles around the selection. The main scrub bar is
+   left untouched. */
 .clip-zoom-wrap {
   display: flex;
   align-items: center;
@@ -383,4 +520,186 @@
   min-height: 22px;
   padding: 2px 8px;
   font-size: 11px;
+}
+
+/* --- clipper mode: viewing chrome off -------------------------------------
+ *
+ * `body.clipper-mode` is set from clip-controls.js off AppFeaturePolicy's
+ * viewingChromeEnabled. Everything below exists to make watching comfortable
+ * and gets in the way of cutting, so it is hidden rather than deleted -- the
+ * markup stays untouched and merges from upstream keep applying.
+ *
+ * !important throughout: controls.js drives most of these with inline styles
+ * and the `hidden` attribute, so the gate has to outrank it.
+ */
+
+/* Pausing is how you inspect a frame -- nothing may cover one. */
+body.clipper-mode #pauseMetadataOverlay { display: none !important; }
+
+/* Anything that advances or relocates playback on its own destroys a trim.
+ * The Kotlin side already refuses to act on these (PlayerScreenRuntimeEffects);
+ * this only makes sure the affordances never appear. */
+body.clipper-mode #skipPrompt,
+body.clipper-mode #nextEpisodeCard,
+body.clipper-mode #nextEpisodeButton { display: none !important; }
+
+/* Time-to-first-frame is the only thing that matters when opening a source, so
+ * the cinematic backdrop and logo-fill animation go; the spinner, status line
+ * and progress bar stay. */
+body.clipper-mode #openingArtwork,
+body.clipper-mode #openingLogoSlot { display: none !important; }
+
+/* Crowdsourced intro timestamps, content warnings, and the subtitle styling
+ * panel are all viewing-side concerns. */
+body.clipper-mode #submitIntroButton,
+body.clipper-mode #parentalGuide,
+body.clipper-mode #subtitleStyleRail { display: none !important; }
+
+/* "Fit" changes what you see but not what you export, which is actively
+ * misleading when the frame is the deliverable. */
+body.clipper-mode .action-pill .action[data-command="resize"] { display: none !important; }
+
+/* --- filmstrip -----------------------------------------------------------
+   A full-screen browser, not an overlay strip: finding a scene in a two-hour
+   film is the whole task while it is open, and a band along the bottom would
+   show a dozen frames where this shows a hundred. */
+.clip-strip {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: rgba(6, 7, 10, 0.97);
+  backdrop-filter: blur(18px);
+}
+
+.clip-strip[hidden] {
+  display: none;
+}
+
+.clip-strip-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.clip-strip-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.clip-strip-count {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.clip-strip-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  /* Auto-fill rather than a fixed count: the window is resizable, and a still
+     stops being recognisable much below this. */
+  grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+  gap: 10px;
+  padding: 16px 22px 28px;
+  align-content: start;
+}
+
+.clip-strip-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.clip-strip-shot {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  /* The placeholder is the grid: an empty cell has to hold its space so the
+     strip does not reflow under the cursor as frames land out of order. */
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid transparent;
+  transition: border-color 90ms ease;
+}
+
+.clip-strip-cell:hover .clip-strip-shot,
+.clip-strip-cell:focus-visible .clip-strip-shot {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.clip-strip-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.clip-strip-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.clip-strip-cell:hover .clip-strip-time {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* --- hover preview on the scrub bar --------------------------------------
+   Sits above the bar and follows the cursor. Fixed rather than absolute so it
+   is not clipped by the controls' own overflow. */
+.clip-hover-preview {
+  position: fixed;
+  z-index: 55;
+  /* Horizontal centring only -- the vertical side is placed in JS, which
+     knows whether there is room above the bar. */
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px;
+  border-radius: 9px;
+  background: rgba(6, 7, 10, 0.94);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.clip-hover-preview[hidden] {
+  display: none;
+}
+
+.clip-hover-shot {
+  display: block;
+  width: 176px;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.clip-hover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.clip-hover-time {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
 }

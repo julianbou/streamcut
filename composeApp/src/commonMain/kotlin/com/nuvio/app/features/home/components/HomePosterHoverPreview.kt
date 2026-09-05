@@ -126,7 +126,10 @@ internal fun HomePosterHoverPreview(
     val posterCardStyle = rememberPosterCardStyleUiState()
     val trailerPlaybackEnabled = AppFeaturePolicy.trailerPlaybackMode == TrailerPlaybackMode.IN_APP &&
         posterCardStyle.hoverPreviewTrailerEnabled
-    if (!posterCardStyle.hoverPreviewEnabled) {
+    // Hovering a poster to be shown a synopsis and an autoplaying trailer is the
+    // lean-back half of this app. The clipper keeps the setting -- it just never
+    // acts on it -- so the viewing builds and the settings page are untouched.
+    if (!AppFeaturePolicy.viewingChromeEnabled || !posterCardStyle.hoverPreviewEnabled) {
         content(modifier)
         return
     }

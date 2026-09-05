@@ -1,5 +1,6 @@
 package com.nuvio.app.features.home
 
+import co.touchlab.kermit.Logger
 import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
@@ -26,6 +27,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 import kotlin.random.Random
+
+/**
+ * Catalog fetches are wrapped in runCatching, so a failing one is dropped and
+ * the row simply never appears. That is the right behaviour -- one dead addon
+ * should not empty the home screen -- but with nothing logged, "every catalog
+ * failed" and "there are no catalogs" look identical from the outside, and a
+ * blank home is unexplainable. This says which one failed and why.
+ */
+private val homeLog = Logger.withTag("HomeRepository")
 
 object HomeRepository {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -99,6 +109,11 @@ object HomeRepository {
 
                 if (activeRequestKey != requestKey) return@launch
 
+                results.forEach { (request, result) ->
+                    result.exceptionOrNull()?.let { error ->
+                        homeLog.w(error) { "Catalog ${request.cacheKey} failed: ${error.message}" }
+                    }
+                }
                 results.mapNotNull { (request, result) ->
                     result.getOrNull()?.let { section -> request.cacheKey to section }
                 }.forEach { (cacheKey, section) ->

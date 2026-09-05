@@ -195,6 +195,7 @@
         </section>
         <div class="scrub-wrap" id="scrubWrap">
           <input id="seek" class="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek">
+          <div class="clip-range-list" id="clipRangeList"></div>
           <div class="clip-range" id="clipRange" hidden></div>
           <div class="clip-handle" id="clipHandleIn" data-clip-handle="in" hidden><span class="clip-handle-bar"></span></div>
           <div class="clip-handle" id="clipHandleOut" data-clip-handle="out" hidden><span class="clip-handle-bar"></span></div>
@@ -202,6 +203,7 @@
         <div class="clip-zoom-wrap" id="clipZoomWrap" hidden>
           <span class="clip-zoom-edge" id="clipZoomStartLabel">--:--</span>
           <div class="clip-zoom-track" id="clipZoomTrack">
+            <div class="clip-range-list" id="clipZoomRangeList"></div>
             <div class="clip-zoom-range" id="clipZoomRange"></div>
             <div class="clip-zoom-playhead" id="clipZoomPlayhead"></div>
             <div class="clip-zoom-handle" id="clipZoomHandleIn" data-clip-handle="in"></div>
@@ -223,24 +225,48 @@
           </div>
           <div class="clip-library-list" id="clipLibraryList"></div>
         </div>
+        <div class="clip-format-panel" id="clipFormatPanel" hidden>
+          <div class="clip-format-group">
+            <span class="clip-format-label">Shape</span>
+            <div class="clip-format-options" id="clipAspectOptions">
+              <button class="clip-nudge" type="button" data-clip-aspect="0">Source</button>
+              <button class="clip-nudge" type="button" data-clip-aspect="1">16:9</button>
+              <button class="clip-nudge" type="button" data-clip-aspect="2">1:1</button>
+              <button class="clip-nudge" type="button" data-clip-aspect="3">4:5</button>
+              <button class="clip-nudge" type="button" data-clip-aspect="4">9:16</button>
+            </div>
+          </div>
+          <div class="clip-format-group">
+            <span class="clip-format-label">Max size</span>
+            <div class="clip-format-options" id="clipSizeOptions">
+              <button class="clip-nudge" type="button" data-clip-size="0">None</button>
+              <button class="clip-nudge" type="button" data-clip-size="8">8 MB</button>
+              <button class="clip-nudge" type="button" data-clip-size="16">16 MB</button>
+              <button class="clip-nudge" type="button" data-clip-size="25">25 MB</button>
+              <button class="clip-nudge" type="button" data-clip-size="50">50 MB</button>
+              <button class="clip-nudge" type="button" data-clip-size="100">100 MB</button>
+            </div>
+            <span class="clip-format-note" id="clipSizeNote"></span>
+          </div>
+        </div>
         <div class="clip-row" id="clipRow" hidden>
           <span class="clip-io-label">IN</span>
-          <span class="clip-io-time" id="clipInReadout">--:--</span>
+          <input class="clip-io-time" id="clipInReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
           <div class="clip-nudge-row" data-clip-target="in">
-            <button class="clip-nudge" type="button" data-clip-nudge="-1000">-1s</button>
-            <button class="clip-nudge" type="button" data-clip-nudge="-100">-0.1s</button>
-            <button class="clip-nudge" type="button" data-clip-nudge="100">+0.1s</button>
-            <button class="clip-nudge" type="button" data-clip-nudge="1000">+1s</button>
+            <button class="clip-nudge clip-mark" type="button" data-clip-mark="in" title="Mark IN at the frame on screen (I)">Set</button>
+            <button class="clip-nudge" type="button" data-clip-nudge-frames="-1" title="Back one frame">&#9664; 1f</button>
+            <button class="clip-nudge" type="button" data-clip-nudge-frames="1" title="Forward one frame">1f &#9654;</button>
           </div>
           <span class="clip-io-label">OUT</span>
-          <span class="clip-io-time" id="clipOutReadout">--:--</span>
+          <input class="clip-io-time" id="clipOutReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
           <div class="clip-nudge-row" data-clip-target="out">
-            <button class="clip-nudge" type="button" data-clip-nudge="-1000">-1s</button>
-            <button class="clip-nudge" type="button" data-clip-nudge="-100">-0.1s</button>
-            <button class="clip-nudge" type="button" data-clip-nudge="100">+0.1s</button>
-            <button class="clip-nudge" type="button" data-clip-nudge="1000">+1s</button>
+            <button class="clip-nudge clip-mark" type="button" data-clip-mark="out" title="Mark OUT at the frame on screen (O)">Set</button>
+            <button class="clip-nudge" type="button" data-clip-nudge-frames="-1" title="Back one frame">&#9664; 1f</button>
+            <button class="clip-nudge" type="button" data-clip-nudge-frames="1" title="Forward one frame">1f &#9654;</button>
           </div>
-          <span class="clip-io-label" id="clipLenReadout"></span>
+          <span class="clip-io-label">LEN</span>
+          <input class="clip-io-time" id="clipLenReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Clip length -- type one to move OUT">
+          <div class="clip-range-chips" id="clipRangeChips"></div>
           <div class="clip-row-spacer"></div>
           <span class="clip-inline-status" id="clipStatus"></span>
           <div class="clip-progress-track" id="clipProgressTrack" hidden>
@@ -251,6 +277,10 @@
           <button class="clip-action" id="clipDismissButton" type="button" hidden>&#10005;</button>
           <button class="clip-action" id="clipJobsButton" type="button" hidden>Exports</button>
           <button class="clip-action" id="clipLibraryButton" type="button" hidden>Clips</button>
+          <button class="clip-action" id="clipStripButton" type="button" title="Browse the film as stills to find a scene (B)" hidden>Scenes</button>
+          <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
+          <button class="clip-action" id="clipFormatButton" type="button" title="Output shape and size">Format</button>
+          <button class="clip-action" id="clipAddRangeButton" type="button" title="Keep this range and start another (A)">&#43; Add</button>
           <button class="clip-action" id="clipPreviewButton" type="button">Preview</button>
           <button class="clip-action primary" id="clipExportButton" type="button">Export clip</button>
         </div>
