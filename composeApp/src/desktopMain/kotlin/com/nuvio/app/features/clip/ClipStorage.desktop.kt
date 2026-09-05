@@ -30,4 +30,14 @@ internal actual object ClipStorage {
     actual fun saveFilenameTemplate(template: String?) {
         store.putString("clip_filename_template", template?.takeIf { it.isNotBlank() })
     }
+
+    // Machine preference as well: it describes the shape of the folder on this
+    // disk, which is not something a second person on the same machine would
+    // want to see change under them.
+    actual fun loadGroupByTitle(): Boolean =
+        store.getString("clip_group_by_title") == "1"
+
+    actual fun saveGroupByTitle(enabled: Boolean) {
+        store.putString("clip_group_by_title", if (enabled) "1" else null)
+    }
 }
