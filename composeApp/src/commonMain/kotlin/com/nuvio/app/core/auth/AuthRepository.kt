@@ -37,12 +37,22 @@ object AuthRepository {
     private var sessionStatusJob: Job? = null
     private var validatedRemoteUserId: String? = null
 
+    /**
+     * Whether an account has ever been signed in on this install.
+     *
+     * The app gate reads it to tell a lapsed session -- which should still
+     * reach the local library -- from a fresh install, which belongs at the
+     * sign-in screen. See [AuthStorage.loadHasSignedIn].
+     */
+    val hasEverSignedIn: Boolean get() = AuthStorage.loadHasSignedIn()
+
     fun initialize() {
         if (initialized) return
         initialized = true
 
         val savedAnonId = AuthStorage.loadAnonymousUserId()
         if (savedAnonId != null) {
+            AuthStorage.saveHasSignedIn()
             _state.value = AuthState.Authenticated(
                 userId = savedAnonId,
                 email = null,
@@ -58,6 +68,7 @@ object AuthRepository {
                         val user = status.session.user
                         val userId = user?.id.orEmpty()
                         if (!validateRemoteSession(userId)) return@collect
+                        AuthStorage.saveHasSignedIn()
                         _state.value = AuthState.Authenticated(
                             userId = userId,
                             email = user?.email,
@@ -104,6 +115,7 @@ object AuthRepository {
         _error.value = null
         val userId = Uuid.random().toString()
         AuthStorage.saveAnonymousUserId(userId)
+        AuthStorage.saveHasSignedIn()
         _state.value = AuthState.Authenticated(
             userId = userId,
             email = null,
@@ -141,6 +153,7 @@ object AuthRepository {
         val anonymousRead = runCatching { AuthStorage.loadAnonymousUserId() }
         val wasAnonymous = anonymousRead.getOrNull() != null
         val anonymousClear = runCatching { AuthStorage.clearAnonymousUserId() }
+        runCatching { AuthStorage.clearHasSignedIn() }
         validatedRemoteUserId = null
         val remoteSignOut = if (wasAnonymous) {
             Result.success(Unit)
@@ -179,6 +192,7 @@ object AuthRepository {
     suspend fun prepareForServerSwitch(): Result<Unit> {
         _error.value = null
         val anonymousClear = runCatching { AuthStorage.clearAnonymousUserId() }
+        runCatching { AuthStorage.clearHasSignedIn() }
         validatedRemoteUserId = null
         val sessionClear = runCatching { SupabaseProvider.client.auth.clearSession() }
         _state.value = AuthState.Unauthenticated
@@ -208,6 +222,7 @@ object AuthRepository {
     private suspend fun clearLocalSessionAfterRemoteInvalidation() {
         _error.value = null
         AuthStorage.clearAnonymousUserId()
+        AuthStorage.clearHasSignedIn()
         validatedRemoteUserId = null
         runCatching {
             SupabaseProvider.client.auth.clearSession()

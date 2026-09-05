@@ -2,9 +2,9 @@ package com.nuvio.app.features.plugins
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.addons.encodeUnsafeHttpUrlCharacters
 import com.nuvio.app.features.addons.httpGetText
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tmdb.TmdbService
 import com.nuvio.app.features.plugins.runtime.PluginRuntime
 import io.github.jan.supabase.postgrest.postgrest
@@ -86,7 +86,7 @@ actual object PluginRepository {
     private val persistedRevisionByProfile = mutableMapOf<Int, Long>()
 
     actual fun initialize() {
-        val effectiveProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
+        val effectiveProfileId = ProfileScopedKey.ScopeId
         val shouldRefreshStoredRepos = !initialized || currentProfileId != effectiveProfileId
         ensureStateLoadedForProfile(effectiveProfileId)
         if (!shouldRefreshStoredRepos) return
@@ -97,7 +97,7 @@ actual object PluginRepository {
     }
 
     actual fun onProfileChanged(profileId: Int) {
-        val effectiveProfileId = resolveEffectiveProfileId(profileId)
+        val effectiveProfileId = profileId
         if (effectiveProfileId == currentProfileId && initialized) return
 
         cancelActiveRefreshes()
@@ -117,7 +117,7 @@ actual object PluginRepository {
     }
 
     actual suspend fun pullFromServer(profileId: Int) {
-        val effectiveProfileId = resolveEffectiveProfileId(profileId)
+        val effectiveProfileId = profileId
         ensureStateLoadedForProfile(effectiveProfileId)
         runCatching {
             val rows = SupabaseProvider.client.postgrest
@@ -628,10 +628,5 @@ actual object PluginRepository {
         val manifestPath = if (path.endsWith("/manifest.json")) path else "$path/manifest.json"
         val manifestUrl = if (query.isEmpty()) manifestPath else "$manifestPath?$query"
         return manifestUrl.encodeUnsafeHttpUrlCharacters()
-    }
-
-    private fun resolveEffectiveProfileId(profileId: Int): Int {
-        val active = ProfileRepository.state.value.activeProfile
-        return if (active != null && !active.id.isBlank() && active.usesPrimaryPlugins) 1 else profileId
     }
 }

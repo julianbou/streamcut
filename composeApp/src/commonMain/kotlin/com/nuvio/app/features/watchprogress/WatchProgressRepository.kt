@@ -3,6 +3,7 @@ package com.nuvio.app.features.watchprogress
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.addons.AddonManifest
 import com.nuvio.app.features.addons.AddonRepository
@@ -11,7 +12,6 @@ import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.player.PlayerPlaybackSnapshot
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingProgressProvider
 import com.nuvio.app.features.tracking.TrackingProgressSnapshot
 import com.nuvio.app.features.tracking.TrackingProviderId
@@ -243,7 +243,7 @@ object WatchProgressRepository {
                     isProviderAuthenticated = ::isProgressProviderAvailable,
                 ),
             )
-            loadFromDisk(ProfileRepository.activeProfileId)
+            loadFromDisk(ProfileScopedKey.ScopeId)
         }
     }
 
@@ -313,7 +313,7 @@ object WatchProgressRepository {
     }
 
     private fun activeOperationGeneration(profileId: Int): Long? {
-        if (ProfileRepository.activeProfileId != profileId) return null
+        if (ProfileScopedKey.ScopeId != profileId) return null
         if (!hasLoaded || currentProfileId != profileId) {
             loadFromDisk(profileId)
         }
@@ -323,7 +323,7 @@ object WatchProgressRepository {
     private fun isActiveOperation(profileId: Int, generation: Long): Boolean =
         currentProfileId == profileId &&
             profileGeneration == generation &&
-            ProfileRepository.activeProfileId == profileId
+            ProfileScopedKey.ScopeId == profileId
 
     private fun isActiveMetadataTarget(
         profileId: Int,
@@ -363,7 +363,7 @@ object WatchProgressRepository {
         TrackingSettingsRepository.ensureLoaded()
         TrackingProviderRegistry.progressProviders().forEach(TrackingProgressProvider::ensureLoaded)
         if (!hasLoaded) {
-            loadFromDisk(ProfileRepository.activeProfileId)
+            loadFromDisk(ProfileScopedKey.ScopeId)
         }
         if (activeSource == source) {
             publish()
@@ -1230,7 +1230,7 @@ object WatchProgressRepository {
             isCompleted = isCompleted,
         ).normalizedCompletion()
 
-        if (targetProfileId != currentProfileId || ProfileRepository.activeProfileId != targetProfileId) {
+        if (targetProfileId != currentProfileId || ProfileScopedKey.ScopeId != targetProfileId) {
             val entry = if (persist) {
                 upsertStoredProfileProgress(profileId = targetProfileId, entry = candidateEntry)
             } else {

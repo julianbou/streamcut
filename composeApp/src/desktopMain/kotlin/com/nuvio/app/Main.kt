@@ -31,7 +31,6 @@ import com.nuvio.app.features.player.desktop.applyNativeDesktopWindowChrome
 import com.nuvio.app.features.player.desktop.installDesktopAppFullscreenShortcuts
 import com.nuvio.app.features.player.desktop.preloadNativePlayerBridgeAsync
 import com.nuvio.app.features.player.desktop.registerDesktopAppFullscreenToggle
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.settings.AppIconRepository
 import com.nuvio.app.features.settings.applyDesktopRendererPreference
 import com.nuvio.app.features.settings.transparentPreviewResource
@@ -51,9 +50,6 @@ fun main(args: Array<String>) {
     installDesktopOpenUriHandler()
     handleDesktopLaunchArgs(args)
     preloadNativePlayerBridgeAsync()
-    // Load cached profile data synchronously so the profile color is available
-    // on the very first Compose frame (matching Android's SharedPreferences behavior).
-    ProfileRepository.loadCachedProfiles()
     AppIconRepository.ensureLoaded()
     DiscordPresenceManager.start()
 

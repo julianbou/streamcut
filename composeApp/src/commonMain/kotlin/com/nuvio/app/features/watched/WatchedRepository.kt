@@ -3,10 +3,10 @@ package com.nuvio.app.features.watched
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaVideo
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
@@ -160,7 +160,7 @@ object WatchedRepository {
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
         if (!hasLoaded) {
-            loadFromDisk(ProfileRepository.activeProfileId)
+            loadFromDisk(ProfileScopedKey.ScopeId)
             activateEffectiveSource(
                 effectiveWatchedSource(
                     requestedSource = TrackingSettingsRepository.uiState.value.watchProgressSource,
@@ -283,7 +283,7 @@ object WatchedRepository {
 
     internal fun activateSource(source: WatchProgressSource): WatchProgressSource {
         if (!hasLoaded) {
-            loadFromDisk(ProfileRepository.activeProfileId)
+            loadFromDisk(ProfileScopedKey.ScopeId)
         }
         return activateEffectiveSource(source)
     }
@@ -310,7 +310,7 @@ object WatchedRepository {
     }
 
     private fun newRefreshOperation(profileId: Int): WatchedRefreshOperation? {
-        if (ProfileRepository.activeProfileId != profileId) return null
+        if (ProfileScopedKey.ScopeId != profileId) return null
         if (!hasLoaded || currentProfileId != profileId) return null
         return WatchedRefreshOperation(
             profileId = profileId,
@@ -325,7 +325,7 @@ object WatchedRepository {
     private fun isActiveOperation(operation: WatchedRefreshOperation): Boolean =
         currentProfileId == operation.profileId &&
             profileGeneration == operation.profileGeneration &&
-            ProfileRepository.activeProfileId == operation.profileId &&
+            ProfileScopedKey.ScopeId == operation.profileId &&
             isWatchedSourceOperationCurrent(
                 operation = operation.sourceOperation,
                 activeSource = activeSource,
@@ -365,7 +365,7 @@ object WatchedRepository {
     ): Boolean {
         TrackingProviderRegistry.ensureLoaded()
         TrackingSettingsRepository.ensureLoaded()
-        if (ProfileRepository.activeProfileId != profileId) {
+        if (ProfileScopedKey.ScopeId != profileId) {
             log.d { "Skipping watched refresh for inactive profile $profileId" }
             return false
         }

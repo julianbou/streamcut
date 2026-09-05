@@ -4,10 +4,10 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.sync.HOME_CATALOG_LEGACY_SYNC_PLATFORMS
 import com.nuvio.app.core.sync.HOME_CATALOG_SHARED_SYNC_PLATFORM
 import com.nuvio.app.core.sync.putSyncOriginClientId
-import com.nuvio.app.features.profiles.ProfileRepository
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import kotlin.concurrent.Volatile
@@ -147,7 +147,7 @@ object HomeCatalogSettingsSyncService {
         }
     }
 
-    private fun currentPullToken(profileId: Int = ProfileRepository.activeProfileId): PullToken? {
+    private fun currentPullToken(profileId: Int = ProfileScopedKey.ScopeId): PullToken? {
         val authState = AuthRepository.state.value
         if (authState !is AuthState.Authenticated || authState.isAnonymous) return null
         return PullToken(

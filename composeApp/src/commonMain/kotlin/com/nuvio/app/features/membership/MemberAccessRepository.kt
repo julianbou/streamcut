@@ -59,7 +59,6 @@ object MemberAccessRepository {
         verifiedUserId = null
         verifiedAtMs = 0L
         MemberAssetStorage.clearAccess()
-        ProfileBackgroundRepository.invalidate()
     }
 
     private suspend fun loadAccess(auth: AuthState) {

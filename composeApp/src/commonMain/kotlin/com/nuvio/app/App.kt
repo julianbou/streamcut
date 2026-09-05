@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -134,13 +135,12 @@ import com.nuvio.app.core.ui.NuvioToastHost
 import com.nuvio.app.features.clip.ClipUndoBar
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.NuvioFloatingPrompt
-import com.nuvio.app.core.ui.ProfileMeshBackground
+import com.nuvio.app.core.ui.LaunchMeshBackground
 import com.nuvio.app.core.ui.TrackingListPickerDialog
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.LocalNuvioBottomNavigationOverlayPadding
 import com.nuvio.app.core.ui.NativeNavigationTab
-import com.nuvio.app.core.ui.NativeProfileSwitcherController
 import com.nuvio.app.core.ui.AppPresenceState
 import com.nuvio.app.core.ui.NativeTabBridge
 import com.nuvio.app.core.ui.PresenceSnapshot
@@ -206,18 +206,6 @@ import com.nuvio.app.features.player.prepareExternalPlayerLaunch
 import com.nuvio.app.features.player.SubtitleLanguageOption
 import com.nuvio.app.features.player.sanitizePlaybackHeaders
 import com.nuvio.app.features.player.sanitizePlaybackResponseHeaders
-import com.nuvio.app.features.profiles.ActiveProfileMiniAvatar
-import com.nuvio.app.features.profiles.AvatarCatalogItem
-import com.nuvio.app.features.profiles.AvatarRepository
-import com.nuvio.app.features.profiles.MAX_PROFILES
-import com.nuvio.app.features.profiles.NuvioProfile
-import com.nuvio.app.features.profiles.ProfileEditScreen
-import com.nuvio.app.features.profiles.ProfileRepository
-import com.nuvio.app.features.profiles.ProfileSelectionScreen
-import com.nuvio.app.features.profiles.ProfileSwitcherTab
-import com.nuvio.app.features.profiles.SidebarProfileSwitcherStack
-import com.nuvio.app.features.profiles.parseHexColor
-import com.nuvio.app.features.profiles.profileAvatarImageUrl
 import com.nuvio.app.features.search.SearchScreen
 import com.nuvio.app.features.settings.SettingsScreen
 import com.nuvio.app.features.settings.HomescreenSettingsScreen
@@ -279,7 +267,9 @@ import com.nuvio.app.features.watchprogress.toContinueWatchingItem
 import com.nuvio.app.features.watching.application.WatchingActions
 import com.nuvio.app.features.watching.application.WatchingState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -294,9 +284,9 @@ import nuvio.composeapp.generated.resources.compose_catalog_subtitle_library
 import nuvio.composeapp.generated.resources.compose_catalog_subtitle_trakt_library
 import nuvio.composeapp.generated.resources.compose_nav_home
 import nuvio.composeapp.generated.resources.compose_nav_library
-import nuvio.composeapp.generated.resources.compose_nav_profile
 import nuvio.composeapp.generated.resources.compose_nav_search
 import nuvio.composeapp.generated.resources.sidebar_library
+import nuvio.composeapp.generated.resources.sidebar_settings
 import nuvio.composeapp.generated.resources.sidebar_search
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.getString
@@ -418,10 +408,6 @@ private val DesktopSidebarExpandedContentWidth = 168.dp
 private val DesktopSidebarItemHeight = 58.dp
 private val DesktopSidebarIconSlotSize = 42.dp
 private val DesktopSidebarIconSize = NuvioTokens.Icon.lg
-private val DesktopSidebarProfileStackRowHeight = 40.dp
-private val DesktopSidebarProfileStackRowGap = 4.dp
-private val DesktopSidebarProfileStackTopGap = 6.dp
-private val DesktopSidebarProfileStackNavGap = 12.dp
 
 private fun AppScreenTab.toNativeNavigationTab(): NativeNavigationTab = when (this) {
     AppScreenTab.Home -> NativeNavigationTab.Home
@@ -452,18 +438,15 @@ private fun PlayerLaunch.toExternalPlayerPlaybackRequest(): ExternalPlayerPlayba
 private enum class AppGateScreen {
     Loading,
     Auth,
-    ProfileSelection,
-    ProfileSwitching,
-    ProfileEdit,
     Main,
 }
 
-private data class PendingProfileSwitch(
-    val profile: NuvioProfile,
-    val syncOnEnter: Boolean,
-)
-
-private suspend fun warmProfileBoundRepositories() {
+/**
+ * Loads everything the app reads out of local storage before the first screen
+ * is drawn. Named for the profile that used to scope that storage; the scope is
+ * now a constant, but the warm-up is still the step between the gate and Main.
+ */
+private suspend fun warmAppRepositories() {
     withContext(Dispatchers.Default) {
         AddonRepository.initialize()
         CollectionRepository.initialize()
@@ -483,14 +466,6 @@ private suspend fun warmProfileBoundRepositories() {
     }
 }
 
-private object NativeAppGateRequests {
-    val profileSelection = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
-    fun requestProfileSelection() {
-        profileSelection.tryEmit(Unit)
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @Preview
@@ -507,8 +482,7 @@ fun App(
     onReplace: ((AppRoute) -> Unit)? = null,
     onActivate: ((AppScreenTab) -> Unit)? = null,
     onAppReady: ((Boolean) -> Unit)? = null,
-    onTabTitles: ((home: String, search: String, library: String, profile: String, switchProfile: String, addProfile: String) -> Unit)? = null,
-    nativeProfileSwitcherController: NativeProfileSwitcherController? = null,
+    onTabTitles: ((home: String, search: String, library: String, settings: String) -> Unit)? = null,
 ) {
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
@@ -551,11 +525,6 @@ fun App(
                     onReplace = onReplace,
                     onActivate = onActivate,
                     onTabTitles = onTabTitles,
-                    nativeProfileSwitcherController = nativeProfileSwitcherController,
-                    onSwitchProfile = {
-                        onActivate?.invoke(AppScreenTab.Home)
-                        NativeAppGateRequests.requestProfileSelection()
-                    },
                 )
                 return@NuvioTheme
             }
@@ -568,13 +537,9 @@ fun App(
             LaunchedEffect(Unit) {
                 if (!ownsAppRuntime) return@LaunchedEffect
                 NetworkStatusRepository.ensureStarted()
-                ProfileRepository.loadCachedProfiles()
-                AvatarRepository.fetchAvatars()
             }
 
             val authState by AuthRepository.state.collectAsStateWithLifecycle()
-            val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
-            val profileAvatars by AvatarRepository.avatars.collectAsStateWithLifecycle()
             val networkStatusUiState by remember {
                 NetworkStatusRepository.uiState
             }.collectAsStateWithLifecycle()
@@ -584,40 +549,8 @@ fun App(
                 DeviceSessionRegistration.registerIfAuthenticated(force = true)
             }
 
-            LaunchedEffect(
-                profileState.activeProfile?.profileIndex,
-                profileState.activeProfile?.name,
-                profileState.activeProfile?.avatarColorHex,
-                profileState.activeProfile?.avatarId,
-                profileState.activeProfile?.avatarUrl,
-                profileAvatars,
-            ) {
-                val activeProfile = profileState.activeProfile
-                val avatarItem = activeProfile?.avatarId?.let { avatarId ->
-                    profileAvatars.find { it.id == avatarId }
-                }
-                NativeTabBridge.publishProfileTabIcon(
-                    name = activeProfile?.name,
-                    avatarColorHex = activeProfile?.avatarColorHex,
-                    avatarImageUrl = activeProfile?.let { profileAvatarImageUrl(it, avatarItem) },
-                    avatarBackgroundColorHex = avatarItem?.bgColor,
-                )
-            }
-
         var gateScreen by rememberSaveable { mutableStateOf(AppGateScreen.Loading.name) }
-        var editingProfile by remember { mutableStateOf<NuvioProfile?>(null) }
-        var isNewProfile by remember { mutableStateOf(false) }
-        var autoSkipProfileSelection by rememberSaveable { mutableStateOf(false) }
-        var pendingProfileSwitch by remember { mutableStateOf<PendingProfileSwitch?>(null) }
-
-        // Use the incoming profile's color during a switch so the loading overlay
-        // already shows the correct hue before MainAppContent's own overlay takes over.
-        val gateProfileColor = remember(pendingProfileSwitch, profileState.activeProfile, profileState.profiles) {
-            val sourceProfile = pendingProfileSwitch?.profile
-                ?: profileState.activeProfile
-                ?: profileState.profiles.firstOrNull()
-            sourceProfile?.avatarColorHex?.let(::parseHexColor) ?: Color(0xFF1E88E5)
-        }
+        var warmingUp by remember { mutableStateOf(false) }
 
         LaunchedEffect(gateScreen, onAppReady) {
             if (gateScreen != AppGateScreen.Main.name) {
@@ -625,160 +558,64 @@ fun App(
             }
         }
 
-        LaunchedEffect(useNativeNavigation, ownsAppRuntime) {
-            if (!useNativeNavigation || !ownsAppRuntime) return@LaunchedEffect
-            NativeAppGateRequests.profileSelection.collect {
-                autoSkipProfileSelection = false
-                gateScreen = AppGateScreen.ProfileSelection.name
-            }
-        }
-
-        fun rememberedStartupProfile(profiles: List<NuvioProfile>): NuvioProfile? {
-            val currentProfileState = ProfileRepository.state.value
-            if (
-                !currentProfileState.rememberLastProfileEnabled ||
-                !currentProfileState.hasEverSelectedProfile
-            ) {
-                return null
-            }
-
-            return profiles
-                .find { it.profileIndex == ProfileRepository.activeProfileId }
-                ?.takeUnless { it.pinEnabled }
-        }
-
-        fun requestProfileSwitch(profile: NuvioProfile, syncOnEnter: Boolean) {
-            autoSkipProfileSelection = false
-            pendingProfileSwitch = PendingProfileSwitch(profile, syncOnEnter)
-            gateScreen = AppGateScreen.ProfileSwitching.name
-        }
-
-        fun enterProfileGate(profiles: List<NuvioProfile>, syncOnEnter: Boolean) {
-            if (profiles.isEmpty()) {
-                autoSkipProfileSelection = true
-                gateScreen = AppGateScreen.ProfileSelection.name
-                return
-            }
-
-            rememberedStartupProfile(profiles)?.let { profile ->
-                requestProfileSwitch(profile, syncOnEnter)
-                return
-            }
-
-            autoSkipProfileSelection = true
-            if (profiles.size == 1) {
-                val onlyProfile = profiles.first()
-                if (onlyProfile.pinEnabled) {
-                    gateScreen = AppGateScreen.ProfileSelection.name
-                    return
-                }
-                requestProfileSwitch(onlyProfile, syncOnEnter)
-            } else {
-                gateScreen = AppGateScreen.ProfileSelection.name
-            }
-        }
-
-        LaunchedEffect(gateScreen, pendingProfileSwitch) {
-            if (gateScreen == AppGateScreen.ProfileSwitching.name && pendingProfileSwitch == null) {
-                gateScreen = AppGateScreen.Loading.name
-            }
-        }
-
-        LaunchedEffect(pendingProfileSwitch) {
-            val request = pendingProfileSwitch ?: return@LaunchedEffect
-            runCatching {
-                ProfileRepository.switchToProfile(request.profile.profileIndex)
-                warmProfileBoundRepositories()
-                if (request.syncOnEnter) {
-                    SyncManager.pullAllForProfile(request.profile.profileIndex)
-                }
-            }.onSuccess {
-                pendingProfileSwitch = null
-                autoSkipProfileSelection = false
-                gateScreen = AppGateScreen.Main.name
-            }.onFailure {
-                pendingProfileSwitch = null
-                autoSkipProfileSelection = false
-                gateScreen = AppGateScreen.ProfileSelection.name
-            }
-        }
-
-        LaunchedEffect(authState, networkStatusUiState.condition, profileState.profiles) {
-            if (gateScreen == AppGateScreen.ProfileSwitching.name) return@LaunchedEffect
-
-            val cachedProfiles = profileState.profiles
-            val hasCachedProfileAccess =
-                cachedProfiles.isNotEmpty() &&
-                    authState !is AuthState.Authenticated
-            val allowCachedProfileAccess =
-                hasCachedProfileAccess &&
-                    (
-                        networkStatusUiState.condition != NetworkCondition.Online ||
-                            gateScreen != AppGateScreen.Auth.name
-                    )
-
-            when (authState) {
-                is AuthState.Loading -> {
-                    if (hasCachedProfileAccess) {
-                        enterProfileGate(cachedProfiles, syncOnEnter = false)
-                    } else {
-                        gateScreen = AppGateScreen.Loading.name
+        /**
+         * Warms local storage, then hands over to the app.
+         *
+         * [syncOnEnter] pulls the account's data first; it is skipped when the
+         * gate is being passed on cached data alone, which is the offline case
+         * below.
+         */
+        suspend fun enterMainGate(syncOnEnter: Boolean) {
+            if (warmingUp) return
+            warmingUp = true
+            try {
+                // The gate opens even when warming or the first pull fails:
+                // everything it loads has a local fallback, and refusing to
+                // start because the network is down is the one outcome the
+                // user cannot work around.
+                runCatching {
+                    warmAppRepositories()
+                    if (syncOnEnter) {
+                        SyncManager.pullAllForProfile(ProfileScopedKey.ScopeId)
                     }
                 }
+                // ...but not when this effect was cancelled while it ran: the
+                // auth state that sent us here is no longer the current one,
+                // and runCatching swallows the cancellation that says so.
+                currentCoroutineContext().ensureActive()
+                gateScreen = AppGateScreen.Main.name
+            } finally {
+                // In a finally so a cancelled warm-up cannot leave the flag
+                // stuck true, which would wedge the app on the loading screen
+                // for the rest of the session.
+                warmingUp = false
+            }
+        }
+
+        LaunchedEffect(authState) {
+            when (authState) {
+                is AuthState.Loading -> {
+                    gateScreen = AppGateScreen.Loading.name
+                }
                 is AuthState.Unauthenticated -> {
-                    if (allowCachedProfileAccess) {
-                        enterProfileGate(cachedProfiles, syncOnEnter = false)
+                    // A session that lapsed -- refresh failed, the machine is
+                    // offline, the token expired -- used to be let through on
+                    // the cached profile list, and still must be: an install
+                    // with a library on it should reach that library rather
+                    // than a sign-in screen it may have no network to complete.
+                    // A machine that has never had an account has nothing to
+                    // show, so it goes to Auth.
+                    if (AuthRepository.hasEverSignedIn) {
+                        if (gateScreen != AppGateScreen.Main.name) enterMainGate(syncOnEnter = false)
                     } else {
-                        ProfileRepository.clearInMemory()
                         gateScreen = AppGateScreen.Auth.name
                     }
                 }
                 is AuthState.Authenticated -> {
-                    val authenticatedState = authState as AuthState.Authenticated
-                    ProfileRepository.ensureLoaded(authenticatedState.userId)
                     if (gateScreen == AppGateScreen.Loading.name || gateScreen == AppGateScreen.Auth.name) {
-                        enterProfileGate(ProfileRepository.state.value.profiles, syncOnEnter = true)
+                        enterMainGate(syncOnEnter = true)
                     }
                 }
-            }
-        }
-
-        LaunchedEffect((authState as? AuthState.Authenticated)?.userId) {
-            val authenticatedState = authState as? AuthState.Authenticated ?: return@LaunchedEffect
-            ProfileRepository.ensureLoaded(authenticatedState.userId)
-            ProfileRepository.pullProfiles()
-        }
-
-        LaunchedEffect(
-            gateScreen,
-            autoSkipProfileSelection,
-            profileState.profiles,
-            profileState.hasEverSelectedProfile,
-            profileState.rememberLastProfileEnabled,
-            profileState.activeProfile?.profileIndex,
-            profileState.activeProfile?.pinEnabled,
-        ) {
-            if (
-                autoSkipProfileSelection &&
-                gateScreen == AppGateScreen.ProfileSelection.name
-            ) {
-                rememberedStartupProfile(profileState.profiles)?.let { profile ->
-                    requestProfileSwitch(
-                        profile = profile,
-                        syncOnEnter = authState is AuthState.Authenticated,
-                    )
-                    return@LaunchedEffect
-                }
-
-                if (profileState.profiles.size != 1) return@LaunchedEffect
-
-                val onlyProfile = profileState.profiles.first()
-                if (onlyProfile.pinEnabled) return@LaunchedEffect
-
-                requestProfileSwitch(
-                    profile = onlyProfile,
-                    syncOnEnter = authState is AuthState.Authenticated,
-                )
             }
         }
 
@@ -791,52 +628,11 @@ fun App(
             },
         ) { currentGate ->
             when (currentGate) {
-                AppGateScreen.Loading.name,
-                AppGateScreen.ProfileSwitching.name -> {
-                    AppLaunchOverlay(
-                        profileColor = gateProfileColor,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                AppGateScreen.Loading.name -> {
+                    AppLaunchOverlay(modifier = Modifier.fillMaxSize())
                 }
                 AppGateScreen.Auth.name -> {
                     AuthScreen(modifier = Modifier.fillMaxSize())
-                }
-                AppGateScreen.ProfileSelection.name -> {
-                    PlatformBackHandler(enabled = gateScreen == AppGateScreen.ProfileSelection.name) {
-                        if (!autoSkipProfileSelection) {
-                            gateScreen = AppGateScreen.Main.name
-                        }
-                    }
-                    ProfileSelectionScreen(
-                        onProfileSelected = { profile ->
-                            requestProfileSwitch(
-                                profile = profile,
-                                syncOnEnter = authState is AuthState.Authenticated,
-                            )
-                        },
-                        onEditProfile = { profile ->
-                            editingProfile = profile
-                            isNewProfile = false
-                            gateScreen = AppGateScreen.ProfileEdit.name
-                        },
-                        onAddProfile = {
-                            editingProfile = null
-                            isNewProfile = true
-                            gateScreen = AppGateScreen.ProfileEdit.name
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                AppGateScreen.ProfileEdit.name -> {
-                    PlatformBackHandler(enabled = gateScreen == AppGateScreen.ProfileEdit.name) {
-                        gateScreen = AppGateScreen.ProfileSelection.name
-                    }
-                    ProfileEditScreen(
-                        profile = editingProfile,
-                        onBack = { gateScreen = AppGateScreen.ProfileSelection.name },
-                        onSaved = { gateScreen = AppGateScreen.ProfileSelection.name },
-                        modifier = Modifier.fillMaxSize(),
-                    )
                 }
                 AppGateScreen.Main.name -> {
                     MainAppContent(
@@ -851,17 +647,19 @@ fun App(
                         onReplace = onReplace,
                         onActivate = onActivate,
                         onTabTitles = onTabTitles,
-                        nativeProfileSwitcherController = nativeProfileSwitcherController,
                         onRootContentReady = { ready ->
                             onAppReady?.invoke(
                                 ready && gateScreen == AppGateScreen.Main.name,
                             )
                         },
-                        onSwitchProfile = {
-                            autoSkipProfileSelection = false
-                            gateScreen = AppGateScreen.ProfileSelection.name
-                        },
                     )
+                }
+                // A gate name saved by a build that still had profiles -- the
+                // state is a rememberSaveable string, so it outlives the
+                // upgrade. The effect above corrects it on the next frame;
+                // until then this is a loading screen, not a blank window.
+                else -> {
+                    AppLaunchOverlay(modifier = Modifier.fillMaxSize())
                 }
             }
         }
@@ -882,10 +680,8 @@ private fun MainAppContent(
     onGoBack: (() -> Unit)? = null,
     onReplace: ((AppRoute) -> Unit)? = null,
     onActivate: ((AppScreenTab) -> Unit)? = null,
-    onTabTitles: ((home: String, search: String, library: String, profile: String, switchProfile: String, addProfile: String) -> Unit)? = null,
-    nativeProfileSwitcherController: NativeProfileSwitcherController? = null,
+    onTabTitles: ((home: String, search: String, library: String, settings: String) -> Unit)? = null,
     onRootContentReady: ((Boolean) -> Unit)? = null,
-    onSwitchProfile: () -> Unit = {},
 ) {
         val navBackStack = rememberNavBackStack(navigationSavedStateConfiguration, initialRoute)
         val routeDisposalDecorator = remember {
@@ -915,7 +711,7 @@ private fun MainAppContent(
 
         LaunchedEffect(ownsAppRuntime) {
             if (!ownsAppRuntime) return@LaunchedEffect
-            warmProfileBoundRepositories()
+            warmAppRepositories()
         }
         val currentRoute = navBackStack.lastOrNull() as? AppRoute
         val liquidGlassNativeTabBarEnabled by remember {
@@ -961,11 +757,6 @@ private fun MainAppContent(
                 selectedPosterActionTarget = target
             }
         }
-        val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
-        val launchOverlayProfileColor = remember(profileState.activeProfile, profileState.profiles) {
-            val sourceProfile = profileState.activeProfile ?: profileState.profiles.firstOrNull()
-            sourceProfile?.avatarColorHex?.let(::parseHexColor) ?: Color(0xFF1E88E5)
-        }
     val externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported
     val playerSettingsUiState by remember {
         PlayerSettingsRepository.ensureLoaded()
@@ -998,9 +789,7 @@ private fun MainAppContent(
     val nativeTabHomeTitle = stringResource(Res.string.compose_nav_home)
     val nativeTabSearchTitle = stringResource(Res.string.compose_nav_search)
     val nativeTabLibraryTitle = stringResource(Res.string.compose_nav_library)
-    val nativeTabProfileTitle = stringResource(Res.string.compose_nav_profile)
-    val nativeSwitchProfileTitle = stringResource(Res.string.compose_settings_root_switch_profile_title)
-    val nativeAddProfileTitle = stringResource(Res.string.compose_profile_add_profile)
+    val nativeTabSettingsTitle = stringResource(Res.string.compose_settings_page_root)
     val homescreenSettingsTitle = stringResource(Res.string.compose_settings_page_homescreen)
     val metaScreenSettingsTitle = stringResource(Res.string.compose_settings_page_meta_screen)
     val continueWatchingSettingsTitle = stringResource(Res.string.compose_settings_page_continue_watching)
@@ -1077,24 +866,20 @@ private fun MainAppContent(
         nativeTabHomeTitle,
         nativeTabSearchTitle,
         nativeTabLibraryTitle,
-        nativeTabProfileTitle,
-        nativeSwitchProfileTitle,
-        nativeAddProfileTitle,
+        nativeTabSettingsTitle,
         onTabTitles,
     ) {
         NativeTabBridge.publishTabTitles(
             home = nativeTabHomeTitle,
             search = nativeTabSearchTitle,
             library = nativeTabLibraryTitle,
-            profile = nativeTabProfileTitle,
+            settings = nativeTabSettingsTitle,
         )
         onTabTitles?.invoke(
             nativeTabHomeTitle,
             nativeTabSearchTitle,
             nativeTabLibraryTitle,
-            nativeTabProfileTitle,
-            nativeSwitchProfileTitle,
-            nativeAddProfileTitle,
+            nativeTabSettingsTitle,
         )
     }
 
@@ -1118,40 +903,10 @@ private fun MainAppContent(
         )
     }
 
-    var profileSwitchLoading by remember { mutableStateOf(false) }
-
-    LaunchedEffect(nativeProfileSwitcherController, ownsAppRuntime) {
-        if (!ownsAppRuntime) return@LaunchedEffect
-        nativeProfileSwitcherController?.selectedProfileIndices?.collectLatest { profileIndex ->
-            val profile = ProfileRepository.state.value.profiles
-                .firstOrNull { it.profileIndex == profileIndex }
-                ?: return@collectLatest
-            profileSwitchLoading = true
-            activateTab(AppScreenTab.Home)
-            try {
-                ProfileRepository.switchToProfile(profile.profileIndex)
-                warmProfileBoundRepositories()
-                SyncManager.pullAllForProfile(profile.profileIndex)
-            } finally {
-                profileSwitchLoading = false
-            }
-        }
-    }
-
-    LaunchedEffect(nativeProfileSwitcherController, ownsAppRuntime, onSwitchProfile) {
-        if (!ownsAppRuntime) return@LaunchedEffect
-        nativeProfileSwitcherController?.requestedManageProfiles?.collectLatest {
-            activateTab(AppScreenTab.Home)
-            onSwitchProfile()
-        }
-    }
     val launchOverlayState = remember(ownsAppRuntime) {
-        MutableTransitionState(
-            ownsAppRuntime && (!initialHomeReady || profileSwitchLoading),
-        )
+        MutableTransitionState(ownsAppRuntime && !initialHomeReady)
     }
-    launchOverlayState.targetState =
-        ownsAppRuntime && (!initialHomeReady || profileSwitchLoading)
+    launchOverlayState.targetState = ownsAppRuntime && !initialHomeReady
 
     LaunchedEffect(
         launchOverlayState.targetState,
@@ -1168,14 +923,12 @@ private fun MainAppContent(
         liquidGlassNativeTabBarSupported,
         liquidGlassNativeTabBarEnabled,
         initialHomeReady,
-        profileSwitchLoading,
         useNativeNavigation,
     ) {
         val visible = !useNativeNavigation &&
             liquidGlassNativeTabBarSupported &&
             liquidGlassNativeTabBarEnabled &&
             initialHomeReady &&
-            !profileSwitchLoading &&
             currentRoute is TabsRoute
         NativeTabBridge.publishTabBarVisible(visible)
     }
@@ -1245,7 +998,6 @@ private fun MainAppContent(
     LaunchedEffect(
         networkStatusUiState.condition,
         (authState as? AuthState.Authenticated)?.userId,
-        profileState.activeProfile?.profileIndex,
     ) {
         if (!ownsAppRuntime) return@LaunchedEffect
         when (networkStatusUiState.condition) {
@@ -1256,8 +1008,7 @@ private fun MainAppContent(
             NetworkCondition.Online -> {
                 if (!watchSourceReconnectPending) return@LaunchedEffect
 
-                val profileId = profileState.activeProfile?.profileIndex
-                    ?: ProfileRepository.activeProfileId
+                val profileId = ProfileScopedKey.ScopeId
                 val authenticatedState = authState as? AuthState.Authenticated
                 if (authenticatedState != null && !authenticatedState.isAnonymous) {
                     SyncManager.requestForegroundPull(profileId = profileId, force = true)
@@ -1315,11 +1066,10 @@ private fun MainAppContent(
         }
     }
 
-    DisposableEffect(authState, profileState.activeProfile?.profileIndex) {
+    DisposableEffect(authState) {
         val authenticatedState = authState as? AuthState.Authenticated
-        val activeProfileId = profileState.activeProfile?.profileIndex
-        if (ownsAppRuntime && authenticatedState != null && !authenticatedState.isAnonymous && activeProfileId != null) {
-            SyncManager.startPeriodicNuvioSyncPull(activeProfileId)
+        if (ownsAppRuntime && authenticatedState != null && !authenticatedState.isAnonymous) {
+            SyncManager.startPeriodicNuvioSyncPull(ProfileScopedKey.ScopeId)
         } else if (ownsAppRuntime) {
             SyncManager.stopPeriodicNuvioSyncPull()
         }
@@ -1328,12 +1078,12 @@ private fun MainAppContent(
         }
     }
 
-    LaunchedEffect(authState, profileState.activeProfile?.profileIndex) {
+    LaunchedEffect(authState) {
         if (!ownsAppRuntime) return@LaunchedEffect
         val authenticatedState = authState as? AuthState.Authenticated ?: return@LaunchedEffect
         if (authenticatedState.isAnonymous) return@LaunchedEffect
 
-        val activeProfileId = profileState.activeProfile?.profileIndex ?: return@LaunchedEffect
+        val activeProfileId = ProfileScopedKey.ScopeId
         SyncManager.pullAllForProfile(activeProfileId)
         AppForegroundMonitor.events().collect {
             SyncManager.requestForegroundPull(activeProfileId, force = true)
@@ -1341,7 +1091,7 @@ private fun MainAppContent(
     }
     var resumePromptItem by remember { mutableStateOf<ContinueWatchingItem?>(null) }
     var lastExternalPlayerLaunch by remember { mutableStateOf<PlayerLaunch?>(null) }
-    val activePlaybackProfileId = profileState.activeProfile?.profileIndex ?: ProfileRepository.activeProfileId
+    val activePlaybackProfileId = ProfileScopedKey.ScopeId
     val launchExternalPlayer = rememberExternalPlayerLauncher { result ->
         if (result != null && result.positionMs > 0L) {
             coroutineScope.launch {
@@ -1414,12 +1164,10 @@ private fun MainAppContent(
 
     LaunchedEffect(
         initialHomeReady,
-        profileSwitchLoading,
-        profileState.activeProfile?.profileIndex,
         continueWatchingPreferencesUiState.showResumePromptOnLaunch,
     ) {
         if (!ownsAppRuntime) return@LaunchedEffect
-        if (!initialHomeReady || profileSwitchLoading) return@LaunchedEffect
+        if (!initialHomeReady) return@LaunchedEffect
         if (resumePromptItem != null) return@LaunchedEffect
         if (continueWatchingPreferencesUiState.showResumePromptOnLaunch) {
             resumePromptItem = ResumePromptRepository.consumeResumePrompt()
@@ -1997,22 +1745,6 @@ private fun MainAppContent(
                         val navBarScrollState = rememberNuvioNavBarScrollState()
                         val navBarHazeState = rememberHazeState()
                         val navBarStyleSetting by remember { ThemeSettingsRepository.navBarStyle }.collectAsStateWithLifecycle()
-                        val onProfileSelected: (NuvioProfile) -> Unit = { profile ->
-                            profileSwitchLoading = true
-                            NativeTabBridge.publishTabBarVisible(false)
-                            activateTab(AppScreenTab.Home)
-                            coroutineScope.launch {
-                                try {
-                                    ProfileRepository.switchToProfile(profile.profileIndex)
-                                    warmProfileBoundRepositories()
-                                    SyncManager.pullAllForProfile(profile.profileIndex)
-                                    delay(300)
-                                } finally {
-                                    profileSwitchLoading = false
-                                }
-                            }
-                        }
-
                         Scaffold(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -2043,14 +1775,9 @@ private fun MainAppContent(
                                         NavItem(
                                             selected = selectedTab == AppScreenTab.Settings,
                                             onClick = { handleRootTabClick(AppScreenTab.Settings) },
-                                        ) {
-                                            ProfileSwitcherTab(
-                                                selected = selectedTab == AppScreenTab.Settings,
-                                                onClick = { handleRootTabClick(AppScreenTab.Settings) },
-                                                onProfileSelected = onProfileSelected,
-                                                onAddProfileRequested = onSwitchProfile,
-                                            )
-                                        }
+                                            icon = Res.drawable.sidebar_settings,
+                                            contentDescription = stringResource(Res.string.compose_settings_page_root),
+                                        )
                                     }
                                 }
                             },
@@ -2134,7 +1861,6 @@ private fun MainAppContent(
                                         onContinueWatchingLongPress = onContinueWatchingLongPress,
                                         libraryDisintegrationRequest = libraryDisintegrationRequests.current,
                                         continueWatchingDisintegrationRequest = continueWatchingDisintegrationRequests.current,
-                                        onSwitchProfile = onSwitchProfile,
                                         onHomescreenSettingsClick = { navController.navigate(HomescreenSettingsRoute(homescreenSettingsTitle)) },
                                         onMetaScreenSettingsClick = { navController.navigate(MetaScreenSettingsRoute(metaScreenSettingsTitle)) },
                                         onContinueWatchingSettingsClick = { navController.navigate(ContinueWatchingSettingsRoute(continueWatchingSettingsTitle)) },
@@ -2203,15 +1929,11 @@ private fun MainAppContent(
                                     DesktopHoverSidebar(
                                         selectedTab = selectedTab,
                                         onTabSelected = ::handleRootTabClick,
-                                        onProfileSelected = onProfileSelected,
-                                        onAddProfileRequested = onSwitchProfile,
                                     )
                                 } else if (useFloatingTopBar) {
                                     TabletFloatingTopBar(
                                         selectedTab = selectedTab,
                                         onTabSelected = ::handleRootTabClick,
-                                        onProfileSelected = onProfileSelected,
-                                        onAddProfileRequested = onSwitchProfile,
                                     )
                                 }
 
@@ -2252,15 +1974,10 @@ private fun MainAppContent(
                                         NavItem(
                                             selected = selectedTab == AppScreenTab.Settings,
                                             onClick = { handleRootTabClick(AppScreenTab.Settings) },
-                                            label = stringResource(Res.string.compose_nav_profile),
-                                        ) {
-                                            ProfileSwitcherTab(
-                                                selected = selectedTab == AppScreenTab.Settings,
-                                                onClick = { handleRootTabClick(AppScreenTab.Settings) },
-                                                onProfileSelected = onProfileSelected,
-                                                onAddProfileRequested = onSwitchProfile,
-                                            )
-                                        }
+                                            icon = Res.drawable.sidebar_settings,
+                                            contentDescription = stringResource(Res.string.compose_settings_page_root),
+                                            label = stringResource(Res.string.compose_settings_page_root),
+                                        )
                                     }
                                 }
                             }
@@ -3779,10 +3496,7 @@ private fun MainAppContent(
                 enter = fadeIn(),
                 exit = fadeOut(androidx.compose.animation.core.tween(400)),
             ) {
-                AppLaunchOverlay(
-                    profileColor = launchOverlayProfileColor,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                AppLaunchOverlay(modifier = Modifier.fillMaxSize())
             }
 
             NuvioFloatingPrompt(
@@ -3863,7 +3577,6 @@ private fun AppTabHost(
     onContinueWatchingLongPress: ((ContinueWatchingItem) -> Unit)? = null,
     libraryDisintegrationRequest: DisintegrationRequest<String>? = null,
     continueWatchingDisintegrationRequest: DisintegrationRequest<String>? = null,
-    onSwitchProfile: (() -> Unit)? = null,
     onHomescreenSettingsClick: () -> Unit = {},
     onMetaScreenSettingsClick: () -> Unit = {},
     onContinueWatchingSettingsClick: () -> Unit = {},
@@ -3948,7 +3661,6 @@ private fun AppTabHost(
                                 rootActionRequests = settingsRootActionRequests,
                                 requestedPageName = requestedSettingsPageName,
                                 onRequestedPageConsumed = onRequestedSettingsPageConsumed,
-                                onSwitchProfile = onSwitchProfile,
                                 onHomescreenClick = onHomescreenSettingsClick,
                                 onMetaScreenClick = onMetaScreenSettingsClick,
                                 onContinueWatchingClick = onContinueWatchingSettingsClick,
@@ -4051,7 +3763,6 @@ private fun AppSettingsTabContent(
     rootActionRequests: Flow<Unit>,
     requestedPageName: String?,
     onRequestedPageConsumed: () -> Unit,
-    onSwitchProfile: (() -> Unit)?,
     onHomescreenClick: () -> Unit,
     onMetaScreenClick: () -> Unit,
     onContinueWatchingClick: () -> Unit,
@@ -4071,7 +3782,6 @@ private fun AppSettingsTabContent(
         requestedPageName = requestedPageName,
         onRequestedPageConsumed = onRequestedPageConsumed,
         rootActionsEnabled = tabsRouteActiveState.value,
-        onSwitchProfile = onSwitchProfile,
         onHomescreenClick = onHomescreenClick,
         onMetaScreenClick = onMetaScreenClick,
         onContinueWatchingClick = onContinueWatchingClick,
@@ -4091,24 +3801,12 @@ private fun AppSettingsTabContent(
 private fun DesktopHoverSidebar(
     selectedTab: AppScreenTab,
     onTabSelected: (AppScreenTab) -> Unit,
-    onProfileSelected: (NuvioProfile) -> Unit,
-    onAddProfileRequested: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tokens = MaterialTheme.nuvio
-    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
-    val avatars by AvatarRepository.avatars.collectAsStateWithLifecycle()
-    val activeProfile = profileState.activeProfile
-    val profiles = profileState.profiles
-    val activeProfileName = activeProfile?.name ?: stringResource(Res.string.compose_nav_profile)
     val hoverSource = remember { MutableInteractionSource() }
-    val hovered by hoverSource.collectIsHoveredAsState()
-    var profileStackVisible by remember { mutableStateOf(false) }
-    val sidebarExpanded = hovered || profileStackVisible
-    val profileTopPadding = statusBarPadding + 18.dp
+    val sidebarExpanded by hoverSource.collectIsHoveredAsState()
     fun selectTab(tab: AppScreenTab) {
-        profileStackVisible = false
         onTabSelected(tab)
     }
     val sidebarWidth by animateDpAsState(
@@ -4129,69 +3827,9 @@ private fun DesktopHoverSidebar(
         BoxWithConstraints(
             modifier = Modifier.fillMaxSize(),
         ) {
-            val profileStackRows = profiles.size + if (profiles.size < MAX_PROFILES) 1 else 0
-            val profileStackHeight = if (profileStackRows > 0) {
-                DesktopSidebarProfileStackRowHeight * profileStackRows +
-                    DesktopSidebarProfileStackRowGap * (profileStackRows - 1)
-            } else {
-                0.dp
-            }
-            val profileStackTop = profileTopPadding + DesktopSidebarItemHeight + DesktopSidebarProfileStackTopGap
-            val minNavTop = if (profileStackVisible) {
-                profileStackTop + profileStackHeight + DesktopSidebarProfileStackNavGap
-            } else {
-                0.dp
-            }
-            val navColumnHeight = DesktopSidebarItemHeight * AppScreenTab.entries.size
-            val centeredNavTop = ((maxHeight - navColumnHeight) / 2).coerceAtLeast(0.dp)
-            val availableNavOffset = (maxHeight - navColumnHeight - centeredNavTop).coerceAtLeast(0.dp)
-            val navColumnOffset = (minNavTop - centeredNavTop)
-                .coerceIn(0.dp, availableNavOffset)
-            val animatedNavColumnOffset by animateDpAsState(
-                targetValue = navColumnOffset,
-                animationSpec = tween(durationMillis = 180),
-                label = "desktop_sidebar_nav_offset",
-            )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = profileTopPadding)
-                    .fillMaxWidth()
-                    .height(DesktopSidebarItemHeight)
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { profileStackVisible = !profileStackVisible },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                DesktopSidebarProfileTrigger(
-                    profile = activeProfile,
-                    avatars = avatars,
-                    label = activeProfileName,
-                    expanded = sidebarExpanded,
-                )
-            }
-
-            if (profileStackVisible) {
-                SidebarProfileSwitcherStack(
-                    onProfileSelected = onProfileSelected,
-                    onAddProfileRequested = onAddProfileRequested,
-                    onDismissRequest = { profileStackVisible = false },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = profileStackTop)
-                        .width(DesktopSidebarExpandedContentWidth)
-                        .zIndex(NuvioTokens.Z.sheet),
-                )
-            }
-
             Column(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .offset(y = animatedNavColumnOffset)
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -4249,60 +3887,6 @@ private fun DesktopHoverSidebar(
                         contentDescription = stringResource(Res.string.compose_settings_page_root),
                         modifier = Modifier.size(DesktopSidebarIconSize),
                         tint = color,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DesktopSidebarProfileTrigger(
-    profile: NuvioProfile?,
-    avatars: List<AvatarCatalogItem>,
-    label: String,
-    expanded: Boolean,
-) {
-    val tokens = MaterialTheme.nuvio
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color.Transparent,
-        shape = RoundedCornerShape(16.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier.width(
-                    if (expanded) DesktopSidebarExpandedContentWidth else DesktopSidebarIconSlotSize,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier.size(DesktopSidebarIconSlotSize),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ActiveProfileMiniAvatar(
-                        profile = profile,
-                        avatars = avatars,
-                        selected = false,
-                        size = 32,
-                    )
-                }
-                if (expanded) {
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = label,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = tokens.colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -4376,8 +3960,6 @@ private fun DesktopSidebarItem(
 private fun TabletFloatingTopBar(
     selectedTab: AppScreenTab,
     onTabSelected: (AppScreenTab) -> Unit,
-    onProfileSelected: (NuvioProfile) -> Unit,
-    onAddProfileRequested: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tokens = MaterialTheme.nuvio
@@ -4451,37 +4033,23 @@ private fun TabletFloatingTopBar(
                         )
                     },
                 )
-                Surface(
-                    color = if (selectedTab == AppScreenTab.Settings) {
-                        tokens.colors.overlaySelected
-                    } else {
-                        tokens.colors.surface
-                    },
-                    shape = tokens.shapes.chip,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = tokens.spacing.listGap, vertical = tokens.spacing.controlGap),
-                        horizontalArrangement = Arrangement.spacedBy(tokens.spacing.controlGap),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ProfileSwitcherTab(
-                            selected = selectedTab == AppScreenTab.Settings,
-                            onClick = { onTabSelected(AppScreenTab.Settings) },
-                            onProfileSelected = onProfileSelected,
-                            onAddProfileRequested = onAddProfileRequested,
-                        )
-                        Text(
-                            text = stringResource(Res.string.compose_nav_profile),
-                            modifier = Modifier.clickable { onTabSelected(AppScreenTab.Settings) },
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (selectedTab == AppScreenTab.Settings) {
+                TabletTopPillItem(
+                    label = stringResource(Res.string.compose_settings_page_root),
+                    selected = selectedTab == AppScreenTab.Settings,
+                    onClick = { onTabSelected(AppScreenTab.Settings) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Settings,
+                            contentDescription = stringResource(Res.string.compose_settings_page_root),
+                            modifier = Modifier.size(NuvioTokens.Space.s18),
+                            tint = if (selectedTab == AppScreenTab.Settings) {
                                 tokens.colors.textPrimary
                             } else {
                                 tokens.colors.textMuted
                             },
                         )
-                    }
-                }
+                    },
+                )
             }
         }
     }
@@ -4525,7 +4093,6 @@ private fun TabletTopPillItem(
 
 @Composable
 private fun AppLaunchOverlay(
-    profileColor: Color = Color(0xFF1E88E5),
     modifier: Modifier = Modifier,
 ) {
     val tokens = MaterialTheme.nuvio
@@ -4534,10 +4101,7 @@ private fun AppLaunchOverlay(
             .zIndex(NuvioTokens.Z.dialog),
         contentAlignment = Alignment.Center,
     ) {
-        ProfileMeshBackground(
-            profileColor = profileColor,
-            modifier = Modifier.fillMaxSize(),
-        )
+        LaunchMeshBackground(modifier = Modifier.fillMaxSize())
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

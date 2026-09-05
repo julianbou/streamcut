@@ -21,8 +21,6 @@ import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.p2p.P2pSettingsRepository
 import com.nuvio.app.features.plugins.PluginRepository
 import com.nuvio.app.features.player.SubtitleRepository
-import com.nuvio.app.features.profiles.ProfileRepository
-import com.nuvio.app.features.profiles.MAX_PROFILES
 import com.nuvio.app.features.search.SearchRepository
 import com.nuvio.app.features.settings.ThemeSettingsRepository
 import com.nuvio.app.features.streams.StreamContextStore
@@ -42,7 +40,7 @@ import com.nuvio.app.features.watched.WatchedRepository
 internal object LocalAccountDataCleaner {
     fun wipe() {
         ensureTrackingProvidersRegistered()
-        TrackingProviderRegistry.removeStoredProfiles(1..MAX_PROFILES)
+        TrackingProviderRegistry.removeStoredProfiles(ProfileScopedKey.LegacyScopeIds)
         SyncManager.cancelAccountSync()
         WatchProgressSourceCoordinator.clearLocalState()
         ProfileSettingsSync.clearAccountState()
@@ -53,7 +51,6 @@ internal object LocalAccountDataCleaner {
             PlatformLocalAccountDataCleaner.wipe()
         }
 
-        ProfileRepository.clearInMemory()
         MemberAccessRepository.clearLocalState()
         AddonRepository.clearLocalState()
         if (AppFeaturePolicy.pluginsEnabled) {

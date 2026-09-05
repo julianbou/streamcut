@@ -26,9 +26,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.ui.NuvioTokens
 import com.nuvio.app.core.ui.nuvio
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingEnrichmentCache
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import kotlinx.coroutines.launch
@@ -42,12 +42,9 @@ import nuvio.composeapp.generated.resources.settings_advanced_discord_rich_prese
 import nuvio.composeapp.generated.resources.settings_advanced_opengl_renderer
 import nuvio.composeapp.generated.resources.settings_advanced_opengl_renderer_description
 import nuvio.composeapp.generated.resources.settings_advanced_opengl_renderer_external_description
-import nuvio.composeapp.generated.resources.settings_advanced_remember_last_profile
-import nuvio.composeapp.generated.resources.settings_advanced_remember_last_profile_description
 import nuvio.composeapp.generated.resources.settings_advanced_section_cache
 import nuvio.composeapp.generated.resources.settings_advanced_section_diagnostics
 import nuvio.composeapp.generated.resources.settings_advanced_section_discord
-import nuvio.composeapp.generated.resources.settings_advanced_section_startup
 import nuvio.composeapp.generated.resources.settings_advanced_section_windows_graphics
 import nuvio.composeapp.generated.resources.settings_advanced_sentry_reports
 import nuvio.composeapp.generated.resources.settings_advanced_sentry_reports_subtitle
@@ -73,24 +70,7 @@ import org.jetbrains.compose.resources.stringResource
 
 internal fun LazyListScope.advancedSettingsContent(
     isTablet: Boolean,
-    rememberLastProfileEnabled: Boolean,
 ) {
-    item {
-        SettingsSection(
-            title = stringResource(Res.string.settings_advanced_section_startup),
-            isTablet = isTablet,
-        ) {
-            SettingsGroup(isTablet = isTablet) {
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_advanced_remember_last_profile),
-                    description = stringResource(Res.string.settings_advanced_remember_last_profile_description),
-                    checked = rememberLastProfileEnabled,
-                    isTablet = isTablet,
-                    onCheckedChange = ProfileRepository::setRememberLastProfileEnabled,
-                )
-            }
-        }
-    }
     if (DesktopRendererSettings.isSupported) {
         item {
             val externallyControlled = remember { DesktopRendererSettings.isExternallyControlled }
@@ -207,11 +187,11 @@ internal fun LazyListScope.advancedSettingsContent(
                     isTablet = isTablet,
                     onClick = {
                         if (!cleared) {
-                            ContinueWatchingEnrichmentCache.clearAll(ProfileRepository.activeProfileId)
+                            ContinueWatchingEnrichmentCache.clearAll(ProfileScopedKey.ScopeId)
                             cleared = true
                             scope.launch {
                                 WatchProgressRepository.clearLocalAndForceSnapshotRefreshFromServer(
-                                    ProfileRepository.activeProfileId,
+                                    ProfileScopedKey.ScopeId,
                                 )
                             }
                         }

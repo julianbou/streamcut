@@ -54,7 +54,6 @@ internal sealed class SettingsSearchTarget {
     data class Page(val page: SettingsPage) : SettingsSearchTarget()
     object Downloads : SettingsSearchTarget()
     object Collections : SettingsSearchTarget()
-    object SwitchProfile : SettingsSearchTarget()
     object CheckForUpdates : SettingsSearchTarget()
 }
 
@@ -88,7 +87,6 @@ internal fun settingsSearchEntries(
     accountDeletionEnabled: Boolean,
     personalMediaAddonCopyEnabled: Boolean,
     liquidGlassNativeTabBarSupported: Boolean,
-    switchProfileAvailable: Boolean,
     checkForUpdatesAvailable: Boolean,
     viewingChromeEnabled: Boolean = true,
 ): List<SettingsSearchEntry> {
@@ -185,18 +183,6 @@ internal fun settingsSearchEntries(
         )
     }
 
-    if (switchProfileAvailable) {
-        add(
-            key = "switch-profile",
-            title = stringResource(Res.string.compose_settings_root_switch_profile_title),
-            description = stringResource(Res.string.compose_settings_root_switch_profile_description),
-            page = accountPage,
-            section = stringResource(Res.string.compose_settings_root_account_section),
-            category = accountCategory,
-            icon = Icons.Rounded.People,
-            target = SettingsSearchTarget.SwitchProfile,
-        )
-    }
     addPage(
         page = SettingsPage.Account,
         key = "account",
@@ -407,16 +393,6 @@ internal fun settingsSearchEntries(
         pageLabel = layoutPage,
         section = stringResource(Res.string.settings_appearance_section_display),
         icon = Icons.Rounded.Language,
-    )
-    addRow(
-        page = SettingsPage.Advanced,
-        key = "remember-last-profile",
-        title = stringResource(Res.string.settings_advanced_remember_last_profile),
-        description = stringResource(Res.string.settings_advanced_remember_last_profile_description),
-        pageLabel = advancedPage,
-        section = stringResource(Res.string.settings_advanced_section_startup),
-        category = advancedCategory,
-        icon = Icons.Rounded.Tune,
     )
     if (DesktopRendererSettings.isSupported) {
         addRow(

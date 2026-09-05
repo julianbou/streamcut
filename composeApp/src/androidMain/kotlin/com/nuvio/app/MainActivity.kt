@@ -40,9 +40,6 @@ import com.nuvio.app.features.player.PipRemoteActionReceiver
 import com.nuvio.app.features.p2p.P2pSettingsStorage
 import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.plugins.PluginStorage
-import com.nuvio.app.features.profiles.AvatarStorage
-import com.nuvio.app.features.profiles.ProfilePinCacheStorage
-import com.nuvio.app.features.profiles.ProfileStorage
 import com.nuvio.app.features.details.SeasonViewModeStorage
 import com.nuvio.app.features.search.SearchHistoryStorage
 import com.nuvio.app.features.settings.SentrySettingsStorage
@@ -99,9 +96,6 @@ open class MainActivity : AppCompatActivity() {
         P2pStreamingEngine.initialize(applicationContext)
         ExternalPlayerPlatform.initialize(applicationContext)
         SubtitleFileCache.initialize(applicationContext)
-        ProfileStorage.initialize(applicationContext)
-        AvatarStorage.initialize(applicationContext)
-        ProfilePinCacheStorage.initialize(applicationContext)
         MemberAssetStorage.initialize(applicationContext)
         SearchHistoryStorage.initialize(applicationContext)
         SeasonViewModeStorage.initialize(applicationContext)

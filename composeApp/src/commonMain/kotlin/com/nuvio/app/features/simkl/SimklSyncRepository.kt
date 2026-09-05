@@ -1,7 +1,7 @@
 package com.nuvio.app.features.simkl
 
 import co.touchlab.kermit.Logger
-import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.tracking.TrackingProfileStore
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
@@ -86,7 +86,7 @@ object SimklSyncRepository : TrackingProfileStore {
         ensureLoaded()
         val requestId = refreshRequestSequence.incrementAndGet()
         val requestedGeneration = profileGeneration
-        val requestedProfileId = ProfileRepository.activeProfileId
+        val requestedProfileId = ProfileScopedKey.ScopeId
         val before = _state.value
         SimklWatchDiagnostics.logRefreshRequest(
             requestId = requestId,
@@ -137,14 +137,14 @@ object SimklSyncRepository : TrackingProfileStore {
         )
         val completed = _state.value
         return requestedGeneration == profileGeneration &&
-            requestedProfileId == ProfileRepository.activeProfileId &&
+            requestedProfileId == ProfileScopedKey.ScopeId &&
             SimklAuthRepository.isAuthenticated.value &&
             completed.hasLoaded &&
             completed.errorMessage == null
     }
 
     private suspend fun refreshSnapshot(generation: Long) = snapshotMutex.withLock {
-        val profileId = ProfileRepository.activeProfileId
+        val profileId = ProfileScopedKey.ScopeId
         val previous = _state.value
         _state.value = previous.copy(isLoading = true, errorMessage = null)
 
@@ -154,7 +154,7 @@ object SimklSyncRepository : TrackingProfileStore {
             throw error
         } catch (error: Throwable) {
             log.w { "Simkl sync failed: ${error.message}" }
-            if (generation == profileGeneration && profileId == ProfileRepository.activeProfileId) {
+            if (generation == profileGeneration && profileId == ProfileScopedKey.ScopeId) {
                 _state.value = previous.copy(
                     isLoading = false,
                     hasLoaded = true,
@@ -164,11 +164,11 @@ object SimklSyncRepository : TrackingProfileStore {
             return@withLock
         }
 
-        if (generation != profileGeneration || profileId != ProfileRepository.activeProfileId) {
+        if (generation != profileGeneration || profileId != ProfileScopedKey.ScopeId) {
             return@withLock
         }
         SimklAuthRepository.synchronizeUserSettings(result.activities?.settings?.all)
-        if (generation != profileGeneration || profileId != ProfileRepository.activeProfileId) {
+        if (generation != profileGeneration || profileId != ProfileScopedKey.ScopeId) {
             return@withLock
         }
         SimklSyncStorage.savePayload(json.encodeToString(result))
@@ -196,9 +196,9 @@ object SimklSyncRepository : TrackingProfileStore {
     internal suspend fun commitScrobble(result: SimklScrobbleResult) {
         ensureLoaded()
         val generation = profileGeneration
-        val profileId = ProfileRepository.activeProfileId
+        val profileId = ProfileScopedKey.ScopeId
         snapshotMutex.withLock {
-            if (generation != profileGeneration || profileId != ProfileRepository.activeProfileId) {
+            if (generation != profileGeneration || profileId != ProfileScopedKey.ScopeId) {
                 return@withLock
             }
             val current = _state.value
@@ -208,7 +208,7 @@ object SimklSyncRepository : TrackingProfileStore {
             )
             if (snapshot == current.snapshot) return@withLock
             SimklSyncStorage.savePayload(json.encodeToString(snapshot))
-            if (generation == profileGeneration && profileId == ProfileRepository.activeProfileId) {
+            if (generation == profileGeneration && profileId == ProfileScopedKey.ScopeId) {
                 _state.value = current.copy(snapshot = snapshot)
                 SimklWatchDiagnostics.logSnapshot(stage = "scrobble-commit", snapshot = snapshot)
             }
@@ -218,9 +218,9 @@ object SimklSyncRepository : TrackingProfileStore {
     internal suspend fun commitMutation(receipt: SimklMutationReceipt) {
         ensureLoaded()
         val generation = profileGeneration
-        val profileId = ProfileRepository.activeProfileId
+        val profileId = ProfileScopedKey.ScopeId
         snapshotMutex.withLock {
-            if (generation != profileGeneration || profileId != ProfileRepository.activeProfileId) {
+            if (generation != profileGeneration || profileId != ProfileScopedKey.ScopeId) {
                 return@withLock
             }
             val current = _state.value
@@ -230,7 +230,7 @@ object SimklSyncRepository : TrackingProfileStore {
             )
             if (snapshot == current.snapshot) return@withLock
             SimklSyncStorage.savePayload(json.encodeToString(snapshot))
-            if (generation == profileGeneration && profileId == ProfileRepository.activeProfileId) {
+            if (generation == profileGeneration && profileId == ProfileScopedKey.ScopeId) {
                 _state.value = current.copy(snapshot = snapshot)
                 SimklWatchDiagnostics.logSnapshot(stage = "mutation-commit", snapshot = snapshot)
             }

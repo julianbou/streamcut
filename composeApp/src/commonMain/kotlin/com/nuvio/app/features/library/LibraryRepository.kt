@@ -3,13 +3,13 @@ package com.nuvio.app.features.library
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
 import com.nuvio.app.features.library.sync.LibrarySyncAdapter
 import com.nuvio.app.features.library.sync.SupabaseLibrarySyncAdapter
 import com.nuvio.app.features.library.sync.consumeCursorPages
 import com.nuvio.app.features.library.sync.libraryDeltaPageSize
 import com.nuvio.app.features.library.sync.librarySnapshotPageSize
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingLibraryProvider
 import com.nuvio.app.features.tracking.TrackingLibraryTab
 import com.nuvio.app.features.tracking.TrackingLibraryTabKind
@@ -106,7 +106,7 @@ object LibraryRepository {
         TrackingSettingsRepository.ensureLoaded()
         TrackingProviderRegistry.libraryProviders().forEach(TrackingLibraryProvider::ensureLoaded)
         while (true) {
-            val activeProfileId = ProfileRepository.activeProfileId
+            val activeProfileId = ProfileScopedKey.ScopeId
             val snapshot = localState.snapshot()
             if (snapshot.hasLoaded && snapshot.token.profileId == activeProfileId) break
             loadFromDisk(activeProfileId)
@@ -149,7 +149,7 @@ object LibraryRepository {
     private fun loadFromDisk(profileId: Int): Boolean {
         var shouldPublish = false
         val loaded = synchronized(loadLock) {
-            if (ProfileRepository.activeProfileId != profileId) return@synchronized false
+            if (ProfileScopedKey.ScopeId != profileId) return@synchronized false
             val current = localState.snapshot()
             if (current.hasLoaded && current.token.profileId == profileId) {
                 return@synchronized true
@@ -174,7 +174,7 @@ object LibraryRepository {
 
         return localState.completeProfileLoad(
             token = token,
-            activeProfileId = ProfileRepository.activeProfileId,
+            activeProfileId = ProfileScopedKey.ScopeId,
             items = storedPayload.items,
             deltaCursorEventId = storedPayload.deltaCursorEventId,
             deltaInitialized = storedPayload.deltaInitialized,
@@ -278,14 +278,14 @@ object LibraryRepository {
     }
 
     private fun activeOperationToken(profileId: Int): LibraryProfileToken? {
-        if (ProfileRepository.activeProfileId != profileId) return null
+        if (ProfileScopedKey.ScopeId != profileId) return null
         if (!loadFromDisk(profileId)) return null
         return localState.currentTokenIfLoaded(profileId)
-            ?.takeIf { ProfileRepository.activeProfileId == profileId }
+            ?.takeIf { ProfileScopedKey.ScopeId == profileId }
     }
 
     private fun isActiveOperation(token: LibraryProfileToken): Boolean =
-        localState.isCurrent(token) && ProfileRepository.activeProfileId == token.profileId
+        localState.isCurrent(token) && ProfileScopedKey.ScopeId == token.profileId
 
     suspend fun toggleSaved(
         item: LibraryItem,
