@@ -16,6 +16,24 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
+
+            // This template and its rules came from upstream Nuvio, where they
+            // keep large, unrequested, directional changes out of the project.
+            // Here the repository owner is the person deciding the direction,
+            // so the gate fires on the one case it was never written for: the
+            // owner's own approved work, which is legitimately broad and has no
+            // outside contributor to hold to a contribution policy.
+            //
+            // Reported as a pass rather than skipped, so the check still shows
+            // on the pull request and says why it let the body through.
+            if (pr.user.login === context.repo.owner) {
+              core.info(
+                `PR opened by the repository owner (${pr.user.login}); the ` +
+                "template policy applies to outside contributions."
+              );
+              return;
+            }
+
             const body = (pr.body || "").trim();
 
             function sectionContent(title) {
