@@ -1,0 +1,10 @@
+{
+  "exclude": [
+    "MPVKit/",
+    "libass-android/",
+    "**/*.xcodeproj/**"
+  ],
+  "include": [
+    "vendor/"
+  ]
+}
