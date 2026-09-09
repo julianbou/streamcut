@@ -11,12 +11,13 @@ object PlayerSubtitleCueParser {
             .trim()
         if (normalized.isBlank()) return emptyList()
 
-        return when (detectSubtitleFormat(sourceUrl, normalized)) {
+        val cues = when (detectSubtitleFormat(sourceUrl, normalized)) {
             SubtitleFormatHint.WebVtt -> parseWebVtt(normalized)
             SubtitleFormatHint.Ass -> parseAss(normalized)
             SubtitleFormatHint.Ttml -> parseTtml(normalized)
             SubtitleFormatHint.Srt -> parseSrt(normalized)
         }
+        return fillMissingEnds(cues)
     }
 
     private enum class SubtitleFormatHint {
@@ -56,10 +57,11 @@ object PlayerSubtitleCueParser {
                 val timingIndex = lines.indexOfFirst { it.contains("-->") }
                 if (timingIndex < 0) return@mapNotNull null
                 val start = parseCueStart(lines[timingIndex]) ?: return@mapNotNull null
+                val end = parseCueEnd(lines[timingIndex])
                 val body = lines.drop(timingIndex + 1)
                     .joinToString(" ")
                     .cleanSubtitleCueText()
-                if (body.isBlank()) null else SubtitleSyncCue(start, body)
+                if (body.isBlank()) null else SubtitleSyncCue(start, body, end ?: start)
             }
             .sortedBy { it.startTimeMs }
 
@@ -75,10 +77,11 @@ object PlayerSubtitleCueParser {
                 val timingIndex = lines.indexOfFirst { it.contains("-->") }
                 if (timingIndex < 0) return@mapNotNull null
                 val start = parseCueStart(lines[timingIndex]) ?: return@mapNotNull null
+                val end = parseCueEnd(lines[timingIndex])
                 val body = lines.drop(timingIndex + 1)
                     .joinToString(" ")
                     .cleanSubtitleCueText()
-                if (body.isBlank()) null else SubtitleSyncCue(start, body)
+                if (body.isBlank()) null else SubtitleSyncCue(start, body, end ?: start)
             }
             .sortedBy { it.startTimeMs }
 
@@ -118,14 +121,16 @@ object PlayerSubtitleCueParser {
             .split(',', limit = fields.ifEmpty { defaultAssFormatFields }.size)
             .map { it.trim() }
         val startIndex = fields.indexOfField("Start").takeIf { it >= 0 } ?: 1
+        val endIndex = fields.indexOfField("End").takeIf { it >= 0 } ?: 2
         val textIndex = fields.indexOfField("Text").takeIf { it >= 0 } ?: 9
 
         if (parts.size <= startIndex || parts.size <= textIndex) return null
         val start = parseTimestamp(parts[startIndex]) ?: return null
+        val end = parts.getOrNull(endIndex)?.let { parseTimestamp(it) }
         val body = parts[textIndex]
             .cleanAssCueText()
             .cleanSubtitleCueText()
-        return if (body.isBlank()) null else SubtitleSyncCue(start, body)
+        return if (body.isBlank()) null else SubtitleSyncCue(start, body, end ?: start)
     }
 
     private fun parseTtml(text: String): List<SubtitleSyncCue> =
@@ -137,10 +142,12 @@ object PlayerSubtitleCueParser {
                     ?: attrs.attributeValue("start")
                     ?: return@mapNotNull null
                 val start = parseTtmlTimestamp(startRaw) ?: return@mapNotNull null
+                val end = attrs.attributeValue("end")?.let { parseTtmlTimestamp(it) }
+                    ?: attrs.attributeValue("dur")?.let { parseTtmlTimestamp(it) }?.let { start + it }
                 val body = match.groupValues[2]
                     .replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), " ")
                     .cleanSubtitleCueText()
-                if (body.isBlank()) null else SubtitleSyncCue(start, body)
+                if (body.isBlank()) null else SubtitleSyncCue(start, body, end ?: start)
             }
             .sortedBy { it.startTimeMs }
             .toList()
@@ -149,6 +156,33 @@ object PlayerSubtitleCueParser {
         val startPart = timingLine.substringBefore("-->").trim()
         return parseTimestamp(startPart)
     }
+
+    private fun parseCueEnd(timingLine: String): Long? {
+        if (!timingLine.contains("-->")) return null
+        val endPart = timingLine.substringAfter("-->").trim()
+        return parseTimestamp(endPart)
+    }
+
+    /** Shortest and longest a cue is allowed to be once its end has been guessed. */
+    private const val MIN_CUE_DURATION_MS = 700L
+    private const val MAX_CUE_DURATION_MS = 7_000L
+
+    /**
+     * Some sources omit the end time, or give one at or before the start. A cue
+     * without a usable end cannot define a clip, so fall back to the next cue's
+     * start -- capped, so one dangling cue at the end of a reel does not claim the
+     * rest of the film.
+     */
+    private fun fillMissingEnds(cues: List<SubtitleSyncCue>): List<SubtitleSyncCue> =
+        cues.mapIndexed { index, cue ->
+            val capped = cue.startTimeMs + MAX_CUE_DURATION_MS
+            if (cue.endTimeMs > cue.startTimeMs) {
+                cue.copy(endTimeMs = minOf(cue.endTimeMs, capped))
+            } else {
+                val guess = cues.getOrNull(index + 1)?.startTimeMs ?: capped
+                cue.copy(endTimeMs = max(cue.startTimeMs + MIN_CUE_DURATION_MS, minOf(guess, capped)))
+            }
+        }
 
     private fun parseTimestamp(raw: String): Long? {
         val cleaned = raw.substringBefore(' ').replace(',', '.')

@@ -1094,6 +1094,10 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("subtitleAutoSyncErrorMessage", subtitleAutoSyncErrorMessage)
         append(',')
+        appendJsonField("subtitleSearchOpen", subtitleSearchOpen)
+        append(',')
+        appendJsonArrayField("subtitleSearchCues", subtitleSearchCues) { appendSubtitleCueItemJson(it) }
+        append(',')
         appendJsonField("subtitleStyle", subtitleStyle)
         append(',')
         appendJsonArrayField("subtitleColorSwatches", SubtitleColorSwatches.map { it.toStorageHexString() }) { append(it.toJsonString()) }
@@ -1331,6 +1335,8 @@ private fun StringBuilder.appendSubtitleCueItemJson(item: PlayerControlSubtitleC
     appendJsonField("index", item.index)
     append(',')
     appendJsonField("timeMs", item.timeMs)
+    append(',')
+    appendJsonField("endMs", item.endMs)
     append(',')
     appendJsonField("timeLabel", item.timeLabel)
     append(',')

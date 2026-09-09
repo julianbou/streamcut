@@ -248,6 +248,14 @@ data class PlayerControlsState(
     val subtitleAutoSyncCues: List<PlayerControlSubtitleCueItem> = emptyList(),
     val subtitleAutoSyncIsLoading: Boolean = false,
     val subtitleAutoSyncErrorMessage: String = "",
+    /**
+     * Phrase search over the film's subtitles. The whole cue list has to reach the
+     * page because matching happens there -- the control bridge carries only
+     * numbers, so the typed query never crosses it. The list is therefore populated
+     * ONLY while the panel is open, and is empty the rest of the time.
+     */
+    val subtitleSearchOpen: Boolean = false,
+    val subtitleSearchCues: List<PlayerControlSubtitleCueItem> = emptyList(),
     val closeModalsToken: Long = 0L,
 )
 
@@ -333,6 +341,9 @@ data class PlayerControlSubtitleOptionItem(
 data class PlayerControlSubtitleCueItem(
     val index: Int = 0,
     val timeMs: Long = 0L,
+    /** When the line leaves the screen. Auto-sync leaves this at 0; search needs it
+     *  to turn a matched line into a clip range. */
+    val endMs: Long = 0L,
     val timeLabel: String = "",
     val text: String = "",
 )
