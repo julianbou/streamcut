@@ -428,6 +428,14 @@ const clipSearchToggle = () => {
 
 if (clipSearchButton) clipSearchButton.addEventListener("click", clipSearchToggle);
 
+// #playerRoot turns every wheel event into a volume change and preventDefaults it,
+// which over a scrollable list means the list cannot scroll AND the volume jumps.
+// Stopping propagation inside the panel leaves the browser's own scrolling intact;
+// no preventDefault here, or the scroll would be cancelled again.
+if (clipSearchPanel) {
+  clipSearchPanel.addEventListener("wheel", event => event.stopPropagation(), { passive: true });
+}
+
 if (clipSearchInput) {
   clipSearchInput.addEventListener("input", () => {
     clipSearchQuery = clipSearchInput.value;
