@@ -262,6 +262,8 @@ internal object NativePlayerBridge {
             // upstream counterparts (see controls.html).
             "clip-controls.css" to readResourceBytes("/player-ui/clip-controls.css"),
             "clip-controls.js" to readResourceBytes("/player-ui/clip-controls.js"),
+            "clip-search.css" to readResourceBytes("/player-ui/clip-search.css"),
+            "clip-search.js" to readResourceBytes("/player-ui/clip-search.js"),
             "fonts/jetbrains_sans_regular.ttf" to readResourceBytes(
                 "/composeResources/nuvio.composeapp.generated.resources/font/jetbrains_sans_regular.ttf",
             ),
