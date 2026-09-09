@@ -16,6 +16,12 @@ package com.nuvio.app.features.clip
  * [aspect] reshapes the frame by centre-cropping; [targetSizeMb] caps the
  * output, trading quality for a file that fits whatever it is being sent
  * through. 0 means no cap, which is the default and the better clip.
+ *
+ * [folderSegments] are folders to create under the clips folder and write into,
+ * outermost first -- see [ClipFolderLayout]. Empty writes flat, which is the
+ * default. Resolved when the job is queued rather than when it runs, so a clip
+ * already in the queue lands where it did when it was started even if the
+ * setting is changed while it waits.
  */
 internal data class ClipExtractRequest(
     val sourceUrl: String,
@@ -27,6 +33,7 @@ internal data class ClipExtractRequest(
     val subtitle: ClipSubtitleSelection? = null,
     val aspect: ClipAspect = ClipAspect.Source,
     val targetSizeMb: Int = 0,
+    val folderSegments: List<String> = emptyList(),
 )
 
 internal interface ClipTaskHandle {

@@ -22,10 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.nuvio
 import com.nuvio.app.features.library.LibrarySourceMode
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.simkl.SimklAnimeIdPreference
 import com.nuvio.app.features.simkl.SimklAuthUiState
 import com.nuvio.app.features.simkl.SimklConnectionMode
@@ -240,7 +240,7 @@ private fun TrackingDataSources(
                 message = stringResource(Res.string.settings_tracking_progress_refresh_failed),
                 onRetry = {
                     scope.launch {
-                        WatchProgressSourceCoordinator.refreshActiveSource(ProfileRepository.activeProfileId)
+                        WatchProgressSourceCoordinator.refreshActiveSource(ProfileScopedKey.ScopeId)
                     }
                 },
             )
@@ -266,7 +266,7 @@ private fun TrackingDataSources(
             onSelected = { source ->
                 scope.launch {
                     WatchProgressSourceCoordinator.selectSource(
-                        profileId = ProfileRepository.activeProfileId,
+                        profileId = ProfileScopedKey.ScopeId,
                         source = source,
                     )
                 }

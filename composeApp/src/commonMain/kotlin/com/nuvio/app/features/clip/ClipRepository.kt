@@ -132,6 +132,7 @@ object ClipRepository {
             subtitle = subtitle,
             aspect = aspect,
             targetSizeMb = targetSizeMb,
+            folderSegments = ClipGroupingSettings.folderSegmentsFor(content),
         )
         onMain {
             // A double-click on Export would otherwise encode the same range

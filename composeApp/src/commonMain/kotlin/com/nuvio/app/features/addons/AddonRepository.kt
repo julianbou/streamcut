@@ -2,8 +2,8 @@ package com.nuvio.app.features.addons
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.sync.putSyncOriginClientId
-import com.nuvio.app.features.profiles.ProfileRepository
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.rpc
@@ -57,7 +57,7 @@ object AddonRepository {
     private val activeRefreshJobs = mutableMapOf<String, Job>()
 
     fun initialize() {
-        val effectiveProfileId = resolveEffectiveProfileId(ProfileRepository.activeProfileId)
+        val effectiveProfileId = ProfileScopedKey.ScopeId
         if (initialized) return
         initialized = true
         currentProfileId = effectiveProfileId
@@ -88,7 +88,7 @@ object AddonRepository {
     }
 
     fun onProfileChanged(profileId: Int) {
-        val effectiveProfileId = resolveEffectiveProfileId(profileId)
+        val effectiveProfileId = profileId
         if (effectiveProfileId == currentProfileId && initialized) return
         cancelActiveRefreshes()
         currentProfileId = effectiveProfileId
@@ -106,7 +106,7 @@ object AddonRepository {
     }
 
     suspend fun pullFromServer(profileId: Int) {
-        currentProfileId = resolveEffectiveProfileId(profileId)
+        currentProfileId = profileId
         log.i { "pullFromServer() — profileId=$profileId, initialized=$initialized, pulledFromServer=$pulledFromServer" }
         runCatching {
             val rows = SupabaseProvider.client.postgrest
@@ -225,9 +225,6 @@ object AddonRepository {
     }
 
     suspend fun addAddon(rawUrl: String): AddAddonResult {
-        if (isUsingPrimaryAddonsFromSecondaryProfile()) {
-            return AddAddonResult.Error(getString(Res.string.profile_primary_addons_required))
-        }
         log.i { "addAddon() — rawUrl=$rawUrl" }
         val manifestUrl = try {
             normalizeManifestUrl(rawUrl)
@@ -267,7 +264,6 @@ object AddonRepository {
     }
 
     fun removeAddon(manifestUrl: String) {
-        if (isUsingPrimaryAddonsFromSecondaryProfile()) return
         log.i { "removeAddon() — $manifestUrl" }
         _uiState.update { current ->
             current.copy(
@@ -279,7 +275,6 @@ object AddonRepository {
     }
 
     fun moveAddon(fromIndex: Int, toIndex: Int) {
-        if (isUsingPrimaryAddonsFromSecondaryProfile()) return
         _uiState.update { current ->
             val addons = current.addons
             if (
@@ -300,7 +295,6 @@ object AddonRepository {
     }
 
     fun setAddonEnabled(manifestUrl: String, enabled: Boolean) {
-        if (isUsingPrimaryAddonsFromSecondaryProfile()) return
         var shouldRefresh = false
         _uiState.update { current ->
             current.copy(
@@ -389,9 +383,6 @@ object AddonRepository {
     private fun pushToServer() {
         scope.launch {
             runCatching {
-                if (isUsingPrimaryAddonsFromSecondaryProfile()) {
-                    return@runCatching
-                }
                 val profileId = currentProfileId
                 val addons = _uiState.value.addons
                     .distinctBy { it.manifestUrl }
@@ -453,16 +444,6 @@ object AddonRepository {
     private fun cancelActiveRefreshes() {
         activeRefreshJobs.values.forEach(Job::cancel)
         activeRefreshJobs.clear()
-    }
-
-    private fun resolveEffectiveProfileId(profileId: Int): Int {
-        val active = ProfileRepository.state.value.activeProfile
-        return if (active != null && active.profileIndex != 1 && active.usesPrimaryAddons) 1 else profileId
-    }
-
-    private fun isUsingPrimaryAddonsFromSecondaryProfile(): Boolean {
-        val active = ProfileRepository.state.value.activeProfile
-        return active != null && active.profileIndex != 1 && active.usesPrimaryAddons
     }
 }
 

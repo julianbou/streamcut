@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.collection.CollectionSyncService
@@ -11,7 +12,6 @@ import com.nuvio.app.features.home.HomeCatalogSettingsSyncService
 import com.nuvio.app.features.library.LibrarySourceMode
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.plugins.PluginRepository
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
 import com.nuvio.app.features.tracking.TrackingSettingsRepository
 import com.nuvio.app.features.tracking.WatchProgressSource
@@ -284,7 +284,7 @@ object SyncManager {
                         delay(FOREGROUND_PULL_DELAY_MS)
                     }
                     if (!force && hasRecentFullPull(profileId)) return@launch
-                    if (ProfileRepository.activeProfileId != profileId) return@launch
+                    if (ProfileScopedKey.ScopeId != profileId) return@launch
                     pullForegroundForProfile(profileId)
                 } finally {
                     synchronized(pullStateLock) {
@@ -314,8 +314,6 @@ object SyncManager {
     private suspend fun pullForegroundForProfile(profileId: Int) {
         log.i { "Foreground sync started profile=$profileId" }
 
-        runCatching { ProfileRepository.pullProfiles() }
-            .onFailure { log.e(it) { "Foreground profiles pull failed" } }
         val syncResult = runOrderedProfileSync(
             profileId = profileId,
             pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
@@ -346,7 +344,7 @@ object SyncManager {
     ) {
         val authState = AuthRepository.state.value
         if (authState !is AuthState.Authenticated || authState.isAnonymous) return
-        if (ProfileRepository.activeProfileId != profileId) return
+        if (ProfileScopedKey.ScopeId != profileId) return
 
         val result = fullSyncRequestGate.launch(
             scope = accountScopeSnapshot(),
@@ -354,7 +352,7 @@ object SyncManager {
         ) {
             val currentAuthState = AuthRepository.state.value
             if (currentAuthState !is AuthState.Authenticated || currentAuthState.isAnonymous) return@launch
-            if (ProfileRepository.activeProfileId != profileId) return@launch
+            if (ProfileScopedKey.ScopeId != profileId) return@launch
 
             log.i { "Full profile sync started profile=$profileId reason=$reason" }
             WatchProgressSourceCoordinator.pauseAutomaticTransitions()
@@ -415,7 +413,7 @@ object SyncManager {
                 if (currentAuthState !is AuthState.Authenticated || currentAuthState.isAnonymous) {
                     continue
                 }
-                if (ProfileRepository.activeProfileId != profileId) {
+                if (ProfileScopedKey.ScopeId != profileId) {
                     continue
                 }
 

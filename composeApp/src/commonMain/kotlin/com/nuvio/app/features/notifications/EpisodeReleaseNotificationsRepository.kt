@@ -2,12 +2,12 @@ package com.nuvio.app.features.notifications
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.deeplink.buildMetaDeepLinkUrl
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.details.MetaDetailsRepository
 import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibraryRepository
 import com.nuvio.app.features.library.LibraryUiState
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.core.time.EpisodeReleaseDatePlatform
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
 import kotlinx.coroutines.CoroutineScope
@@ -206,7 +206,7 @@ object EpisodeReleaseNotificationsRepository {
             }
 
             val request = EpisodeReleaseNotificationRequest(
-                requestId = "episode-release-test-${ProfileRepository.activeProfileId}-${EpisodeReleaseDatePlatform.nowEpochMs()}",
+                requestId = "episode-release-test-${ProfileScopedKey.ScopeId}-${EpisodeReleaseDatePlatform.nowEpochMs()}",
                 notificationTitle = target.name,
                 notificationBody = getString(Res.string.notifications_test_preview_body),
                 releaseDateIso = CurrentDateProvider.todayIsoDate(),
@@ -450,7 +450,7 @@ object EpisodeReleaseNotificationsRepository {
 
             EpisodeReleaseNotificationRequest(
                 requestId = buildEpisodeReleaseNotificationId(
-                    profileId = ProfileRepository.activeProfileId,
+                    profileId = ProfileScopedKey.ScopeId,
                     contentType = trackedShow.contentType,
                     contentId = trackedShow.contentId,
                     episodeId = episode.id,

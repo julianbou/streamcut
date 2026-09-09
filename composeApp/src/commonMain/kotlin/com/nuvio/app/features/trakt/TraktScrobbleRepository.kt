@@ -2,8 +2,8 @@ package com.nuvio.app.features.trakt
 
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.build.AppVersionPolicy
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.addons.httpRequestRaw
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingMediaKind
 import com.nuvio.app.features.tracking.TrackingMediaReference
 import com.nuvio.app.features.tracking.TrackingProviderId
@@ -225,9 +225,9 @@ internal object TraktScrobbleRepository : TrackingScrobbler {
         item: TraktScrobbleItem,
         progressPercent: Float,
     ) {
-        if (ProfileRepository.activeProfileId != profileId) return
+        if (ProfileScopedKey.ScopeId != profileId) return
         val headers = TraktAuthRepository.authorizedHeaders() ?: return
-        if (ProfileRepository.activeProfileId != profileId) return
+        if (ProfileScopedKey.ScopeId != profileId) return
         val clampedProgress = progressPercent.coerceIn(0f, 100f)
         if (shouldSkip(profileId, action, item.itemKey, clampedProgress)) return
 

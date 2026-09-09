@@ -12,11 +12,7 @@ private const val nativeTabAccentColorKey = "NuvioNativeTabAccentColor"
 private const val nativeTabTitleHomeKey = "NuvioNativeTabTitleHome"
 private const val nativeTabTitleSearchKey = "NuvioNativeTabTitleSearch"
 private const val nativeTabTitleLibraryKey = "NuvioNativeTabTitleLibrary"
-private const val nativeTabTitleProfileKey = "NuvioNativeTabTitleProfile"
-private const val nativeProfileNameKey = "NuvioNativeProfileName"
-private const val nativeProfileAvatarColorKey = "NuvioNativeProfileAvatarColor"
-private const val nativeProfileAvatarUrlKey = "NuvioNativeProfileAvatarURL"
-private const val nativeProfileAvatarBackgroundColorKey = "NuvioNativeProfileAvatarBackgroundColor"
+private const val nativeTabTitleSettingsKey = "NuvioNativeTabTitleSettings"
 private const val nativeTabChromeDidChangeNotification = "NuvioNativeTabChromeDidChange"
 
 internal actual fun isLiquidGlassNativeTabBarSupported(): Boolean {
@@ -46,25 +42,12 @@ internal actual fun publishNativeTabTitles(
     home: String,
     search: String,
     library: String,
-    profile: String,
+    settings: String,
 ) {
     publishString(nativeTabTitleHomeKey, home)
     publishString(nativeTabTitleSearchKey, search)
     publishString(nativeTabTitleLibraryKey, library)
-    publishString(nativeTabTitleProfileKey, profile)
-    notifyNativeTabChromeChanged()
-}
-
-internal actual fun publishNativeProfileTabIcon(
-    name: String?,
-    avatarColorHex: String?,
-    avatarImageUrl: String?,
-    avatarBackgroundColorHex: String?,
-) {
-    publishString(nativeProfileNameKey, name)
-    publishString(nativeProfileAvatarColorKey, avatarColorHex)
-    publishString(nativeProfileAvatarUrlKey, avatarImageUrl)
-    publishString(nativeProfileAvatarBackgroundColorKey, avatarBackgroundColorHex)
+    publishString(nativeTabTitleSettingsKey, settings)
     notifyNativeTabChromeChanged()
 }
 

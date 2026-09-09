@@ -1,8 +1,8 @@
 package com.nuvio.app.features.simkl
 
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.library.LibraryItem
 import com.nuvio.app.features.library.LibrarySection
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingLibraryProvider
 import com.nuvio.app.features.tracking.TrackingLibrarySnapshot
 import com.nuvio.app.features.tracking.TrackingLibraryTab
@@ -75,7 +75,7 @@ object SimklLibraryRepository {
         desiredMembership: Map<String, Boolean>,
         destructiveRemovalConfirmed: Boolean = false,
     ): TrackingMembershipResolution? {
-        if (profileId != ProfileRepository.activeProfileId) return null
+        if (profileId != ProfileScopedKey.ScopeId) return null
         ensureLoaded()
         val desiredStatuses = simklLibraryStatusDefinitions.filter { definition ->
             desiredMembership[definition.key] == true

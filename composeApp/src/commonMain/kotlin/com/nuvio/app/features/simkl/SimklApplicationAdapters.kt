@@ -1,7 +1,7 @@
 package com.nuvio.app.features.simkl
 
 import co.touchlab.kermit.Logger
-import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.tracking.TrackingHistoryItem
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.TrackingProgressProvider
@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 object SimklWatchedSyncAdapter : TrackingWatchedProvider {
     override val providerId: TrackingProviderId = TrackingProviderId.SIMKL
     override suspend fun pull(profileId: Int, pageSize: Int): List<WatchedItem> {
-        if (profileId != ProfileRepository.activeProfileId) return emptyList()
+        if (profileId != ProfileScopedKey.ScopeId) return emptyList()
         SimklSyncRepository.refresh(
             intent = TrackingRefreshIntent.AUTOMATIC,
             origin = SimklRefreshOrigin.WATCHED_ITEMS,
@@ -48,7 +48,7 @@ object SimklWatchedSyncAdapter : TrackingWatchedProvider {
     }
 
     override suspend fun pullExtraWatchedKeys(profileId: Int): Set<String> {
-        if (profileId != ProfileRepository.activeProfileId) return emptySet()
+        if (profileId != ProfileScopedKey.ScopeId) return emptySet()
         SimklSyncRepository.refresh(
             intent = TrackingRefreshIntent.AUTOMATIC,
             origin = SimklRefreshOrigin.WATCHED_ITEMS,
@@ -66,7 +66,7 @@ object SimklWatchedSyncAdapter : TrackingWatchedProvider {
             .distinctUntilChanged()
 
     override suspend fun push(profileId: Int, items: Collection<WatchedItem>) {
-        if (profileId != ProfileRepository.activeProfileId || items.isEmpty()) return
+        if (profileId != ProfileScopedKey.ScopeId || items.isEmpty()) return
         SimklSyncRepository.ensureLoaded()
         val snapshot = SimklSyncRepository.state.value.snapshot
         val historyItems = items.map { item ->
@@ -90,7 +90,7 @@ object SimklWatchedSyncAdapter : TrackingWatchedProvider {
     }
 
     override suspend fun delete(profileId: Int, items: Collection<WatchedItem>) {
-        if (profileId != ProfileRepository.activeProfileId || items.isEmpty()) return
+        if (profileId != ProfileScopedKey.ScopeId || items.isEmpty()) return
         val episodeItems = items.filter { item -> item.season != null && item.episode != null }
         if (episodeItems.isEmpty()) return
         // Optimistically mark video IDs as removed so fallback won't show them as watched

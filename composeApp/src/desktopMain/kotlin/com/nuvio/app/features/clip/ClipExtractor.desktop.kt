@@ -1061,14 +1061,16 @@ internal actual object ClipExtractor {
             dateLabel = stamp.date,
             timeLabel = stamp.time,
         )
-        var candidate = File(clipsDir, "$stem.mp4")
+        val directory = clipOutputDir(clipsDir, request.folderSegments)
+        var candidate = File(directory, "$stem.mp4")
         var index = 1
         while (candidate.exists()) {
-            candidate = File(clipsDir, "$stem ($index).mp4")
+            candidate = File(directory, "$stem ($index).mp4")
             index++
         }
         return candidate
     }
+
 
     /**
      * Which ffmpeg to cut with, chosen by what it can do rather than by where
@@ -1148,4 +1150,25 @@ internal actual object ClipExtractor {
         val seconds = parts[2].toDoubleOrNull() ?: return null
         return hours * 3600 + minutes * 60 + seconds
     }
+}
+
+/**
+ * The clips folder [root], or a folder inside it named after what the clip was
+ * cut from -- see [ClipFolderLayout].
+ *
+ * Falls back to [root] when the subfolder cannot be created: a read-only drive,
+ * or a name this filesystem refuses, should cost the user a tidy folder, not
+ * the clip they just waited five minutes for.
+ *
+ * File-level and internal rather than a private member, so the fallback can be
+ * tested against a real temporary directory without touching the user's own
+ * clips folder preference.
+ */
+internal fun clipOutputDir(root: File, segments: List<String>): File {
+    if (segments.isEmpty()) return root
+    val target = segments.fold(root) { parent, segment -> File(parent, segment) }
+    val usable = runCatching {
+        (target.exists() || target.mkdirs()) && target.isDirectory && target.canWrite()
+    }.getOrDefault(false)
+    return if (usable) target else root
 }

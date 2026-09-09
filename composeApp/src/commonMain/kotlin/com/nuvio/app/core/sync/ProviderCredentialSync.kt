@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
 import com.nuvio.app.core.network.SupabaseProvider
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.debrid.DebridProviders
 import com.nuvio.app.features.debrid.DebridSettings
 import com.nuvio.app.features.debrid.DebridSettingsRepository
@@ -11,7 +12,6 @@ import com.nuvio.app.features.mdblist.MdbListSettings
 import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.PlayerSettingsUiState
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tmdb.TmdbSettings
 import com.nuvio.app.features.tmdb.TmdbSettingsRepository
 import io.github.jan.supabase.postgrest.postgrest
@@ -162,14 +162,13 @@ object ProviderCredentialSync {
     }
 
     private fun observeCredentialSnapshots() = combine(
-        ProfileRepository.state,
         DebridSettingsRepository.uiState,
         TmdbSettingsRepository.uiState,
         MdbListSettingsRepository.uiState,
         PlayerSettingsRepository.uiState,
-    ) { _, debrid, tmdb, mdbList, player ->
+    ) { debrid, tmdb, mdbList, player ->
         buildSnapshot(
-            profileId = ProfileRepository.activeProfileId,
+            profileId = ProfileScopedKey.ScopeId,
             debrid = debrid,
             tmdb = tmdb,
             mdbList = mdbList,
@@ -178,7 +177,7 @@ object ProviderCredentialSync {
     }
 
     private fun currentSnapshot(profileId: Int): ProviderCredentialSnapshot {
-        check(ProfileRepository.activeProfileId == profileId)
+        check(ProfileScopedKey.ScopeId == profileId)
         val snapshot = buildSnapshot(
             profileId = profileId,
             debrid = DebridSettingsRepository.snapshot(),
@@ -186,7 +185,7 @@ object ProviderCredentialSync {
             mdbList = MdbListSettingsRepository.snapshot(),
             player = PlayerSettingsRepository.uiState.value,
         )
-        check(ProfileRepository.activeProfileId == profileId)
+        check(ProfileScopedKey.ScopeId == profileId)
         return snapshot
     }
 
@@ -297,7 +296,7 @@ object ProviderCredentialSync {
 
     private fun currentScope(profileId: Int): ProviderCredentialScope? {
         val state = AuthRepository.state.value as? AuthState.Authenticated ?: return null
-        if (state.isAnonymous || ProfileRepository.activeProfileId != profileId) return null
+        if (state.isAnonymous || ProfileScopedKey.ScopeId != profileId) return null
         return ProviderCredentialScope(state.userId, profileId)
     }
 

@@ -1,7 +1,7 @@
 package com.nuvio.app.features.tracking
 
 import co.touchlab.kermit.Logger
-import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.core.storage.ProfileScopedKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -20,7 +20,7 @@ object TrackingScrobbleCoordinator {
         action: TrackingScrobbleAction,
         event: TrackingScrobbleEvent,
     ): List<TrackingScrobbleFailure> {
-        if (profileId != ProfileRepository.activeProfileId) return emptyList()
+        if (profileId != ProfileScopedKey.ScopeId) return emptyList()
         TrackingProviderRegistry.ensureLoaded()
         val failures = dispatchTrackingScrobble(
             scrobblers = TrackingProviderRegistry.connectedScrobblers(),
@@ -41,7 +41,7 @@ object TrackingScrobbleCoordinator {
         action: TrackingScrobbleAction,
         event: TrackingScrobbleEvent,
     ): List<TrackingScrobbleFailure> {
-        if (profileId != ProfileRepository.activeProfileId) return emptyList()
+        if (profileId != ProfileScopedKey.ScopeId) return emptyList()
         TrackingProviderRegistry.ensureLoaded()
         val failures = dispatchTrackingSeekScrobble(
             scrobblers = TrackingProviderRegistry.connectedScrobblers(),

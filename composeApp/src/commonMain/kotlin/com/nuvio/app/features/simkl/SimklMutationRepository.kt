@@ -1,6 +1,6 @@
 package com.nuvio.app.features.simkl
 
-import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.tracking.TrackingEpisode
 import com.nuvio.app.features.tracking.TrackingExternalIds
 import com.nuvio.app.features.tracking.TrackingHistoryItem
@@ -206,7 +206,7 @@ object SimklMutationRepository : TrackingListWriter, TrackingHistoryWriter, Trac
         }
     }
 
-    private fun isActiveProfile(profileId: Int): Boolean = ProfileRepository.activeProfileId == profileId
+    private fun isActiveProfile(profileId: Int): Boolean = ProfileScopedKey.ScopeId == profileId
 }
 
 internal fun buildSimklListMutationBody(

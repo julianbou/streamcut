@@ -14,15 +14,20 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 
+/**
+ * The soft radial wash behind the launch overlay. It used to take the active
+ * profile's colour; with one user there is nothing to tint it by, so it keeps
+ * the hue that profile 1 always had.
+ */
 @Composable
-fun ProfileMeshBackground(
-    profileColor: Color,
+fun LaunchMeshBackground(
+    accentColor: Color = Color(0xFF1E88E5),
     modifier: Modifier = Modifier,
 ) {
     val animatedProfileColor by animateColorAsState(
-        targetValue = profileColor,
+        targetValue = accentColor,
         animationSpec = tween(durationMillis = 520),
-        label = "profileMeshBackgroundColor",
+        label = "launchMeshBackgroundColor",
     )
     val baseColor = Color.Black
     val primaryMeshColor = lerp(baseColor, animatedProfileColor, 0.58f)

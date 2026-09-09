@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.clip.ClipFilenameSettings
 import com.nuvio.app.features.clip.ClipFilenameTemplate
 import com.nuvio.app.features.clip.ClipFolderPicker
+import com.nuvio.app.features.clip.ClipGroupingSettings
 import com.nuvio.app.features.clip.ClipRepository
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.clip_action_cancel
@@ -44,6 +45,10 @@ import nuvio.composeapp.generated.resources.clip_settings_folder_default_format
 import nuvio.composeapp.generated.resources.clip_settings_folder_error
 import nuvio.composeapp.generated.resources.clip_settings_folder_reset_title
 import nuvio.composeapp.generated.resources.clip_settings_folder_title
+import nuvio.composeapp.generated.resources.clip_settings_group_description_off
+import nuvio.composeapp.generated.resources.clip_settings_group_description_on
+import nuvio.composeapp.generated.resources.clip_settings_group_example_format
+import nuvio.composeapp.generated.resources.clip_settings_group_title
 import nuvio.composeapp.generated.resources.clip_settings_section
 import org.jetbrains.compose.resources.stringResource
 
@@ -61,6 +66,7 @@ internal fun ClipsSettingsSection(isTablet: Boolean) {
     var outputDir by remember { mutableStateOf(ClipRepository.outputDirPath()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var template by remember { mutableStateOf(ClipFilenameSettings.template()) }
+    var groupByTitle by remember { mutableStateOf(ClipGroupingSettings.isEnabled()) }
     var editingTemplate by remember { mutableStateOf<String?>(null) }
     val defaultDir = remember { ClipRepository.defaultOutputDirPath() }
     val isDefault = outputDir == defaultDir
@@ -106,6 +112,28 @@ internal fun ClipsSettingsSection(isTablet: Boolean) {
                     },
                 )
             }
+            SettingsGroupDivider(isTablet = isTablet)
+            SettingsSwitchRow(
+                title = stringResource(Res.string.clip_settings_group_title),
+                // What the setting does, then what it would produce: the rule
+                // alone does not answer "so where does my next clip go".
+                description = stringResource(
+                    if (groupByTitle) {
+                        Res.string.clip_settings_group_description_on
+                    } else {
+                        Res.string.clip_settings_group_description_off
+                    },
+                ) + "\n" + stringResource(
+                    Res.string.clip_settings_group_example_format,
+                    ClipGroupingSettings.preview(groupByTitle),
+                ),
+                checked = groupByTitle,
+                isTablet = isTablet,
+                onCheckedChange = { enabled ->
+                    ClipGroupingSettings.setEnabled(enabled)
+                    groupByTitle = ClipGroupingSettings.isEnabled()
+                },
+            )
             SettingsGroupDivider(isTablet = isTablet)
             SettingsNavigationRow(
                 title = stringResource(Res.string.clip_settings_filename_title),

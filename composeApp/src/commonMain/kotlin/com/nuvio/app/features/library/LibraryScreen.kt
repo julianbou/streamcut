@@ -37,6 +37,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ViewAgenda
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -87,7 +88,6 @@ import com.nuvio.app.features.home.components.HomeEmptyStateCard
 import com.nuvio.app.features.home.components.HomePosterCard
 import com.nuvio.app.features.home.components.HomeSkeletonRow
 import com.nuvio.app.features.home.components.posterGridColumnCountForWidth
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingRefreshIntent
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watching.application.WatchingState
@@ -175,7 +175,7 @@ fun LibraryScreen(
         NetworkStatusRepository.requestRefresh(force = true)
         coroutineScope.launch {
             LibraryRepository.pullFromServer(
-                profileId = ProfileRepository.activeProfileId,
+                profileId = ProfileScopedKey.ScopeId,
                 refreshIntent = TrackingRefreshIntent.USER_INITIATED,
             )
         }
@@ -194,7 +194,7 @@ fun LibraryScreen(
                 observedOfflineState = false
                 if (isRemoteSource) {
                     coroutineScope.launch {
-                        LibraryRepository.pullFromServer(ProfileRepository.activeProfileId)
+                        LibraryRepository.pullFromServer(ProfileScopedKey.ScopeId)
                     }
                 }
             }

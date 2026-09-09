@@ -19,4 +19,8 @@ internal expect object ClipStorage {
     /** The user's clip-filename template, or null to use [ClipFilenameTemplate.Default]. */
     fun loadFilenameTemplate(): String?
     fun saveFilenameTemplate(template: String?)
+
+    /** Whether clips are filed into per-title folders. See [ClipFolderLayout]. */
+    fun loadGroupByTitle(): Boolean
+    fun saveGroupByTitle(enabled: Boolean)
 }

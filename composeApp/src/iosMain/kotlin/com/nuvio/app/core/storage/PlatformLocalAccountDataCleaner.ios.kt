@@ -5,7 +5,6 @@ package com.nuvio.app.core.storage
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSHomeDirectory
-import com.nuvio.app.features.profiles.MAX_PROFILES
 
 internal actual object PlatformLocalAccountDataCleaner {
     private val plainKeys = listOf(
@@ -74,7 +73,7 @@ internal actual object PlatformLocalAccountDataCleaner {
 
         plainKeys.forEach(defaults::removeObjectForKey)
 
-        (1..MAX_PROFILES).forEach { profileId ->
+        ProfileScopedKey.LegacyScopeIds.forEach { profileId ->
             profileIndexedPrefixes.forEach { prefix ->
                 defaults.removeObjectForKey("$prefix$profileId")
             }

@@ -2,8 +2,8 @@ package com.nuvio.app.features.trakt
 
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.library.LibrarySourceMode
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.simkl.DEFAULT_SIMKL_ANIME_ID_PREFERENCE
 import com.nuvio.app.features.simkl.SimklAnimeIdPreference
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -96,7 +96,7 @@ object TraktSettingsRepository {
 
     internal fun setWatchProgressSource(
         source: WatchProgressSource,
-        profileId: Int = ProfileRepository.activeProfileId,
+        profileId: Int = ProfileScopedKey.ScopeId,
     ) {
         ensureLoaded()
         if (_uiState.value.watchProgressSource == source) return

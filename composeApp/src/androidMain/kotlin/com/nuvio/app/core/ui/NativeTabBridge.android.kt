@@ -14,12 +14,5 @@ internal actual fun publishNativeTabTitles(
     home: String,
     search: String,
     library: String,
-    profile: String,
-) = Unit
-
-internal actual fun publishNativeProfileTabIcon(
-    name: String?,
-    avatarColorHex: String?,
-    avatarImageUrl: String?,
-    avatarBackgroundColorHex: String?,
+    settings: String,
 ) = Unit

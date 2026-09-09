@@ -1,11 +1,11 @@
 package com.nuvio.app.features.trakt
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.addons.httpGetTextWithHeaders
 import com.nuvio.app.features.addons.httpPostJsonWithHeaders
 import com.nuvio.app.features.addons.httpRequestRaw
 import com.nuvio.app.isDesktop
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.TrackingAuthProvider
 import com.nuvio.app.features.tracking.TrackingCapability
 import com.nuvio.app.features.tracking.TrackingProviderDescriptor
@@ -85,11 +85,11 @@ object TraktAuthRepository : TrackingAuthProvider {
     private var devicePollingJob: Job? = null
 
     override fun ensureLoaded() {
-        ensureLoaded(ProfileRepository.activeProfileId)
+        ensureLoaded(ProfileScopedKey.ScopeId)
     }
 
     override fun onProfileChanged() {
-        onProfileChanged(ProfileRepository.activeProfileId)
+        onProfileChanged(ProfileScopedKey.ScopeId)
     }
 
     fun ensureLoaded(profileId: Int) {
@@ -116,7 +116,7 @@ object TraktAuthRepository : TrackingAuthProvider {
         TraktAuthStorage.removeProfile(profileId)
     }
 
-    fun snapshot(profileId: Int = ProfileRepository.activeProfileId): TraktAuthUiState {
+    fun snapshot(profileId: Int = ProfileScopedKey.ScopeId): TraktAuthUiState {
         ensureLoaded(profileId)
         return _uiState.value
     }
@@ -124,7 +124,7 @@ object TraktAuthRepository : TrackingAuthProvider {
     fun hasRequiredCredentials(): Boolean =
         TraktConfig.CLIENT_ID.isNotBlank() && TraktConfig.CLIENT_SECRET.isNotBlank()
 
-    fun onConnectRequested(profileId: Int = ProfileRepository.activeProfileId): String? {
+    fun onConnectRequested(profileId: Int = ProfileScopedKey.ScopeId): String? {
         ensureLoaded(profileId)
         if (!hasRequiredCredentials()) {
             publish(errorMessage = localizedString(Res.string.trakt_missing_credentials))
@@ -149,7 +149,7 @@ object TraktAuthRepository : TrackingAuthProvider {
         return buildAuthorizationUrl(oauthState)
     }
 
-    fun pendingAuthorizationUrl(profileId: Int = ProfileRepository.activeProfileId): String? {
+    fun pendingAuthorizationUrl(profileId: Int = ProfileScopedKey.ScopeId): String? {
         ensureLoaded(profileId)
         if (isDesktop) {
             return authState.pendingDeviceVerificationUrl
@@ -159,7 +159,7 @@ object TraktAuthRepository : TrackingAuthProvider {
         return buildAuthorizationUrl(oauthState)
     }
 
-    fun onCancelAuthorization(profileId: Int = ProfileRepository.activeProfileId) {
+    fun onCancelAuthorization(profileId: Int = ProfileScopedKey.ScopeId) {
         ensureLoaded(profileId)
         devicePollingJob?.cancel()
         clearPendingAuthorization()
@@ -167,7 +167,7 @@ object TraktAuthRepository : TrackingAuthProvider {
         publish(statusMessage = null, errorMessage = null)
     }
 
-    fun onCancelDeviceFlow(profileId: Int = ProfileRepository.activeProfileId) {
+    fun onCancelDeviceFlow(profileId: Int = ProfileScopedKey.ScopeId) {
         onCancelAuthorization(profileId)
     }
 
@@ -176,7 +176,7 @@ object TraktAuthRepository : TrackingAuthProvider {
     }
 
     fun onAuthCallbackReceived(callbackUrl: String) {
-        val profileId = ProfileRepository.activeProfileId
+        val profileId = ProfileScopedKey.ScopeId
         ensureLoaded(profileId)
         if (isDesktop) return
         if (!callbackUrl.startsWith("${TraktConfig.REDIRECT_URI}?", ignoreCase = true) &&
@@ -678,7 +678,7 @@ object TraktAuthRepository : TrackingAuthProvider {
             log.w { "Trakt token refresh transport failure: ${error.message}" }
         }.getOrNull() ?: return@withLock false
 
-        if (ProfileRepository.activeProfileId != profileId || authState.refreshToken != refreshToken) {
+        if (ProfileScopedKey.ScopeId != profileId || authState.refreshToken != refreshToken) {
             return@withLock false
         }
 

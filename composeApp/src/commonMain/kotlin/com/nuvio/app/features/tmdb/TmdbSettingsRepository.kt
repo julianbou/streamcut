@@ -1,7 +1,7 @@
 package com.nuvio.app.features.tmdb
 
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.features.details.MetaDetailsRepository
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.watchprogress.ContinueWatchingEnrichmentCache
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -221,7 +221,7 @@ object TmdbSettingsRepository {
 
     private fun invalidateReleaseDateMetadata() {
         MetaDetailsRepository.clear()
-        ContinueWatchingEnrichmentCache.clearAll(ProfileRepository.activeProfileId)
+        ContinueWatchingEnrichmentCache.clearAll(ProfileScopedKey.ScopeId)
     }
 }
 

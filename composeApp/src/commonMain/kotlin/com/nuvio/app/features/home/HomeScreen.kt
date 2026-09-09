@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.isDesktop
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
@@ -86,7 +87,6 @@ import com.nuvio.app.features.watching.application.WatchingState
 import com.nuvio.app.features.watching.domain.WatchingContentRef
 import com.nuvio.app.features.watching.domain.isReleasedBy
 import com.nuvio.app.features.collection.CollectionRepository
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.home.components.HomeCollectionRowSection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -296,8 +296,7 @@ fun HomeScreen(
             candidate.content.id !in nextUpSuppressedSeriesIds
         }
     }
-    val profileState by ProfileRepository.state.collectAsStateWithLifecycle()
-    val activeProfileId = profileState.activeProfile?.profileIndex ?: 1
+    val activeProfileId = ProfileScopedKey.ScopeId
     val cwCacheGeneration by ContinueWatchingEnrichmentCache.generation.collectAsStateWithLifecycle()
     var hasUserScrolledContinueWatching by remember(activeProfileId) { mutableStateOf(false) }
     var hasUserScrolledUpcoming by remember(activeProfileId) { mutableStateOf(false) }

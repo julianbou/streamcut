@@ -66,6 +66,10 @@
     <string name="clip_settings_filename_tokens">Available: {title} {start} {end} {duration} {date} {time}</string>
     <string name="clip_settings_filename_preview_format">Example: %1$s</string>
     <string name="clip_settings_filename_reset">Use the default</string>
+    <string name="clip_settings_group_title">Folder per title</string>
+    <string name="clip_settings_group_description_on">Clips go into a folder named after the film. Episodes go into Show/Season/Episode.</string>
+    <string name="clip_settings_group_description_off">Every clip goes straight into the clips folder.</string>
+    <string name="clip_settings_group_example_format">Example: %1$s</string>
 
     <!-- Details page. The clipper build never says "Play": pressing this opens
          the title to cut from, and "Resume" describes watching, not clipping. -->

@@ -2,7 +2,6 @@ package com.nuvio.app
 
 import androidx.compose.ui.uikit.OnFocusBehavior
 import androidx.compose.ui.window.ComposeUIViewController
-import com.nuvio.app.core.ui.NativeProfileSwitcherController
 import com.nuvio.app.navigation.AppRoute
 import platform.UIKit.UIColor
 import platform.UIKit.UIViewController
@@ -24,8 +23,7 @@ fun MainViewController(
     onReplace: (AppRoute) -> Unit,
     onActivate: (String) -> Unit,
     onAppReady: (Boolean) -> Unit,
-    onTabTitles: (String, String, String, String, String, String) -> Unit,
-    nativeProfileSwitcherController: NativeProfileSwitcherController,
+    onTabTitles: (String, String, String, String) -> Unit,
 ): UIViewController {
     val initialTab = AppScreenTab.fromName(initialTabName)
     return nuvioComposeViewController {
@@ -42,7 +40,6 @@ fun MainViewController(
             onActivate = { tab -> onActivate(tab.name) },
             onAppReady = onAppReady,
             onTabTitles = onTabTitles,
-            nativeProfileSwitcherController = nativeProfileSwitcherController,
         )
     }
 }

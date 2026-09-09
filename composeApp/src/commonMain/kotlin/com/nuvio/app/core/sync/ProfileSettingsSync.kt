@@ -1,6 +1,7 @@
 package com.nuvio.app.core.sync
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.isDesktop
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
@@ -17,7 +18,6 @@ import com.nuvio.app.features.mdblist.MdbListSettingsRepository
 import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsRepository
 import com.nuvio.app.features.player.PlayerSettingsStorage
 import com.nuvio.app.features.player.PlayerSettingsRepository
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.core.ui.CardDepthStyleRepository
 import com.nuvio.app.core.ui.CardDepthStyleStorage
 import com.nuvio.app.core.ui.PosterCardStyleRepository
@@ -102,14 +102,14 @@ object ProfileSettingsSync {
     suspend fun pull(profileId: Int): Boolean {
         ensureRepositoriesLoaded()
         return syncMutex.withLock {
-            if (ProfileRepository.activeProfileId != profileId) {
+            if (ProfileScopedKey.ScopeId != profileId) {
                 log.d { "pull(profileId=$profileId) — skipped because profile is no longer active" }
                 return@withLock false
             }
             isServerSyncInFlight = true
             try {
                 val localBlob = exportSettingsBlob()
-                if (ProfileRepository.activeProfileId != profileId) return@withLock false
+                if (ProfileScopedKey.ScopeId != profileId) return@withLock false
                 val localSignature = buildSignature(localBlob)
 
                 val params = buildJsonObject {
@@ -117,7 +117,7 @@ object ProfileSettingsSync {
                     put("p_platform", profileSettingsPlatform)
                 }
                 val result = SupabaseProvider.client.postgrest.rpc("sync_pull_profile_settings_blob", params)
-                if (ProfileRepository.activeProfileId != profileId) return@withLock false
+                if (ProfileScopedKey.ScopeId != profileId) return@withLock false
                 val response = result.decodeList<SettingsBlobResponse>().firstOrNull()
                 val remoteJson = response?.settingsJson
 
@@ -140,7 +140,7 @@ object ProfileSettingsSync {
                         return@withLock false
                     }
 
-                    if (ProfileRepository.activeProfileId != profileId) return@withLock false
+                    if (ProfileScopedKey.ScopeId != profileId) return@withLock false
                     applyRemoteBlob(remoteBlob)
                     skipNextPushSignature = currentObservedStateSignature()
                 } finally {
@@ -162,9 +162,9 @@ object ProfileSettingsSync {
         ensureRepositoriesLoaded()
         return syncMutex.withLock {
             runCatching {
-                val profileId = ProfileRepository.activeProfileId
+                val profileId = ProfileScopedKey.ScopeId
                 val blob = exportSettingsBlob()
-                if (ProfileRepository.activeProfileId != profileId) return@runCatching false
+                if (ProfileScopedKey.ScopeId != profileId) return@runCatching false
                 pushToRemoteLocked(profileId, blob)
                 true
             }.onFailure { error ->

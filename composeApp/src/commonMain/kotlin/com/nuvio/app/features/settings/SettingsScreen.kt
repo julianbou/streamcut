@@ -74,7 +74,6 @@ import com.nuvio.app.features.notifications.EpisodeReleaseNotificationsUiState
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.AndroidLibmpvVideoOutput
 import com.nuvio.app.features.player.AndroidPlaybackEngine
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.simkl.SimklAuthRepository
 import com.nuvio.app.features.simkl.SimklAuthUiState
 import com.nuvio.app.features.trakt.TraktAuthUiState
@@ -114,7 +113,6 @@ fun SettingsScreen(
     requestedPageName: String? = null,
     onRequestedPageConsumed: () -> Unit = {},
     rootActionsEnabled: Boolean = true,
-    onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onMetaScreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -224,9 +222,6 @@ fun SettingsScreen(
             EpisodeReleaseNotificationsRepository.ensureLoaded()
             EpisodeReleaseNotificationsRepository.uiState
         }.collectAsStateWithLifecycle()
-        val profileSettingsState by remember {
-            ProfileRepository.state
-        }.collectAsStateWithLifecycle()
 
         LaunchedEffect(homescreenCatalogRefreshKey) {
             if (homescreenCatalogRefreshKey.isEmpty()) return@LaunchedEffect
@@ -310,7 +305,6 @@ fun SettingsScreen(
                 tunnelingEnabled = playerSettingsUiState.tunnelingEnabled,
                 useLibass = playerSettingsUiState.useLibass,
                 libassRenderType = playerSettingsUiState.libassRenderType,
-                rememberLastProfileEnabled = profileSettingsState.rememberLastProfileEnabled,
                 selectedTheme = selectedTheme,
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
@@ -340,7 +334,6 @@ fun SettingsScreen(
                 metaScreenSettingsUiState = metaScreenSettingsUiState,
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
                 posterCardStyleUiState = posterCardStyleUiState,
-                onSwitchProfile = onSwitchProfile,
                 onDownloadsClick = onDownloadsClick,
                 onSupportersContributorsClick = onSupportersContributorsClick,
                 onLicensesAttributionsClick = onLicensesAttributionsClick,
@@ -372,7 +365,6 @@ fun SettingsScreen(
                 tunnelingEnabled = playerSettingsUiState.tunnelingEnabled,
                 useLibass = playerSettingsUiState.useLibass,
                 libassRenderType = playerSettingsUiState.libassRenderType,
-                rememberLastProfileEnabled = profileSettingsState.rememberLastProfileEnabled,
                 selectedTheme = selectedTheme,
                 onThemeSelected = ThemeSettingsRepository::setTheme,
                 amoledEnabled = amoledEnabled,
@@ -402,7 +394,6 @@ fun SettingsScreen(
                 metaScreenSettingsUiState = metaScreenSettingsUiState,
                 continueWatchingPreferencesUiState = continueWatchingPreferencesUiState,
                 posterCardStyleUiState = posterCardStyleUiState,
-                onSwitchProfile = onSwitchProfile,
                 onHomescreenClick = onHomescreenClick,
                 onMetaScreenClick = onMetaScreenClick,
                 onContinueWatchingClick = onContinueWatchingClick,
@@ -444,7 +435,6 @@ private fun MobileSettingsScreen(
     tunnelingEnabled: Boolean,
     useLibass: Boolean,
     libassRenderType: String,
-    rememberLastProfileEnabled: Boolean,
     selectedTheme: AppTheme,
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
@@ -474,7 +464,6 @@ private fun MobileSettingsScreen(
     metaScreenSettingsUiState: MetaScreenSettingsUiState,
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
     posterCardStyleUiState: PosterCardStyleUiState,
-    onSwitchProfile: (() -> Unit)? = null,
     onHomescreenClick: () -> Unit = {},
     onMetaScreenClick: () -> Unit = {},
     onContinueWatchingClick: () -> Unit = {},
@@ -518,7 +507,6 @@ private fun MobileSettingsScreen(
             accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
             personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
             liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
-            switchProfileAvailable = onSwitchProfile != null,
             checkForUpdatesAvailable = onCheckForUpdatesClick != null,
             viewingChromeEnabled = AppFeaturePolicy.viewingChromeEnabled,
         )
@@ -550,7 +538,6 @@ private fun MobileSettingsScreen(
                     }
                 }
                 SettingsSearchTarget.Collections -> onCollectionsClick()
-                SettingsSearchTarget.SwitchProfile -> onSwitchProfile?.invoke()
                 SettingsSearchTarget.CheckForUpdates -> onCheckForUpdatesClick?.invoke()
             }
         }
@@ -607,7 +594,6 @@ private fun MobileSettingsScreen(
                             onTestUpdateBannerClick = onTestUpdateBannerClick,
                             onDownloadsClick = onDownloadsClick,
                             onAccountClick = onAccountClick,
-                            onSwitchProfileClick = onSwitchProfile,
                             showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
                             showNotificationsEntry = AppFeaturePolicy.notificationsEnabled,
                             showTrackingEntry = AppFeaturePolicy.viewingChromeEnabled,
@@ -681,7 +667,6 @@ private fun MobileSettingsScreen(
                 )
                 SettingsPage.Advanced -> advancedSettingsContent(
                     isTablet = false,
-                    rememberLastProfileEnabled = rememberLastProfileEnabled,
                 )
                 SettingsPage.Notifications -> if (AppFeaturePolicy.notificationsEnabled) {
                     notificationsSettingsContent(
@@ -820,7 +805,6 @@ private fun TabletSettingsScreen(
     tunnelingEnabled: Boolean,
     useLibass: Boolean,
     libassRenderType: String,
-    rememberLastProfileEnabled: Boolean,
     selectedTheme: AppTheme,
     onThemeSelected: (AppTheme) -> Unit,
     amoledEnabled: Boolean,
@@ -850,7 +834,6 @@ private fun TabletSettingsScreen(
     metaScreenSettingsUiState: MetaScreenSettingsUiState,
     continueWatchingPreferencesUiState: ContinueWatchingPreferencesUiState,
     posterCardStyleUiState: PosterCardStyleUiState,
-    onSwitchProfile: (() -> Unit)? = null,
     onDownloadsClick: () -> Unit = {},
     onSupportersContributorsClick: () -> Unit = {},
     onLicensesAttributionsClick: () -> Unit = {},
@@ -932,8 +915,7 @@ private fun TabletSettingsScreen(
                 accountDeletionEnabled = AppFeaturePolicy.accountDeletionEnabled,
                 personalMediaAddonCopyEnabled = AppFeaturePolicy.personalMediaAddonCopyEnabled,
                 liquidGlassNativeTabBarSupported = liquidGlassNativeTabBarSupported,
-                switchProfileAvailable = onSwitchProfile != null,
-                checkForUpdatesAvailable = onCheckForUpdatesClick != null,
+                    checkForUpdatesAvailable = onCheckForUpdatesClick != null,
                 viewingChromeEnabled = AppFeaturePolicy.viewingChromeEnabled,
             )
 
@@ -950,8 +932,7 @@ private fun TabletSettingsScreen(
                         }
                     }
                     SettingsSearchTarget.Collections -> onCollectionsClick()
-                    SettingsSearchTarget.SwitchProfile -> onSwitchProfile?.invoke()
-                    SettingsSearchTarget.CheckForUpdates -> onCheckForUpdatesClick?.invoke()
+                        SettingsSearchTarget.CheckForUpdates -> onCheckForUpdatesClick?.invoke()
                 }
             }
 
@@ -1038,8 +1019,7 @@ private fun TabletSettingsScreen(
                                     onTestUpdateBannerClick = onTestUpdateBannerClick,
                                     onDownloadsClick = onDownloadsClick,
                                     onAccountClick = { openInlinePage(SettingsPage.Account) },
-                                    onSwitchProfileClick = onSwitchProfile,
-                                    showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
+                                            showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
                                     showNotificationsEntry = AppFeaturePolicy.notificationsEnabled,
                                     showTrackingEntry = AppFeaturePolicy.viewingChromeEnabled,
                                     showAccountSection = activeCategory == SettingsCategory.Account,
@@ -1116,8 +1096,7 @@ private fun TabletSettingsScreen(
                         )
                         SettingsPage.Advanced -> advancedSettingsContent(
                             isTablet = true,
-                            rememberLastProfileEnabled = rememberLastProfileEnabled,
-                        )
+                                )
                         SettingsPage.Notifications -> if (AppFeaturePolicy.notificationsEnabled) {
                             notificationsSettingsContent(
                                 isTablet = true,

@@ -3,8 +3,8 @@ package com.nuvio.app.features.watchprogress
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.tracking.ensureTrackingProvidersRegistered
-import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.tracking.DEFAULT_WATCH_PROGRESS_SOURCE
 import com.nuvio.app.features.tracking.TrackingProviderId
 import com.nuvio.app.features.tracking.TrackingProviderRegistry
@@ -238,11 +238,9 @@ object WatchProgressSourceCoordinator {
                     TrackingSettingsRepository.uiState,
                     TrackingProviderRegistry.connectedProviderIds,
                     AuthRepository.state,
-                    ProfileRepository.state,
-                ) { settings, connectedProviderIds, authState, profileState ->
+                ) { settings, connectedProviderIds, authState ->
                     buildContext(
-                        profileId = profileState.activeProfile?.profileIndex
-                            ?: ProfileRepository.activeProfileId,
+                        profileId = ProfileScopedKey.ScopeId,
                         requestedSource = settings.watchProgressSource,
                         connectedProviderIds = connectedProviderIds,
                         authState = authState,
@@ -363,8 +361,7 @@ object WatchProgressSourceCoordinator {
             if (automaticTransitionPauseCount.compareAndSet(current, current - 1)) {
                 if (current == 1) {
                     scope.launch {
-                        val profileId = ProfileRepository.state.value.activeProfile?.profileIndex
-                            ?: ProfileRepository.activeProfileId
+                        val profileId = ProfileScopedKey.ScopeId
                         try {
                             runTransition(
                                 context = currentContext(profileId),
@@ -405,8 +402,7 @@ object WatchProgressSourceCoordinator {
 
         return transitionStateMutex.withLock {
             currentCoroutineContext().ensureActive()
-            val activeProfileId = ProfileRepository.state.value.activeProfile?.profileIndex
-                ?: ProfileRepository.activeProfileId
+            val activeProfileId = ProfileScopedKey.ScopeId
             val resolvedContext = resolveSerializedWatchProgressContext(
                 queuedContext = context,
                 currentContext = currentContext(activeProfileId),
