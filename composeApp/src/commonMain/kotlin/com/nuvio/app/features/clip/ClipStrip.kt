@@ -53,8 +53,9 @@ expect object ClipStrip {
      * [buildMissing] separates the two things this does. False only publishes
      * what is already cached, which costs nothing and is what makes the scrub
      * bar's hover preview work the instant a title is opened again. True also
-     * fetches the frames that are missing, which costs real bandwidth and so
-     * happens only when the user asks for it.
+     * fetches the frames that are missing, which costs real bandwidth: the
+     * player asks for it once playback has settled, so the hover preview fills
+     * in without Scenes being opened, and Scenes asks for it straight away.
      */
     fun open(
         cacheKey: String,

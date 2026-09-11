@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -47,6 +48,8 @@ import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import com.nuvio.app.features.watching.application.WatchingState
 import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -249,21 +252,40 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         summarizeClipJobs(clipJobsForThisContent, clipOutputDirLabel)
     }
     val clipStripState by ClipStrip.state.collectAsState()
-    // Publishes any strip this title already has, without fetching anything --
-    // which is what lets the scrub bar's hover preview work the moment a film
-    // you have browsed before is opened again. Keyed on whether the duration is
-    // known rather than its value, so the constant ticking of playback does not
-    // restart it (and would cancel a build in progress if it did).
+    // Publishes any strip this title already has straight away -- which is what
+    // lets the scrub bar's hover preview work the moment a film you have browsed
+    // before is opened again -- then builds whatever is missing in the
+    // background, so the preview does not wait for Scenes to be opened. Keyed on
+    // whether the duration is known rather than its value, so the constant
+    // ticking of playback does not restart it (and would cancel a build in
+    // progress if it did).
     LaunchedEffect(playerSurfaceSourceUrl, playbackSnapshot.durationMs > 0L) {
         val url = playerSurfaceSourceUrl.orEmpty()
         val durationMs = playbackSnapshot.durationMs
         if (!ClipStrip.isSupported || url.isBlank() || durationMs <= 0L) return@LaunchedEffect
+        val cacheKey = buildClipContentRef().key
         ClipStrip.open(
-            cacheKey = buildClipContentRef().key,
+            cacheKey = cacheKey,
             sourceUrl = url,
             headers = activeSourceHeaders,
             durationMs = durationMs,
             buildMissing = false,
+        )
+        // The frames come from the same source the film streams from, so
+        // fetching them during the opening buffer would slow the start of
+        // playback. Wait for the player to stop loading, then give the stream a
+        // head start. If Scenes is opened sooner it starts the build itself, and
+        // this call then finds it running and leaves it alone.
+        snapshotFlow { playbackSnapshot.isLoading }.first { !it }
+        delay(CLIP_STRIP_BACKGROUND_DELAY_MS)
+        val buildUrl = clipSourceUrl()
+        if (buildUrl.isBlank()) return@LaunchedEffect
+        ClipStrip.open(
+            cacheKey = cacheKey,
+            sourceUrl = buildUrl,
+            headers = activeSourceHeaders,
+            durationMs = playbackSnapshot.durationMs.takeIf { it > 0L } ?: durationMs,
+            buildMissing = true,
         )
     }
     // The strip is per title, and its frames outlive the playback session, so a
@@ -903,6 +925,9 @@ private fun PlayerScreenRuntime.clipJobIdAt(value: Double): String {
  * server, and its URL is the only one ffmpeg can read -- the magnet the source
  * list carries is not a media file.
  */
+/** How long after playback settles the background filmstrip build starts. */
+private const val CLIP_STRIP_BACKGROUND_DELAY_MS = 10_000L
+
 private fun PlayerScreenRuntime.clipSourceUrl(): String =
     if (activeTorrentInfoHash != null) p2pResolvedSourceUrl.orEmpty() else activeSourceUrl
 
