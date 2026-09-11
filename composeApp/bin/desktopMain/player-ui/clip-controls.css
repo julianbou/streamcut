@@ -634,10 +634,12 @@ body.clipper-mode .action-pill .action[data-command="resize"] { display: none !i
   display: none;
 }
 
+/* No fixed ratio: the box takes each still's own shape (the stills are scaled
+   to a width with the height following), so scope and 4:3 films show whole
+   instead of being zoomed and cropped into a 16:9 frame. */
 .clip-hover-shot {
   display: block;
   width: 176px;
-  aspect-ratio: 16 / 9;
   border-radius: 5px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
@@ -645,8 +647,7 @@ body.clipper-mode .action-pill .action[data-command="resize"] { display: none !i
 
 .clip-hover-img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
   display: block;
 }
 
