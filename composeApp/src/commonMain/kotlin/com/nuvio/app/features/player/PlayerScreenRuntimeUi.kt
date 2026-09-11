@@ -4,11 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import com.nuvio.app.features.clip.ClipAspect
 import com.nuvio.app.features.clip.ClipContentRef
-import com.nuvio.app.features.clip.ClipExtractor
 import com.nuvio.app.features.clip.ClipJob
 import com.nuvio.app.features.clip.ClipLibrary
 import com.nuvio.app.features.clip.ClipRepository
@@ -249,18 +245,6 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipLibraryEntries.filter { it.contentKey == clipContent.key }
     }
     val clipOutputDirLabel = remember(clipLibraryEntries) { ClipRepository.outputDirPath() }
-    // The trim row steps In/Out by whole frames, which needs the source's frame
-    // rate. The native player exposes no such property, so it is read off the
-    // container instead: one probe per source, off the main thread, and zero
-    // until it lands -- the chrome falls back to a time step meanwhile.
-    var clipFrameDurationUs by remember { mutableStateOf(0) }
-    LaunchedEffect(playerSurfaceSourceUrl, activeSourceHeaders) {
-        clipFrameDurationUs = 0
-        val probeUrl = playerSurfaceSourceUrl.orEmpty()
-        if (!ClipRepository.isSupported || probeUrl.isBlank()) return@LaunchedEffect
-        val fps = ClipExtractor.probeFrameRate(probeUrl, activeSourceHeaders)
-        if (fps > 0.0) clipFrameDurationUs = (1_000_000.0 / fps).roundToInt()
-    }
     val clipSummary = remember(clipJobsForThisContent, clipOutputDirLabel) {
         summarizeClipJobs(clipJobsForThisContent, clipOutputDirLabel)
     }
@@ -409,9 +393,6 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipOutputDir = clipOutputDirLabel,
         clipSubtitlesAvailable = activeClipSubtitle(delayMs = 0) != null,
         clipBurnSubtitles = clipBurnSubtitles,
-        clipFrameDurationUs = clipFrameDurationUs,
-        clipAspect = clipAspect.ordinal,
-        clipTargetSizeMb = clipTargetSizeMb,
         clipStripSession = clipStripState.session,
         clipStripCount = clipStripState.count,
         clipStripReady = clipStripState.ready,
@@ -1089,14 +1070,6 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
         "clipBurnSubtitles" -> {
             clipBurnSubtitles = value != 0.0
         }
-        "clipSetAspect" -> {
-            clipAspect = ClipAspect.fromOrdinal(value.toInt())
-        }
-        "clipSetSizeMb" -> {
-            // Clamped rather than rejected: the field is free text, and a cap
-            // below a megabyte cannot produce a watchable clip anyway.
-            clipTargetSizeMb = value.toInt().coerceIn(0, 4096)
-        }
         "clipExport" -> {
             val start = clipStartMs
             val end = clipEndMs
@@ -1110,8 +1083,6 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                     retainsP2pStream = activeTorrentInfoHash != null,
                     audioTrackIndex = activeClipAudioTrackIndex(),
                     subtitle = if (clipBurnSubtitles) activeClipSubtitle(subtitleDelayMs) else null,
-                    aspect = clipAspect,
-                    targetSizeMb = clipTargetSizeMb,
                 )
             }
         }
