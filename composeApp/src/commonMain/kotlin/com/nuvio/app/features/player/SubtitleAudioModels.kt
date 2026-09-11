@@ -91,6 +91,18 @@ data class SubtitleAutoSyncUiState(
     val errorMessage: String? = null,
 )
 
+/**
+ * Cues for the subtitle search panel. Kept apart from auto-sync, because search can
+ * read a subtitle that is not the one on screen.
+ */
+data class SubtitleSearchUiState(
+    /** The addon subtitle these cues came from; null until something has loaded. */
+    val loadedSourceId: String? = null,
+    val cues: List<SubtitleSyncCue> = emptyList(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+)
+
 val SubtitleColorSwatches = listOf(
     Color.White,
     Color(0xFFFFD700),

@@ -18,6 +18,7 @@
 const clipSearchButton = document.getElementById("clipSearchButton");
 const clipSearchPanel = document.getElementById("clipSearchPanel");
 const clipSearchInput = document.getElementById("clipSearchInput");
+const clipSearchSource = document.getElementById("clipSearchSource");
 const clipSearchStatus = document.getElementById("clipSearchStatus");
 const clipSearchList = document.getElementById("clipSearchList");
 
@@ -276,8 +277,11 @@ const clipSearchRun = (index, rawQuery) => {
 
 // --- actions ---
 
-/** Subtitle delay is the offset between the cue's own time and the picture. */
-const clipSearchDelayMs = () => Number(state.subtitleDelayMs) || 0;
+/**
+ * Offset between the cue's own time and the picture. Kotlin sends 0 unless the
+ * searched file is the one on screen: a delay only describes the file it was set on.
+ */
+const clipSearchDelayMs = () => Number(state.subtitleSearchDelayMs) || 0;
 
 const clipSearchGoTo = result => {
   // scrubFinish is in MILLISECONDS -- clipStart/clipEnd below are in seconds.
@@ -297,16 +301,18 @@ const clipSearchClipFrom = result => {
 
 // --- rendering ---
 
+const clipSearchSources = () =>
+  Array.isArray(state.addonSubtitleItems) ? state.addonSubtitleItems : [];
+
 const clipSearchStatusText = () => {
-  if (!state.hasSelectedAddonSubtitle) {
-    return state.selectAddonSubtitleFirstLabel || "Select an addon subtitle first";
+  if (!clipSearchSources().length) {
+    return state.isLoadingAddonSubtitles ? "Loading subtitles..." : "No addon subtitles for this title";
   }
-  if (state.subtitleAutoSyncIsLoading) {
+  if (state.subtitleSearchErrorMessage) return state.subtitleSearchErrorMessage;
+  // Nothing loaded and nothing wrong means a download is on its way -- including the
+  // moment between picking a source and Kotlin starting to fetch it.
+  if (state.subtitleSearchIsLoading || !clipSearchIndex || !clipSearchIndex.cues.length) {
     return state.loadingSubtitleLinesLabel || "Loading subtitle lines...";
-  }
-  if (state.subtitleAutoSyncErrorMessage) return state.subtitleAutoSyncErrorMessage;
-  if (!clipSearchIndex || !clipSearchIndex.cues.length) {
-    return state.noSubtitleLinesFoundLabel || "No subtitle lines found";
   }
   if (!clipSearchQuery.trim()) {
     return `${clipSearchIndex.cues.length} lines — type a phrase`;
@@ -382,12 +388,46 @@ const clipSearchRecompute = () => {
 const clipSearchSyncIndex = () => {
   const cues = Array.isArray(state.subtitleSearchCues) ? state.subtitleSearchCues : [];
   const signature = cues.length
-    ? `${cues.length}:${cues[0].timeMs}:${cues[cues.length - 1].timeMs}`
+    ? `${state.subtitleSearchSourceIndex}:${cues.length}:${cues[0].timeMs}:${cues[cues.length - 1].timeMs}`
     : "";
   if (signature === clipSearchIndexSignature) return false;
   clipSearchIndexSignature = signature;
   clipSearchIndex = cues.length ? clipSearchBuildIndex(cues) : null;
   return true;
+};
+
+let clipSearchSourceSignature = "";
+
+/**
+ * The subtitle picker. Rebuilt only when the list of subtitles changes, not on every
+ * state push, or an open dropdown would be torn down under the pointer.
+ */
+const clipSearchRenderSources = () => {
+  if (!clipSearchSource) return;
+  const sources = clipSearchSources();
+  setVisible(clipSearchSource, sources.length > 0);
+  const signature = sources.map(item => item.id).join("\n");
+  if (signature !== clipSearchSourceSignature) {
+    clipSearchSourceSignature = signature;
+    clipSearchSource.textContent = "";
+    // Two files in the same language from the same addon would read identically.
+    const seen = new Map();
+    sources.forEach((item, position) => {
+      const base = item.display || item.languageLabel || item.language || `Subtitle ${position + 1}`;
+      const count = (seen.get(base) || 0) + 1;
+      seen.set(base, count);
+      const option = document.createElement("option");
+      option.value = String(Number.isFinite(item.index) ? item.index : position);
+      option.textContent = count > 1 ? `${base} (${count})` : base;
+      clipSearchSource.appendChild(option);
+    });
+  }
+  // Not while the picker has focus: a push that lands between a pick and Kotlin's
+  // echo of it would otherwise flick the selection back for a frame.
+  const selected = Number(state.subtitleSearchSourceIndex);
+  if (document.activeElement !== clipSearchSource && Number.isFinite(selected) && selected >= 0) {
+    clipSearchSource.value = String(selected);
+  }
 };
 
 const clipSearchRender = () => {
@@ -403,6 +443,7 @@ const clipSearchRender = () => {
   }
   if (!isOpen) return;
 
+  clipSearchRenderSources();
   if (clipSearchSyncIndex()) clipSearchRecompute();
   else clipSearchStatus.textContent = clipSearchStatusText();
 };
@@ -441,20 +482,47 @@ if (clipSearchInput) {
     clipSearchQuery = clipSearchInput.value;
     clipSearchRecompute();
   });
-  // The global handler bails out on text-entry targets, so Escape has to be
-  // caught here or it never reaches anything.
   clipSearchInput.addEventListener("keydown", event => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      clipSearchClose();
-      return;
-    }
     if (event.key === "Enter" && clipSearchResults.length) {
       event.preventDefault();
       clipSearchGoTo(clipSearchResults[0]);
     }
   });
 }
+
+if (clipSearchSource) {
+  clipSearchSource.addEventListener("change", () => {
+    const index = Number(clipSearchSource.value);
+    if (!Number.isFinite(index) || index < 0) return;
+    // Drop results from the previous file now, rather than showing them until the
+    // new one has downloaded.
+    clipSearchResults = [];
+    clipSearchRenderResults();
+    send("subtitleSearchSource", index);
+  });
+}
+
+// controls.js answers Escape before anything else in its keydown listener -- it
+// leaves fullscreen or leaves the player -- so an open panel never got a say, and
+// Escape in Find line or Scenes threw away the whole video. Capturing on window
+// runs first. The key is consumed only when there is a panel to close; everywhere
+// else Escape keeps its usual meaning.
+window.addEventListener("keydown", event => {
+  if (event.key !== "Escape") return;
+  // An open modal is closed by controls.js's own branch; leave that alone.
+  if (typeof activeModal !== "undefined" && activeModal) return;
+  // The Scenes strip covers the screen, so when both are open it is the one on top.
+  if (typeof clipStripVisible !== "undefined" && clipStripVisible && typeof clipStripHide === "function") {
+    clipStripHide();
+  } else if (clipSearchPanel && !clipSearchPanel.hidden) {
+    clipSearchClose();
+  } else {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  if (typeof focusShortcutRoot === "function") focusShortcutRoot();
+}, true);
 
 // --- hook into the clip UI without editing its file ---
 //
@@ -482,11 +550,6 @@ window.clipUi = Object.assign({}, clipSearchPreviousUi, {
       if (event.code === "Slash") {
         event.preventDefault();
         clipSearchToggle();
-        return true;
-      }
-      if (event.code === "Escape" && state.subtitleSearchOpen) {
-        event.preventDefault();
-        clipSearchClose();
         return true;
       }
     }

@@ -218,6 +218,9 @@ internal class PlayerScreenRuntime(
     var subtitleDelayMs by mutableStateOf(0)
     var subtitleAutoSyncState by mutableStateOf(SubtitleAutoSyncUiState())
     var subtitleSearchOpen by mutableStateOf(false)
+    /** The addon subtitle picked in the search panel; null follows the one on screen. */
+    var subtitleSearchSourceId by mutableStateOf<String?>(null)
+    var subtitleSearchState by mutableStateOf(SubtitleSearchUiState())
 
     var lastSyncedSettingsResizeMode: PlayerResizeMode? = null
     var lastResetPlaybackIdentity: String? = null

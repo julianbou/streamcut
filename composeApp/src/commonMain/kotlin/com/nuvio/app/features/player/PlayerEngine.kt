@@ -256,6 +256,12 @@ data class PlayerControlsState(
      */
     val subtitleSearchOpen: Boolean = false,
     val subtitleSearchCues: List<PlayerControlSubtitleCueItem> = emptyList(),
+    /** Index into [addonSubtitleItems] of the subtitle being searched; -1 for none. */
+    val subtitleSearchSourceIndex: Int = -1,
+    val subtitleSearchIsLoading: Boolean = false,
+    val subtitleSearchErrorMessage: String = "",
+    /** Delay for result times: 0 unless the searched file is the one on screen. */
+    val subtitleSearchDelayMs: Int = 0,
     val closeModalsToken: Long = 0L,
 )
 
