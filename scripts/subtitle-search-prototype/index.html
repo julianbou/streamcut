@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Subtitle phrase search — prototype</title>
+<style>
+  :root {
+    --bg: #101215; --panel: #181b20; --line: #262a31;
+    --fg: #e6e8ec; --dim: #8b93a1; --accent: #6ea8fe; --hit: #ffd76e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header { padding: 18px 22px 12px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .sub { color: var(--dim); font-size: 12.5px; }
+  .bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 22px; }
+  input[type=search], input[type=number] {
+    background: var(--panel); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 7px; padding: 9px 11px; font-size: 14px; font-family: inherit;
+  }
+  input[type=search] { flex: 1; min-width: 260px; }
+  input[type=number] { width: 88px; }
+  label { color: var(--dim); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .file { color: var(--dim); font-size: 12px; }
+  .file input { color: var(--dim); font-size: 12px; }
+  #stats { padding: 0 22px 10px; color: var(--dim); font-size: 12px; }
+  #results { padding: 0 22px 40px; }
+  .row {
+    border: 1px solid var(--line); border-radius: 9px; background: var(--panel);
+    padding: 11px 13px; margin-bottom: 9px;
+  }
+  .meta { display: flex; gap: 12px; align-items: baseline; font-size: 12px; color: var(--dim); margin-bottom: 5px; }
+  .tc { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tag { border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: 11px; }
+  .tag.exact { color: #7ee2a8; border-color: #2c4b39; }
+  .tag.fuzzy { color: var(--hit); border-color: #4b422c; }
+  .text { font-size: 14.5px; }
+  .text mark { background: rgba(255,215,110,.22); color: var(--hit); border-radius: 3px; padding: 0 2px; }
+  .clip { margin-top: 6px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .clip b { color: var(--fg); font-weight: 600; }
+  .empty { color: var(--dim); padding: 20px 0; }
+  .hint { color: var(--dim); font-size: 12px; padding: 0 22px 14px; }
+  .hint code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Subtitle phrase search — prototype</h1>
+  <div class="sub">Type a line the way you remember it. Results give the cue range and the clip in/out it would set.</div>
+</header>
+
+<div class="bar">
+  <input type="search" id="q" placeholder="Search a phrase…" autocomplete="off" spellcheck="false">
+  <label>delay ms <input type="number" id="delay" value="0" step="100"></label>
+  <label>pad ms <input type="number" id="pad" value="250" step="50"></label>
+</div>
+<div class="bar" style="padding-top:0">
+  <span class="file">Load your own subtitles: <input type="file" id="file" accept=".srt,.vtt,.ass,.ssa,.ttml,.xml,.txt"></span>
+</div>
+<div class="hint">
+  Try <code>the truth when what you really want</code> (splits across two cues),
+  <code>nobody leaves this room clean</code> (wrong verb), or
+  <code>no sabes lo que me costo llegar</code> (accents dropped).
+</div>
+
+<div id="stats"></div>
+<div id="results"></div>
+
+<script src="subtitle-cues.js"></script>
+<script src="subtitle-search.js"></script>
+<script>
+(function () {
+  "use strict";
+  const { parse } = SubtitleCues;
+  const { buildIndex, search, normalize, formatTimecode } = SubtitleSearch;
+
+  const qEl = document.getElementById("q");
+  const delayEl = document.getElementById("delay");
+  const padEl = document.getElementById("pad");
+  const fileEl = document.getElementById("file");
+  const statsEl = document.getElementById("stats");
+  const resultsEl = document.getElementById("results");
+
+  let index = null;
+  let sourceName = "";
+
+  function load(text, name) {
+    const parsed = parse(text, name);
+    index = buildIndex(parsed.cues);
+    sourceName = name;
+    const inferred = parsed.cues.filter((c) => c.endInferred).length;
+    statsEl.textContent =
+      `${name} — ${parsed.cues.length} cues (${parsed.format}), ` +
+      `${index.tokens.length} tokens` +
+      (inferred ? `, ${inferred} end times inferred` : "");
+    run();
+  }
+
+  function highlight(text, queryTokens) {
+    // Approximate: highlights whole words whose normalized form was searched for.
+    // Good enough to eyeball a result; the match itself is done on normalized text.
+    return text.replace(/[\p{L}\p{N}’ʼ'`´]+/gu, (word) => {
+      const norm = normalize(word);
+      const hit = norm && queryTokens.some(
+        (q) => q === norm || (Math.min(q.length, norm.length) >= 5 && (q.startsWith(norm) || norm.startsWith(q)))
+      );
+      return hit ? "<mark>" + word + "</mark>" : word;
+    });
+  }
+
+  function run() {
+    if (!index) return;
+    const query = qEl.value;
+    resultsEl.innerHTML = "";
+    if (!normalize(query)) {
+      resultsEl.innerHTML = '<div class="empty">Type a phrase.</div>';
+      return;
+    }
+
+    const started = performance.now();
+    const results = search(index, query, {
+      delayMs: Number(delayEl.value) || 0,
+      padMs: Number(padEl.value) || 0,
+    });
+    const elapsed = performance.now() - started;
+
+    const queryTokens = normalize(query).split(" ");
+    if (!results.length) {
+      resultsEl.innerHTML = `<div class="empty">No match. (${elapsed.toFixed(1)} ms)</div>`;
+      return;
+    }
+
+    const head = document.createElement("div");
+    head.className = "empty";
+    head.style.padding = "0 0 10px";
+    head.textContent = `${results.length} result${results.length === 1 ? "" : "s"} in ${elapsed.toFixed(1)} ms`;
+    resultsEl.appendChild(head);
+
+    for (const r of results) {
+      const row = document.createElement("div");
+      row.className = "row";
+      const cues = r.firstCue === r.lastCue
+        ? `cue ${r.firstCue + 1}`
+        : `cues ${r.firstCue + 1}–${r.lastCue + 1}`;
+      row.innerHTML =
+        `<div class="meta">` +
+          `<span class="tc">${formatTimecode(r.startMs)}</span>` +
+          `<span class="tag ${r.exact ? "exact" : "fuzzy"}">${r.exact ? "exact" : "fuzzy " + r.score.toFixed(2)}</span>` +
+          `<span>${cues}</span>` +
+        `</div>` +
+        `<div class="text">${highlight(r.text, queryTokens)}</div>` +
+        `<div class="clip">clip <b>in</b> ${formatTimecode(r.clipInMs)} → <b>out</b> ${formatTimecode(r.clipOutMs)} ` +
+          `<span>(${((r.clipOutMs - r.clipInMs) / 1000).toFixed(2)}s)</span></div>`;
+      resultsEl.appendChild(row);
+    }
+  }
+
+  let timer = null;
+  const debounced = () => { clearTimeout(timer); timer = setTimeout(run, 120); };
+  qEl.addEventListener("input", debounced);
+  delayEl.addEventListener("input", debounced);
+  padEl.addEventListener("input", debounced);
+
+  fileEl.addEventListener("change", () => {
+    const file = fileEl.files && fileEl.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => load(String(reader.result), file.name);
+    reader.readAsText(file);
+  });
+
+  fetch("sample.srt")
+    .then((r) => r.text())
+    .then((t) => load(t, "sample.srt"))
+    .catch(() => { statsEl.textContent = "Could not load sample.srt — serve this directory over HTTP."; });
+})();
+</script>
+</body>
+</html>

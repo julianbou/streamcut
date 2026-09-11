@@ -76,10 +76,28 @@ data class SubtitleStyleState(
 data class SubtitleSyncCue(
     val startTimeMs: Long,
     val text: String,
+    /**
+     * When the line leaves the screen. Auto-sync only ever needed the start, so this
+     * arrived with phrase search: a clip cannot be derived from a start alone. The
+     * parser fills it in, inferring it from the next cue when the source omits it.
+     */
+    val endTimeMs: Long = startTimeMs,
 )
 
 data class SubtitleAutoSyncUiState(
     val capturedPositionMs: Long? = null,
+    val cues: List<SubtitleSyncCue> = emptyList(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+)
+
+/**
+ * Cues for the subtitle search panel. Kept apart from auto-sync, because search can
+ * read a subtitle that is not the one on screen.
+ */
+data class SubtitleSearchUiState(
+    /** The addon subtitle these cues came from; null until something has loaded. */
+    val loadedSourceId: String? = null,
     val cues: List<SubtitleSyncCue> = emptyList(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,

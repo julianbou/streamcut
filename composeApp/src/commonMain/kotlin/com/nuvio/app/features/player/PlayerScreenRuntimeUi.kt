@@ -200,6 +200,14 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
     val playerControlAddonSubtitles = buildPlayerControlAddonSubtitleItems()
     val playerControlSubtitleSelection = buildPlayerControlSubtitleSelection()
     val playerControlAutoSyncCues = buildPlayerControlSubtitleCueItems()
+    val playerControlSubtitleSearchCues = buildPlayerControlSubtitleSearchCues()
+    // The panel can open before the addons have answered, and the source it reads can
+    // change under it (a pick, or the subtitle on screen when nothing was picked).
+    // Whenever the source it should be reading changes while it is open, load that.
+    val subtitleSearchSourceKey = if (subtitleSearchOpen) subtitleSearchSource?.id else null
+    LaunchedEffect(subtitleSearchSourceKey) {
+        if (subtitleSearchSourceKey != null) loadSubtitleSearchCues()
+    }
     val themeColors = MaterialTheme.nuvio.colors
     val selectedEpisodeLabel = episodeStreamsPanelState.selectedEpisode?.let { selected ->
         val selectedCode = selected.playerControlsEpisodeCode()
@@ -468,6 +476,14 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         subtitleAutoSyncCues = playerControlAutoSyncCues,
         subtitleAutoSyncIsLoading = subtitleAutoSyncState.isLoading,
         subtitleAutoSyncErrorMessage = subtitleAutoSyncState.errorMessage.orEmpty(),
+        subtitleSearchOpen = subtitleSearchOpen,
+        subtitleSearchCues = playerControlSubtitleSearchCues,
+        subtitleSearchSourceIndex = subtitleSearchSource
+            ?.let { source -> visibleAddonSubtitles.indexOfFirst { it.id == source.id } }
+            ?: -1,
+        subtitleSearchIsLoading = currentSubtitleSearchState.isLoading,
+        subtitleSearchErrorMessage = currentSubtitleSearchState.errorMessage.orEmpty(),
+        subtitleSearchDelayMs = subtitleSearchDelayMs,
         closeModalsToken = playerControlsCloseModalsToken,
         showOpeningOverlay = openingOverlayWanted,
         openingArtwork = background ?: poster,
@@ -1186,6 +1202,10 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
         "subtitleDelayReset" -> setSubtitleDelay(0)
         "subtitleAutoSyncCapture" -> captureSubtitleAutoSyncTime()
         "subtitleAutoSyncReload" -> loadSubtitleAutoSyncCues(force = true)
+        "subtitleSearchOpen" -> {
+            if (value != 0.0) openSubtitleSearch() else subtitleSearchOpen = false
+        }
+        "subtitleSearchSource" -> selectSubtitleSearchSource(value.toInt())
         "subtitleAutoSyncCue" -> {
             val cue = playerControlsNearestSubtitleCues().getOrNull(value.toInt()) ?: return true
             applySubtitleAutoSyncCue(cue)
@@ -1691,6 +1711,29 @@ private fun PlayerScreenRuntime.buildPlayerControlSubtitleCueItems(): List<Playe
             text = cue.text,
         )
     }
+
+/**
+ * Every cue of the selected subtitle, for the search panel to match against.
+ *
+ * Read from whichever addon subtitle the panel has picked, which need not be the
+ * one on screen. Empty while the panel is closed --
+ * a film runs to a few thousand cues, and that payload has no business riding
+ * along on unrelated control-state pushes.
+ */
+private fun PlayerScreenRuntime.buildPlayerControlSubtitleSearchCues(): List<PlayerControlSubtitleCueItem> {
+    if (!subtitleSearchOpen) return emptyList()
+    return currentSubtitleSearchState.cues.mapIndexed { index, cue ->
+        PlayerControlSubtitleCueItem(
+            index = index,
+            timeMs = cue.startTimeMs,
+            endMs = cue.endTimeMs,
+            // Left to the page: it already formats timecodes, and a film needs hours,
+            // which the auto-sync m:ss label does not carry.
+            timeLabel = "",
+            text = cue.text,
+        )
+    }
+}
 
 private fun PlayerScreenRuntime.playerControlsNearestSubtitleCues(): List<SubtitleSyncCue> {
     val capturedPositionMs = subtitleAutoSyncState.capturedPositionMs ?: return emptyList()

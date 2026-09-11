@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="controls.css">
   <link rel="stylesheet" href="clip-controls.css">
+  <link rel="stylesheet" href="clip-search.css">
 </head>
 <body>
   <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
@@ -225,6 +226,14 @@
           </div>
           <div class="clip-library-list" id="clipLibraryList"></div>
         </div>
+        <div class="clip-search-panel" id="clipSearchPanel" hidden>
+          <div class="clip-search-head">
+            <select class="clip-search-source" id="clipSearchSource" title="Subtitle to search" hidden></select>
+            <input class="clip-search-input" id="clipSearchInput" type="search" spellcheck="false" autocomplete="off" placeholder="Search a line of dialogue...">
+            <span class="clip-search-status" id="clipSearchStatus"></span>
+          </div>
+          <div class="clip-search-list" id="clipSearchList"></div>
+        </div>
         <div class="clip-format-panel" id="clipFormatPanel" hidden>
           <div class="clip-format-group">
             <span class="clip-format-label">Shape</span>
@@ -277,6 +286,7 @@
           <button class="clip-action" id="clipDismissButton" type="button" hidden>&#10005;</button>
           <button class="clip-action" id="clipJobsButton" type="button" hidden>Exports</button>
           <button class="clip-action" id="clipLibraryButton" type="button" hidden>Clips</button>
+          <button class="clip-action" id="clipSearchButton" type="button" title="Find a line of dialogue (/)" hidden>Find line</button>
           <button class="clip-action" id="clipStripButton" type="button" title="Browse the film as stills to find a scene (B)" hidden>Scenes</button>
           <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
           <button class="clip-action" id="clipFormatButton" type="button" title="Output shape and size">Format</button>
@@ -514,5 +524,6 @@
 
   <script src="controls.js"></script>
   <script src="clip-controls.js"></script>
+  <script src="clip-search.js"></script>
 </body>
 </html>
