@@ -41,6 +41,9 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
     abstract val desktopAppVersionCode: Property<Int>
 
     @get:Input
+    abstract val upstreamDesktopVersionName: Property<String>
+
+    @get:Input
     abstract val supabaseUrl: Property<String>
 
     @get:Input
@@ -202,6 +205,7 @@ abstract class GenerateRuntimeConfigsTask : DefaultTask() {
                 |    const val VERSION_CODE = ${appVersionCode.get()}
                 |    const val DESKTOP_VERSION_NAME = "${desktopAppVersionName.get()}"
                 |    const val DESKTOP_VERSION_CODE = ${desktopAppVersionCode.get()}
+                |    const val UPSTREAM_DESKTOP_VERSION_NAME = "${upstreamDesktopVersionName.get()}"
                 |}
                 """.trimMargin()
             )
@@ -630,6 +634,11 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     appVersionCode.set(releaseAppVersionCode)
     desktopAppVersionName.set(desktopReleaseVersionName)
     desktopAppVersionCode.set(desktopReleaseVersionCode)
+    // The Nuvio Desktop release this fork is built from, read straight from the
+    // file upstream bumps. Not desktopReleaseVersionName: that one honours
+    // nuvio.desktop.versionName, so giving the fork its own version would
+    // otherwise rewrite the "Based on Nuvio Desktop" credit as well.
+    upstreamDesktopVersionName.set(desktopVersionProps.getProperty("VERSION_NAME")?.trim().orEmpty())
     supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL"))
     supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
@@ -1334,7 +1343,7 @@ compose.desktop {
                 upgradeUuid = windowsMsiUpgradeUuid
                 shortcut = true
                 menu = true
-                menuGroup = "Nuvio"
+                menuGroup = forkAppNameValue
             }
             linux {
                 iconFile.set(project.file("src/desktopMain/resources/icons/nuvio-app-icon-transparent.png"))

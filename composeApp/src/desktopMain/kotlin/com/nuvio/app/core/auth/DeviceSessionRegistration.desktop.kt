@@ -1,5 +1,6 @@
 package com.nuvio.app.core.auth
 
+import com.nuvio.app.core.branding.ForkBranding
 import java.net.InetAddress
 
 internal actual fun currentDeviceClientMetadata(): DeviceClientMetadata {
@@ -18,7 +19,7 @@ internal actual fun currentDeviceClientMetadata(): DeviceClientMetadata {
         .joinToString(" ")
 
     return DeviceClientMetadata(
-        clientName = "Nuvio Desktop",
+        clientName = "${ForkBranding.APP_NAME} Desktop",
         deviceName = deviceName,
         platform = platform,
     )

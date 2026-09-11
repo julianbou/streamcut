@@ -1,5 +1,6 @@
 package com.nuvio.app.features.discordrpc
 
+import com.nuvio.app.core.branding.ForkBranding
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.ui.AppPresenceState
 import com.nuvio.app.core.ui.PresenceSnapshot
@@ -49,7 +50,7 @@ internal object DiscordPresenceManager {
                     lastActivity = null
                     try {
                         AppPresenceState.current.collect { snapshot ->
-                            val activity = snapshot?.toDiscordActivity() ?: DiscordActivity(details = "Browsing Nuvio")
+                            val activity = snapshot?.toDiscordActivity() ?: DiscordActivity(details = "Browsing ${ForkBranding.APP_NAME}")
                             if (activity == lastActivity) return@collect
                             if (client.setActivity(activity)) {
                                 lastActivity = activity
