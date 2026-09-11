@@ -77,18 +77,6 @@ internal expect object ClipExtractor {
         onFailure: (message: String) -> Unit,
     ): ClipTaskHandle
 
-    /**
-     * Frames per second of [sourceUrl]'s video stream, or 0.0 when it cannot be
-     * determined.
-     *
-     * The trim UI steps In/Out one frame at a time, which needs the source's
-     * real rate: a fixed guess is off by a whole frame every few presses on
-     * anything that is not 24fps. The native player does not expose a rate, so
-     * this is probed from the container instead. Suspending because it reaches
-     * the network -- for a remote source it is a ranged read of the header.
-     */
-    suspend fun probeFrameRate(sourceUrl: String, sourceHeaders: Map<String, String>): Double
-
     /** Reveal the finished clip in the platform file manager. No-op where unsupported. */
     fun reveal(outputFileUri: String)
 

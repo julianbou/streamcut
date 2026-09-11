@@ -171,30 +171,4 @@ data class ClipEntry(
                 "${tenths / 10}.${tenths % 10} GB"
             }
         }
-
-    /**
-     * Share targets this clip already fits, largest first.
-     *
-     * The question a clip card has to answer is not "how big is it" but "can I
-     * send it", and the limits are not memorable.
-     */
-    val fitsLabels: List<String>
-        get() {
-            if (fileSizeBytes <= 0L) return emptyList()
-            return CLIP_SHARE_LIMITS.filter { fileSizeBytes <= it.second }.map { it.first }
-        }
 }
-
-/**
- * Attachment ceilings, smallest first. Free tiers, since those are the ones
- * that bite.
- *
- * Deliberately a file-level constant and not a companion object: adding a
- * companion to a @Serializable class is where the generated serializer lives,
- * and it is not worth the risk for a lookup table.
- */
-private val CLIP_SHARE_LIMITS = listOf(
-    "Discord" to 10_000_000L,
-    "WhatsApp" to 16_000_000L,
-    "X" to 512_000_000L,
-)

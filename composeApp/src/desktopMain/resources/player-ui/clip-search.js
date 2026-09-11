@@ -22,6 +22,10 @@ const clipSearchSource = document.getElementById("clipSearchSource");
 const clipSearchStatus = document.getElementById("clipSearchStatus");
 const clipSearchList = document.getElementById("clipSearchList");
 
+/** How the find shortcut is written on this platform, for the icon's tooltip. */
+const CLIP_SEARCH_SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform || "") ? "\u2318F" : "Ctrl+F";
+if (clipSearchButton) clipSearchButton.title = `Find a line of dialogue (${CLIP_SEARCH_SHORTCUT})`;
+
 // --- tuning (see the prototype README for why each number is what it is) ---
 
 /** Blended score a fuzzy window must beat. */
@@ -502,6 +506,33 @@ if (clipSearchSource) {
   });
 }
 
+// Cmd+F (Ctrl+F off the Mac) opens the search, or puts the cursor back in it when
+// it is already open. Cmd+Ctrl+F is the native fullscreen shortcut, so exactly
+// one of the two modifiers has to be down. Captured on window so it also works
+// from inside the search box, where controls.js stops looking at keys.
+window.addEventListener("keydown", event => {
+  if (event.code !== "KeyF" || event.altKey || event.shiftKey) return;
+  if (event.metaKey === event.ctrlKey) return;
+  if (!state.showClip) return;
+  if (typeof activeModal !== "undefined" && activeModal) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (clipSearchPanel && !clipSearchPanel.hidden) {
+    clipSearchInput.focus();
+    clipSearchInput.select();
+  } else {
+    clipSearchOpen();
+  }
+}, true);
+
+// The player root pauses on a click and goes fullscreen on a double-click
+// anywhere that is not a button or an input -- which takes in the result text,
+// the panel background and the subtitle picker. None of those are the video.
+if (clipSearchPanel) {
+  clipSearchPanel.addEventListener("click", event => event.stopPropagation());
+  clipSearchPanel.addEventListener("dblclick", event => event.stopPropagation());
+}
+
 // controls.js answers Escape before anything else in its keydown listener -- it
 // leaves fullscreen or leaves the player -- so an open panel never got a say, and
 // Escape in Find line or Scenes threw away the whole video. Capturing on window
@@ -540,9 +571,9 @@ window.clipUi = Object.assign({}, clipSearchPreviousUi, {
     clipSearchRender();
   },
   shouldPinChrome() {
-    // Hiding the chrome out from under an open search box would take the box
-    // with it, mid-query.
-    if (state.subtitleSearchOpen) return true;
+    // Not pinned while searching: the panel sits in the header, outside what
+    // chrome-hidden fades, so it stays put while the bottom controls clear off
+    // the subtitles and the picture.
     return clipSearchPreviousPin ? clipSearchPreviousPin() : false;
   },
   handleKey(event) {

@@ -36,6 +36,16 @@
     <symbol id="icon-content-cut" viewBox="0 0 24 24">
       <path d="M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64ZM6 8c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2Zm0 12c-1.1 0-2-.89-2-2s.9-2 2-2 2 .89 2 2-.9 2-2 2Zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5ZM19 3l-6 6 2 2 7-7V3h-3Z"/>
     </symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M15.5 15.5L21 21" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-scenes" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.75"/>
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.75"/>
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.75"/>
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.75"/>
+    </symbol>
     <symbol id="icon-close" viewBox="0 0 24 24">
       <path d="M6 6L18 18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/>
       <path d="M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/>
@@ -122,7 +132,17 @@
     </section>
     <div class="content">
       <header class="header">
+        <div class="clip-search-panel" id="clipSearchPanel" hidden>
+          <div class="clip-search-head">
+            <select class="clip-search-source" id="clipSearchSource" title="Subtitle to search" hidden></select>
+            <input class="clip-search-input" id="clipSearchInput" type="search" spellcheck="false" autocomplete="off" placeholder="Search a line of dialogue...">
+            <span class="clip-search-status" id="clipSearchStatus"></span>
+          </div>
+          <div class="clip-search-list" id="clipSearchList"></div>
+        </div>
         <nav class="header-actions" aria-label="Player actions">
+          <button class="header-button" id="clipSearchButton" type="button" aria-label="Find a line of dialogue" hidden><svg><use href="#icon-search"></use></svg></button>
+          <button class="header-button" id="clipStripButton" type="button" aria-label="Scenes" title="Browse the film as stills to find a scene (B)" hidden><svg><use href="#icon-scenes"></use></svg></button>
           <button class="header-button" id="submitIntroButton" data-command="submitIntro" aria-label="Submit intro"><svg><use href="#icon-flag"></use></svg></button>
           <button class="header-button" id="videoSettingsButton" data-command="videoSettings" aria-label="Video settings"><svg><use href="#icon-build"></use></svg></button>
           <button class="header-button" id="fullscreenButton" data-command="toggleFullscreen" aria-label="Enter fullscreen"><svg><use id="fullscreenIcon" href="#icon-fullscreen"></use></svg></button>
@@ -194,6 +214,48 @@
             <span class="provider" id="providerName"></span>
           </div>
         </section>
+        <div class="clip-library-panel" id="clipJobsPanel" hidden>
+          <div class="clip-library-head">
+            <span>Exports</span>
+          </div>
+          <div class="clip-library-list" id="clipJobsList"></div>
+        </div>
+        <div class="clip-library-panel" id="clipLibraryPanel" hidden>
+          <div class="clip-library-head">
+            <span id="clipLibraryTitle">Clips from this title</span>
+            <span class="clip-library-path" id="clipLibraryPath"></span>
+          </div>
+          <div class="clip-library-list" id="clipLibraryList"></div>
+        </div>
+        <div class="clip-row" id="clipRow" hidden>
+          <span class="clip-io-label">IN</span>
+          <input class="clip-io-time" id="clipInReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
+          <div class="clip-nudge-row" data-clip-target="in">
+            <button class="clip-nudge clip-mark" type="button" data-clip-mark="in" title="Mark IN at the frame on screen (I)">Set</button>
+          </div>
+          <span class="clip-io-label">OUT</span>
+          <input class="clip-io-time" id="clipOutReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
+          <div class="clip-nudge-row" data-clip-target="out">
+            <button class="clip-nudge clip-mark" type="button" data-clip-mark="out" title="Mark OUT at the frame on screen (O)">Set</button>
+          </div>
+          <span class="clip-io-label">LEN</span>
+          <input class="clip-io-time" id="clipLenReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Clip length -- type one to move OUT">
+          <div class="clip-range-chips" id="clipRangeChips"></div>
+          <div class="clip-row-spacer"></div>
+          <span class="clip-inline-status" id="clipStatus"></span>
+          <div class="clip-progress-track" id="clipProgressTrack" hidden>
+            <div class="clip-progress-bar" id="clipProgressBar"></div>
+          </div>
+          <button class="clip-action" id="clipCancelButton" type="button" hidden>Cancel</button>
+          <button class="clip-action" id="clipRevealButton" type="button" hidden>Show file</button>
+          <button class="clip-action" id="clipDismissButton" type="button" hidden>&#10005;</button>
+          <button class="clip-action" id="clipJobsButton" type="button" hidden>Exports</button>
+          <button class="clip-action" id="clipLibraryButton" type="button" hidden>Clips</button>
+          <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
+          <button class="clip-action" id="clipAddRangeButton" type="button" title="Keep this range and start another (A)">&#43; Add</button>
+          <button class="clip-action" id="clipPreviewButton" type="button">Preview</button>
+          <button class="clip-action primary" id="clipExportButton" type="button">Export clip</button>
+        </div>
         <div class="scrub-wrap" id="scrubWrap">
           <input id="seek" class="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek">
           <div class="clip-range-list" id="clipRangeList"></div>
@@ -212,87 +274,6 @@
           </div>
           <span class="clip-zoom-edge" id="clipZoomEndLabel">--:--</span>
           <span class="clip-zoom-scale" id="clipZoomScale"></span>
-        </div>
-        <div class="clip-library-panel" id="clipJobsPanel" hidden>
-          <div class="clip-library-head">
-            <span>Exports</span>
-          </div>
-          <div class="clip-library-list" id="clipJobsList"></div>
-        </div>
-        <div class="clip-library-panel" id="clipLibraryPanel" hidden>
-          <div class="clip-library-head">
-            <span id="clipLibraryTitle">Clips from this title</span>
-            <span class="clip-library-path" id="clipLibraryPath"></span>
-          </div>
-          <div class="clip-library-list" id="clipLibraryList"></div>
-        </div>
-        <div class="clip-search-panel" id="clipSearchPanel" hidden>
-          <div class="clip-search-head">
-            <select class="clip-search-source" id="clipSearchSource" title="Subtitle to search" hidden></select>
-            <input class="clip-search-input" id="clipSearchInput" type="search" spellcheck="false" autocomplete="off" placeholder="Search a line of dialogue...">
-            <span class="clip-search-status" id="clipSearchStatus"></span>
-          </div>
-          <div class="clip-search-list" id="clipSearchList"></div>
-        </div>
-        <div class="clip-format-panel" id="clipFormatPanel" hidden>
-          <div class="clip-format-group">
-            <span class="clip-format-label">Shape</span>
-            <div class="clip-format-options" id="clipAspectOptions">
-              <button class="clip-nudge" type="button" data-clip-aspect="0">Source</button>
-              <button class="clip-nudge" type="button" data-clip-aspect="1">16:9</button>
-              <button class="clip-nudge" type="button" data-clip-aspect="2">1:1</button>
-              <button class="clip-nudge" type="button" data-clip-aspect="3">4:5</button>
-              <button class="clip-nudge" type="button" data-clip-aspect="4">9:16</button>
-            </div>
-          </div>
-          <div class="clip-format-group">
-            <span class="clip-format-label">Max size</span>
-            <div class="clip-format-options" id="clipSizeOptions">
-              <button class="clip-nudge" type="button" data-clip-size="0">None</button>
-              <button class="clip-nudge" type="button" data-clip-size="8">8 MB</button>
-              <button class="clip-nudge" type="button" data-clip-size="16">16 MB</button>
-              <button class="clip-nudge" type="button" data-clip-size="25">25 MB</button>
-              <button class="clip-nudge" type="button" data-clip-size="50">50 MB</button>
-              <button class="clip-nudge" type="button" data-clip-size="100">100 MB</button>
-            </div>
-            <span class="clip-format-note" id="clipSizeNote"></span>
-          </div>
-        </div>
-        <div class="clip-row" id="clipRow" hidden>
-          <span class="clip-io-label">IN</span>
-          <input class="clip-io-time" id="clipInReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
-          <div class="clip-nudge-row" data-clip-target="in">
-            <button class="clip-nudge clip-mark" type="button" data-clip-mark="in" title="Mark IN at the frame on screen (I)">Set</button>
-            <button class="clip-nudge" type="button" data-clip-nudge-frames="-1" title="Back one frame">&#9664; 1f</button>
-            <button class="clip-nudge" type="button" data-clip-nudge-frames="1" title="Forward one frame">1f &#9654;</button>
-          </div>
-          <span class="clip-io-label">OUT</span>
-          <input class="clip-io-time" id="clipOutReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
-          <div class="clip-nudge-row" data-clip-target="out">
-            <button class="clip-nudge clip-mark" type="button" data-clip-mark="out" title="Mark OUT at the frame on screen (O)">Set</button>
-            <button class="clip-nudge" type="button" data-clip-nudge-frames="-1" title="Back one frame">&#9664; 1f</button>
-            <button class="clip-nudge" type="button" data-clip-nudge-frames="1" title="Forward one frame">1f &#9654;</button>
-          </div>
-          <span class="clip-io-label">LEN</span>
-          <input class="clip-io-time" id="clipLenReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Clip length -- type one to move OUT">
-          <div class="clip-range-chips" id="clipRangeChips"></div>
-          <div class="clip-row-spacer"></div>
-          <span class="clip-inline-status" id="clipStatus"></span>
-          <div class="clip-progress-track" id="clipProgressTrack" hidden>
-            <div class="clip-progress-bar" id="clipProgressBar"></div>
-          </div>
-          <button class="clip-action" id="clipCancelButton" type="button" hidden>Cancel</button>
-          <button class="clip-action" id="clipRevealButton" type="button" hidden>Show file</button>
-          <button class="clip-action" id="clipDismissButton" type="button" hidden>&#10005;</button>
-          <button class="clip-action" id="clipJobsButton" type="button" hidden>Exports</button>
-          <button class="clip-action" id="clipLibraryButton" type="button" hidden>Clips</button>
-          <button class="clip-action" id="clipSearchButton" type="button" title="Find a line of dialogue (/)" hidden>Find line</button>
-          <button class="clip-action" id="clipStripButton" type="button" title="Browse the film as stills to find a scene (B)" hidden>Scenes</button>
-          <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
-          <button class="clip-action" id="clipFormatButton" type="button" title="Output shape and size">Format</button>
-          <button class="clip-action" id="clipAddRangeButton" type="button" title="Keep this range and start another (A)">&#43; Add</button>
-          <button class="clip-action" id="clipPreviewButton" type="button">Preview</button>
-          <button class="clip-action primary" id="clipExportButton" type="button">Export clip</button>
         </div>
         <div class="time-row">
           <span class="time-pill" id="position">00:00</span>

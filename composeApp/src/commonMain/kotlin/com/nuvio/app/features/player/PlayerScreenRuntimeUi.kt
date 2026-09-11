@@ -4,11 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import com.nuvio.app.features.clip.ClipAspect
 import com.nuvio.app.features.clip.ClipContentRef
-import com.nuvio.app.features.clip.ClipExtractor
 import com.nuvio.app.features.clip.ClipJob
 import com.nuvio.app.features.clip.ClipLibrary
 import com.nuvio.app.features.clip.ClipRepository
@@ -25,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -51,6 +48,8 @@ import com.nuvio.app.features.watchprogress.buildPlaybackVideoId
 import com.nuvio.app.features.watching.application.WatchingState
 import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -249,37 +248,44 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipLibraryEntries.filter { it.contentKey == clipContent.key }
     }
     val clipOutputDirLabel = remember(clipLibraryEntries) { ClipRepository.outputDirPath() }
-    // The trim row steps In/Out by whole frames, which needs the source's frame
-    // rate. The native player exposes no such property, so it is read off the
-    // container instead: one probe per source, off the main thread, and zero
-    // until it lands -- the chrome falls back to a time step meanwhile.
-    var clipFrameDurationUs by remember { mutableStateOf(0) }
-    LaunchedEffect(playerSurfaceSourceUrl, activeSourceHeaders) {
-        clipFrameDurationUs = 0
-        val probeUrl = playerSurfaceSourceUrl.orEmpty()
-        if (!ClipRepository.isSupported || probeUrl.isBlank()) return@LaunchedEffect
-        val fps = ClipExtractor.probeFrameRate(probeUrl, activeSourceHeaders)
-        if (fps > 0.0) clipFrameDurationUs = (1_000_000.0 / fps).roundToInt()
-    }
     val clipSummary = remember(clipJobsForThisContent, clipOutputDirLabel) {
         summarizeClipJobs(clipJobsForThisContent, clipOutputDirLabel)
     }
     val clipStripState by ClipStrip.state.collectAsState()
-    // Publishes any strip this title already has, without fetching anything --
-    // which is what lets the scrub bar's hover preview work the moment a film
-    // you have browsed before is opened again. Keyed on whether the duration is
-    // known rather than its value, so the constant ticking of playback does not
-    // restart it (and would cancel a build in progress if it did).
+    // Publishes any strip this title already has straight away -- which is what
+    // lets the scrub bar's hover preview work the moment a film you have browsed
+    // before is opened again -- then builds whatever is missing in the
+    // background, so the preview does not wait for Scenes to be opened. Keyed on
+    // whether the duration is known rather than its value, so the constant
+    // ticking of playback does not restart it (and would cancel a build in
+    // progress if it did).
     LaunchedEffect(playerSurfaceSourceUrl, playbackSnapshot.durationMs > 0L) {
         val url = playerSurfaceSourceUrl.orEmpty()
         val durationMs = playbackSnapshot.durationMs
         if (!ClipStrip.isSupported || url.isBlank() || durationMs <= 0L) return@LaunchedEffect
+        val cacheKey = buildClipContentRef().key
         ClipStrip.open(
-            cacheKey = buildClipContentRef().key,
+            cacheKey = cacheKey,
             sourceUrl = url,
             headers = activeSourceHeaders,
             durationMs = durationMs,
             buildMissing = false,
+        )
+        // The frames come from the same source the film streams from, so
+        // fetching them during the opening buffer would slow the start of
+        // playback. Wait for the player to stop loading, then give the stream a
+        // head start. If Scenes is opened sooner it starts the build itself, and
+        // this call then finds it running and leaves it alone.
+        snapshotFlow { playbackSnapshot.isLoading }.first { !it }
+        delay(CLIP_STRIP_BACKGROUND_DELAY_MS)
+        val buildUrl = clipSourceUrl()
+        if (buildUrl.isBlank()) return@LaunchedEffect
+        ClipStrip.open(
+            cacheKey = cacheKey,
+            sourceUrl = buildUrl,
+            headers = activeSourceHeaders,
+            durationMs = playbackSnapshot.durationMs.takeIf { it > 0L } ?: durationMs,
+            buildMissing = true,
         )
     }
     // The strip is per title, and its frames outlive the playback session, so a
@@ -409,9 +415,6 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipOutputDir = clipOutputDirLabel,
         clipSubtitlesAvailable = activeClipSubtitle(delayMs = 0) != null,
         clipBurnSubtitles = clipBurnSubtitles,
-        clipFrameDurationUs = clipFrameDurationUs,
-        clipAspect = clipAspect.ordinal,
-        clipTargetSizeMb = clipTargetSizeMb,
         clipStripSession = clipStripState.session,
         clipStripCount = clipStripState.count,
         clipStripReady = clipStripState.ready,
@@ -922,6 +925,9 @@ private fun PlayerScreenRuntime.clipJobIdAt(value: Double): String {
  * server, and its URL is the only one ffmpeg can read -- the magnet the source
  * list carries is not a media file.
  */
+/** How long after playback settles the background filmstrip build starts. */
+private const val CLIP_STRIP_BACKGROUND_DELAY_MS = 10_000L
+
 private fun PlayerScreenRuntime.clipSourceUrl(): String =
     if (activeTorrentInfoHash != null) p2pResolvedSourceUrl.orEmpty() else activeSourceUrl
 
@@ -1089,14 +1095,6 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
         "clipBurnSubtitles" -> {
             clipBurnSubtitles = value != 0.0
         }
-        "clipSetAspect" -> {
-            clipAspect = ClipAspect.fromOrdinal(value.toInt())
-        }
-        "clipSetSizeMb" -> {
-            // Clamped rather than rejected: the field is free text, and a cap
-            // below a megabyte cannot produce a watchable clip anyway.
-            clipTargetSizeMb = value.toInt().coerceIn(0, 4096)
-        }
         "clipExport" -> {
             val start = clipStartMs
             val end = clipEndMs
@@ -1110,8 +1108,6 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                     retainsP2pStream = activeTorrentInfoHash != null,
                     audioTrackIndex = activeClipAudioTrackIndex(),
                     subtitle = if (clipBurnSubtitles) activeClipSubtitle(subtitleDelayMs) else null,
-                    aspect = clipAspect,
-                    targetSizeMb = clipTargetSizeMb,
                 )
             }
         }

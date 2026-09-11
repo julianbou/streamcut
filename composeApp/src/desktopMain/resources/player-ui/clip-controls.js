@@ -34,13 +34,7 @@ const clipAddRangeButton = document.getElementById("clipAddRangeButton");
 const clipRangeList = document.getElementById("clipRangeList");
 const clipZoomRangeList = document.getElementById("clipZoomRangeList");
 const clipRangeChips = document.getElementById("clipRangeChips");
-const clipFormatButton = document.getElementById("clipFormatButton");
-const clipFormatPanel = document.getElementById("clipFormatPanel");
-const clipAspectOptions = document.getElementById("clipAspectOptions");
-const clipSizeOptions = document.getElementById("clipSizeOptions");
-const clipSizeNote = document.getElementById("clipSizeNote");
 const clipExportButton = document.getElementById("clipExportButton");
-const clipNudgeRows = Array.from(document.querySelectorAll(".clip-nudge-row"));
 const clipZoomWrap = document.getElementById("clipZoomWrap");
 const clipZoomTrack = document.getElementById("clipZoomTrack");
 const clipZoomRange = document.getElementById("clipZoomRange");
@@ -97,7 +91,6 @@ let clipPreviewActive = false;
 let clipPreviewLoopSeekAt = 0;
 let clipLibraryOpen = false;
 let clipJobsOpen = false;
-let clipFormatOpen = false;
 // Window of the timeline the zoom track spans, or null when zoom is off.
 let clipZoomView = null;
 
@@ -387,44 +380,6 @@ const renderClipLibrary = () => {
   });
 };
 
-/**
- * Draws the format popover from state, and says what the size cap works out to.
- *
- * The note is the useful part: a cap is a bitrate spread over the runtime, so
- * the same 25MB is generous on a ten-second clip and brutal on a two-minute
- * one, and there is no way to know which you have without the arithmetic.
- */
-const renderClipFormat = () => {
-  const open = clipFormatOpen && Boolean(state.showClip);
-  clipFormatPanel.hidden = !open;
-  clipFormatButton.classList.toggle("toggled-on", Number(state.clipAspect) > 0 || Number(state.clipTargetSizeMb) > 0);
-  if (!open) return;
-  const aspect = Number(state.clipAspect) || 0;
-  const sizeMb = Number(state.clipTargetSizeMb) || 0;
-  clipAspectOptions.querySelectorAll("[data-clip-aspect]").forEach(button => {
-    button.classList.toggle("toggled-on", Number(button.dataset.clipAspect) === aspect);
-  });
-  clipSizeOptions.querySelectorAll("[data-clip-size]").forEach(button => {
-    button.classList.toggle("toggled-on", Number(button.dataset.clipSize) === sizeMb);
-  });
-  if (sizeMb <= 0) {
-    clipSizeNote.textContent = "Best quality the encoder can manage.";
-    return;
-  }
-  const ranges = clipExportableRanges();
-  if (ranges.length === 0) {
-    clipSizeNote.textContent = "Each clip is capped at this size.";
-    return;
-  }
-  const longestSec = Math.max(...ranges.map(range => (range.outMs - range.inMs) / 1000));
-  // Mirrors targetVideoBitrateBps in ClipExtractor.desktop.kt: 2% muxing
-  // overhead off the top, then the audio track, then the rest to the video.
-  const videoKbps = Math.round(((sizeMb * 1e6 * 8 * 0.97) / longestSec - 192000) / 1000);
-  clipSizeNote.textContent = videoKbps < 150
-    ? `Too tight for ${Math.round(longestSec)}s -- the clip will come out over the cap.`
-    : `About ${videoKbps} kbps of video on the longest range (${Math.round(longestSec)}s).`;
-};
-
 /** One removable chip per set-aside range, so a wrong one can be taken back. */
 const renderClipRangeChips = () => {
   clipRangeChips.textContent = "";
@@ -463,7 +418,6 @@ const renderClipUi = () => {
   if (clipStripButton) clipStripButton.hidden = !hasDuration;
   if (!show) {
     clipStripHide();
-    clipFormatPanel.hidden = true;
     clipZoomWrap.hidden = true;
     clipJobsPanel.hidden = true;
     clipJobsButton.hidden = true;
@@ -490,7 +444,6 @@ const renderClipUi = () => {
   // A length is only meaningful measured from somewhere.
   clipLenReadout.disabled = clipDraft.inMs == null;
   renderClipRangeChips();
-  renderClipFormat();
   clipAddRangeButton.disabled = !clipHasRange();
   // Exports run in the background, so nothing below is gated on one: the trim
   // controls stay live while clips encode, and so does the export button.
@@ -522,15 +475,6 @@ const renderClipUi = () => {
   clipRevealButton.dataset.clipJobIndex = revealIndex;
   clipDismissButton.hidden = dismissIndex < 0 || !state.clipStatusKind;
   clipDismissButton.dataset.clipJobIndex = dismissIndex;
-  // Stepping needs a point to step from. Set does not -- it is how the point
-  // gets there -- so it stays live even though it shares the row.
-  clipNudgeRows.forEach(row => {
-    const target = row.dataset.clipTarget;
-    const value = target === "in" ? clipDraft.inMs : clipDraft.outMs;
-    row.querySelectorAll("button[data-clip-nudge-frames]").forEach(button => {
-      button.disabled = value == null;
-    });
-  });
   if (running) {
     clipProgressTrack.hidden = false;
     clipProgressBar.style.width = `${Math.round((Number(state.clipProgress) || 0) * 100)}%`;
@@ -582,33 +526,6 @@ const clipFieldText = target => {
   return ms == null ? "" : formatClipTime(ms);
 };
 
-/**
- * Microseconds in one source frame, probed off the container by Kotlin.
- *
- * 0 until the probe lands, and 0 for good where ffprobe found no rate -- the
- * step falls back to a fixed time nudge in that case. Kept in microseconds
- * because 23.976fps is 41.7083ms: rounding to whole milliseconds per press
- * would drift a frame within a couple of dozen steps.
- */
-const clipFrameDurationUs = () => Number(state.clipFrameDurationUs) || 0;
-
-/** Step used when the source rate is unknown. */
-const CLIP_FALLBACK_STEP_MS = 100;
-
-/**
- * Where `frames` frames from `fromMs` lands.
- *
- * Snapped to the frame grid rather than added to the current value, so a point
- * marked mid-frame lands on a boundary at the first press instead of carrying
- * its offset for the rest of the session.
- */
-const clipFrameStepMs = (fromMs, frames) => {
-  const frameUs = clipFrameDurationUs();
-  if (frameUs <= 0) return fromMs + frames * CLIP_FALLBACK_STEP_MS;
-  const index = Math.round((fromMs * 1000) / frameUs) + frames;
-  return Math.max(0, Math.round((index * frameUs) / 1000));
-};
-
 const clipApplyPoint = (target, ms) => {
   if (target === "in") {
     const limit = clipDraft.outMs != null ? clipDraft.outMs - CLIP_MIN_GAP_MS : clipDraftDurationMs;
@@ -623,10 +540,10 @@ const clipApplyPoint = (target, ms) => {
 /**
  * Holds the picture still so the frame being landed on can be read.
  *
- * Stepping a frame while the film runs is pointless -- the frame is gone before
- * the eye reaches it -- so every fine adjustment pauses first. Quiet, because
- * this is not the user asking to stop watching; it is the trim UI needing a
- * still to work against.
+ * Used when a typed timecode jumps the playhead: the point of the jump is to see
+ * the frame it names, which a running film carries away before the eye gets
+ * there. Quiet, because this is not the user asking to stop watching; it is the
+ * trim UI needing a still to work against.
  */
 const clipPauseForInspection = () => {
   if (!state.isPlaying) return;
@@ -634,20 +551,6 @@ const clipPauseForInspection = () => {
   // the real value a beat later.
   state.isPlaying = false;
   send("setPlaybackStateQuiet", 0);
-};
-
-/**
- * Moves the playhead one frame. Nothing about the draft changes.
- *
- * The counterpart to marking, and the reason marking can stay seek-free: step
- * to the exact frame you want with `,` / `.`, then press I or O to pin it.
- */
-const clipStepPlayhead = frames => {
-  clipPauseForInspection();
-  clipPreviewActive = false;
-  const from = Math.max(0, Math.min(clipDraftDurationMs, Number(state.positionMs) || 0));
-  clipSeekTo(clipFrameStepMs(from, frames));
-  renderClipUi();
 };
 
 /**
@@ -718,7 +621,6 @@ const clipMarkAtPlayhead = target => {
  * The clipper's keyboard map. controls.js offers every keydown here before its
  * own shortcut table, so these win; a truthy return means the key was consumed.
  *
- *   , .        step the playhead one frame
  *   I O        mark In / Out at the frame on screen
  *   A          set this range aside and start another
  *   X          export every range
@@ -746,10 +648,6 @@ const clipHandleKey = event => {
     case "KeyI":
     case "KeyO":
       clipMarkAtPlayhead(event.code === "KeyI" ? "in" : "out");
-      break;
-    case "Comma":
-    case "Period":
-      clipStepPlayhead(event.code === "Comma" ? -1 : 1);
       break;
     case "KeyA":
       clipAddRange();
@@ -846,27 +744,6 @@ document.querySelectorAll("[data-clip-mark]").forEach(button => {
   button.addEventListener("click", event => {
     event.stopPropagation();
     clipMarkAtPlayhead(button.dataset.clipMark);
-  });
-});
-
-clipNudgeRows.forEach(row => {
-  const target = row.dataset.clipTarget;
-  // Scoped to the step buttons: the Set button shares this row but carries no
-  // delta, and would otherwise read as a step of zero -- which still seeks.
-  row.querySelectorAll("button[data-clip-nudge-frames]").forEach(button => {
-    button.addEventListener("click", event => {
-      event.stopPropagation();
-      const frames = Number(button.dataset.clipNudgeFrames) || 0;
-      const current = target === "in" ? clipDraft.inMs : clipDraft.outMs;
-      if (current == null) return;
-      clipPreviewActive = false;
-      // Unlike marking, stepping *should* move the picture: you are adjusting a
-      // point by an amount there is no way to judge without seeing the frame it
-      // lands on. Pausing is what makes that frame legible.
-      clipPauseForInspection();
-      clipSeekTo(clipApplyPoint(target, clipFrameStepMs(current, frames)));
-      renderClipUi();
-    });
   });
 });
 
@@ -979,33 +856,6 @@ clipPreviewButton.addEventListener("click", event => {
 clipSubsButton.addEventListener("click", event => {
   event.stopPropagation();
   send("clipBurnSubtitles", state.clipBurnSubtitles ? 0 : 1);
-});
-
-// --- output format --------------------------------------------------------
-//
-// Shape and size cap live in a popover rather than the clip row: they are set
-// once for a run of clips headed to the same place, while everything in the row
-// is touched per clip. Both are owned by Kotlin -- the ffmpeg command is built
-// there -- so these buttons only report the choice.
-
-clipFormatButton.addEventListener("click", event => {
-  event.stopPropagation();
-  clipFormatOpen = !clipFormatOpen;
-  renderClipUi();
-});
-
-clipAspectOptions.querySelectorAll("[data-clip-aspect]").forEach(button => {
-  button.addEventListener("click", event => {
-    event.stopPropagation();
-    send("clipSetAspect", Number(button.dataset.clipAspect) || 0);
-  });
-});
-
-clipSizeOptions.querySelectorAll("[data-clip-size]").forEach(button => {
-  button.addEventListener("click", event => {
-    event.stopPropagation();
-    send("clipSetSizeMb", Number(button.dataset.clipSize) || 0);
-  });
 });
 
 clipAddRangeButton.addEventListener("click", event => {

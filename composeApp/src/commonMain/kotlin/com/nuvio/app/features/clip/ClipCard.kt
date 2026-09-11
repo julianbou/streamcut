@@ -176,26 +176,6 @@ internal fun ClipCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            val fits = entry.fitsLabels
-            if (fits.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    fits.forEach { target ->
-                        Text(
-                            text = target,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(Color.White.copy(alpha = 0.09f))
-                                .padding(horizontal = 5.dp, vertical = 1.dp),
-                        )
-                    }
-                }
-            }
         }
     }
 }
