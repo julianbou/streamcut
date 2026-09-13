@@ -82,7 +82,7 @@ class LibraryRepositoryTest {
         val tabs = libraryTabsWithLocal(listOf(traktTab))
 
         assertEquals(listOf("local", "trakt:watchlist"), tabs.map { it.key })
-        assertEquals("Clipper Library", tabs.first().title)
+        assertEquals("StreamCut Library", tabs.first().title)
     }
 
     @Test
