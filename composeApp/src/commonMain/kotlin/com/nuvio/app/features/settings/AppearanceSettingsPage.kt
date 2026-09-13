@@ -221,7 +221,9 @@ internal fun LazyListScope.appearanceSettingsContent(
                         )
                     }
                 }
-                if (AppIconPlatform.isSupported) {
+                // The clipper ships a single logo, so there are no colour
+                // variants to choose between.
+                if (AppIconPlatform.isSupported && AppFeaturePolicy.viewingChromeEnabled) {
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsNavigationRow(
                         title = stringResource(Res.string.settings_appearance_app_icon),

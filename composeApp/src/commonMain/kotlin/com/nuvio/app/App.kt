@@ -1,5 +1,6 @@
 package com.nuvio.app
 
+import com.nuvio.app.core.branding.BrandLaunchScreen
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -4095,24 +4096,6 @@ private fun TabletTopPillItem(
 private fun AppLaunchOverlay(
     modifier: Modifier = Modifier,
 ) {
-    val tokens = MaterialTheme.nuvio
-    Box(
-        modifier = modifier
-            .zIndex(NuvioTokens.Z.dialog),
-        contentAlignment = Alignment.Center,
-    ) {
-        LaunchMeshBackground(modifier = Modifier.fillMaxSize())
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            AppBrandWordmark(
-                contentDescription = stringResource(Res.string.app_brand_name),
-                modifier = Modifier
-                    .fillMaxWidth(0.48f)
-                    .height(44.dp),
-            )
-            Spacer(modifier = Modifier.height(tokens.spacing.sectionGap))
-            NuvioLoadingIndicator(color = tokens.colors.accent)
-        }
-    }
+    // The clipper's own launch screen -- its logo on the artwork's navy.
+    BrandLaunchScreen(modifier = modifier.zIndex(NuvioTokens.Z.dialog))
 }
