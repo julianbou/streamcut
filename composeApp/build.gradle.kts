@@ -1356,6 +1356,57 @@ compose.desktop {
     }
 }
 
+/**
+ * Fails the build when iCloud has left `Name 2.ext` copies in the packaged output.
+ *
+ * The repository lives under ~/Documents, which is synced by iCloud Drive's
+ * "Desktop & Documents". Sync periodically duplicates files it finds in
+ * build/, and jpackage puts whatever is in processedResources into the app.
+ * A duplicated Compose resource is not a build error -- it is a crash on
+ * launch: the resource loader refuses an ID backed by two files, and the app
+ * dies on a dialog before any window appears.
+ *
+ * 0.1.0-alpha shipped exactly that, so the check runs before jpackage rather
+ * than trusting the tree to be clean. The fix when it fires is to delete the
+ * polluted directories and build again; the source tree is not affected.
+ */
+fun failOnDuplicatedPackagedResources() {
+    val roots = listOf(
+        layout.buildDirectory.dir("processedResources/desktop").get().asFile,
+        layout.buildDirectory.dir("classes/kotlin/desktop").get().asFile,
+    ).filter { it.exists() }
+
+    // A duplicate is "<name> <n><ext>" sitting beside the "<name><ext>" it was
+    // copied from. Requiring the original rules out a resource that simply has
+    // a number in its name, which would otherwise fail every build.
+    val copySuffix = Regex(""" \d+$""")
+    val duplicates = roots.flatMap { root ->
+        root.walkTopDown().filter { candidate ->
+            if (!candidate.isFile) return@filter false
+            val stem = candidate.nameWithoutExtension
+            if (!copySuffix.containsMatchIn(stem)) return@filter false
+            val originalStem = stem.replace(copySuffix, "")
+            val extension = candidate.extension
+            val originalName = if (extension.isEmpty()) originalStem else "$originalStem.$extension"
+            File(candidate.parentFile, originalName).isFile
+        }
+    }
+    if (duplicates.isEmpty()) return
+
+    error(
+        buildString {
+            appendLine("iCloud has left ${duplicates.size} duplicated file(s) in the build output.")
+            appendLine("Packaging them produces an app that crashes on launch.")
+            appendLine()
+            duplicates.take(10).forEach { appendLine("  ${it.relativeTo(rootProject.projectDir)}") }
+            if (duplicates.size > 10) appendLine("  ... and ${duplicates.size - 10} more")
+            appendLine()
+            appendLine("Delete the polluted output and package again:")
+            appendLine("  rm -rf composeApp/build/{processedResources,generated/compose,classes,kotlin}")
+        }
+    )
+}
+
 fun renameMacosDmgOutput(release: Boolean) {
     if (!isMacHost) return
 
@@ -1420,6 +1471,16 @@ fun publishWindowsMsiArtifact(msi: File) {
         msi.copyTo(publishedMsi, overwrite = true)
     }
     logger.lifecycle("Published Windows MSI artifact: ${publishedMsi.absolutePath}")
+}
+
+// The app image is assembled here, so this is the last point before the
+// duplicates would be copied into it -- packageReleaseDmg runs too late.
+tasks.matching {
+    it.name == "createDistributable" || it.name == "createReleaseDistributable"
+}.configureEach {
+    doFirst {
+        failOnDuplicatedPackagedResources()
+    }
 }
 
 tasks.matching { it.name == "packageDmg" }.configureEach {
