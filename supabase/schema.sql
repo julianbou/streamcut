@@ -1233,6 +1233,31 @@ begin
 end;
 $$;
 
+-- Publishes the local credentials of a device that has never synced without
+-- overwriting what the account already holds: the caller seeds, then pulls and
+-- merges. Same arguments as the push above, but rows that already exist win.
+create or replace function public.sync_seed_provider_credentials(
+    p_profile_id int,
+    p_credentials jsonb,
+    p_origin_client_id text default null
+)
+returns void
+language plpgsql security definer
+set search_path = public, pg_temp
+as $$
+declare uid uuid := public._require_uid();
+begin
+    insert into public.provider_credentials (user_id, profile_id, provider, credential_json, updated_at)
+    select uid, p_profile_id,
+           item->>'provider',
+           coalesce(item->'credential_json', '{}'::jsonb),
+           now()
+    from jsonb_array_elements(coalesce(p_credentials, '[]'::jsonb)) item
+    where item->>'provider' is not null
+    on conflict (user_id, profile_id, provider) do nothing;
+end;
+$$;
+
 create or replace function public.sync_delete_provider_credentials(
     p_profile_id int,
     p_provider text,
@@ -1301,6 +1326,7 @@ begin
         'sync_push_collections(int, jsonb, text)',
         'sync_pull_provider_credentials(int)',
         'sync_push_provider_credentials(int, jsonb, text)',
+        'sync_seed_provider_credentials(int, jsonb, text)',
         'sync_delete_provider_credentials(int, text, text)'
     ] loop
         execute format('revoke execute on function public.%s from public, anon', fn);
