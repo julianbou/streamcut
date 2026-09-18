@@ -36,6 +36,7 @@ import com.nuvio.app.core.ui.nuvio
 import kotlinx.coroutines.launch
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_cancel
+import nuvio.composeapp.generated.resources.compose_auth_sign_in
 import nuvio.composeapp.generated.resources.compose_settings_page_account
 import nuvio.composeapp.generated.resources.auth_account_deletion_failed
 import nuvio.composeapp.generated.resources.settings_account_delete_account
@@ -112,10 +113,21 @@ private fun AccountSettingsBody(
             }
         }
 
-        NuvioPrimaryButton(
-            text = stringResource(Res.string.settings_account_sign_out),
-            onClick = { showSignOutConfirm = true },
-        )
+        // Signed out is a state the app can reach on its own -- a refresh that
+        // failed, a token that expired -- and the gate lets it through to the
+        // local library. Offering only "sign out" there wipes that library and
+        // leaves nowhere to sign back in, so the button follows the state.
+        if (authState is AuthState.Authenticated) {
+            NuvioPrimaryButton(
+                text = stringResource(Res.string.settings_account_sign_out),
+                onClick = { showSignOutConfirm = true },
+            )
+        } else {
+            NuvioPrimaryButton(
+                text = stringResource(Res.string.compose_auth_sign_in),
+                onClick = { AuthRepository.requestSignIn() },
+            )
+        }
 
         if (canDeleteAccount) {
             DeleteAccountCard(

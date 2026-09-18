@@ -5,7 +5,7 @@ import com.nuvio.app.core.storage.DesktopStorage
 internal actual object AuthStorage {
     private val store = DesktopStorage.store("nuvio_auth")
 
-    /** The cached profile list this flag replaced. Read only, never written. */
+    /** The cached profile list this flag replaced. Only read, and cleared. */
     private val legacyProfileStore = DesktopStorage.store("nuvio_profiles")
 
     actual fun loadAnonymousUserId(): String? =
@@ -29,5 +29,9 @@ internal actual object AuthStorage {
 
     actual fun clearHasSignedIn() {
         store.remove("has_signed_in")
+        // The legacy list answers loadHasSignedIn() on its own, so leaving it
+        // behind would keep the app out of the sign-in screen for good if the
+        // sign-out wipe that deletes it ever fails.
+        legacyProfileStore.remove("profiles")
     }
 }

@@ -46,6 +46,25 @@ object AuthRepository {
      */
     val hasEverSignedIn: Boolean get() = AuthStorage.loadHasSignedIn()
 
+    /**
+     * Whether the app must show the sign-in screen even though [state] did not
+     * change value.
+     *
+     * Signing out from [AuthState.Unauthenticated] -- the lapsed session the
+     * gate lets through on its local library -- writes the state value that is
+     * already current, so a gate keyed on [state] alone never re-runs: the user
+     * stays inside an app whose data was just wiped, with no way back. Settings
+     * raises the flag too; for a lapsed session it is the only route back to
+     * sign-in.
+     */
+    private val _signInRequested = MutableStateFlow(false)
+    val signInRequested: StateFlow<Boolean> = _signInRequested.asStateFlow()
+
+    /** Sends the app back to the sign-in screen without touching local data. */
+    fun requestSignIn() {
+        _signInRequested.value = true
+    }
+
     fun initialize() {
         if (initialized) return
         initialized = true
@@ -53,6 +72,7 @@ object AuthRepository {
         val savedAnonId = AuthStorage.loadAnonymousUserId()
         if (savedAnonId != null) {
             AuthStorage.saveHasSignedIn()
+            _signInRequested.value = false
             _state.value = AuthState.Authenticated(
                 userId = savedAnonId,
                 email = null,
@@ -69,6 +89,7 @@ object AuthRepository {
                         val userId = user?.id.orEmpty()
                         if (!validateRemoteSession(userId)) return@collect
                         AuthStorage.saveHasSignedIn()
+                        _signInRequested.value = false
                         _state.value = AuthState.Authenticated(
                             userId = userId,
                             email = user?.email,
@@ -116,6 +137,7 @@ object AuthRepository {
         val userId = Uuid.random().toString()
         AuthStorage.saveAnonymousUserId(userId)
         AuthStorage.saveHasSignedIn()
+        _signInRequested.value = false
         _state.value = AuthState.Authenticated(
             userId = userId,
             email = null,
@@ -168,6 +190,7 @@ object AuthRepository {
             Result.success(Unit)
         }
         val localCleanup = runCatching { LocalAccountDataCleaner.wipe() }
+        _signInRequested.value = true
         _state.value = AuthState.Unauthenticated
 
         val failure = anonymousRead.exceptionOrNull()
@@ -195,6 +218,7 @@ object AuthRepository {
         runCatching { AuthStorage.clearHasSignedIn() }
         validatedRemoteUserId = null
         val sessionClear = runCatching { SupabaseProvider.client.auth.clearSession() }
+        _signInRequested.value = true
         _state.value = AuthState.Unauthenticated
         val failure = anonymousClear.exceptionOrNull() ?: sessionClear.exceptionOrNull()
         val cancellation = sessionClear.exceptionOrNull() as? CancellationException
@@ -230,6 +254,7 @@ object AuthRepository {
             log.w(e) { "Failed to clear Supabase session after remote invalidation; continuing local reset" }
         }
         val localCleanup = runCatching { LocalAccountDataCleaner.wipe() }
+        _signInRequested.value = true
         _state.value = AuthState.Unauthenticated
         localCleanup.onFailure { error ->
             log.e(error) { "Local account cleanup failed after remote session invalidation" }
@@ -244,6 +269,7 @@ object AuthRepository {
         try {
             LocalAccountDataCleaner.wipe()
         } finally {
+            _signInRequested.value = true
             _state.value = AuthState.Unauthenticated
         }
     }.onFailure { e ->

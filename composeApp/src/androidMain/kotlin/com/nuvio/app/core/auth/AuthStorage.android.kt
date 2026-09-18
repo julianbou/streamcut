@@ -10,7 +10,7 @@ actual object AuthStorage {
 
     private var preferences: SharedPreferences? = null
 
-    /** The cached profile list this flag replaced. Read only, never written. */
+    /** The cached profile list this flag replaced. Only read, and cleared. */
     private var legacyProfilePreferences: SharedPreferences? = null
 
     fun initialize(context: Context) {
@@ -40,5 +40,9 @@ actual object AuthStorage {
 
     actual fun clearHasSignedIn() {
         preferences?.edit()?.remove(KEY_HAS_SIGNED_IN)?.apply()
+        // The legacy list answers loadHasSignedIn() on its own, so leaving it
+        // behind would keep the app out of the sign-in screen for good if the
+        // sign-out wipe that clears it ever fails.
+        legacyProfilePreferences?.edit()?.remove("profile_payload")?.apply()
     }
 }

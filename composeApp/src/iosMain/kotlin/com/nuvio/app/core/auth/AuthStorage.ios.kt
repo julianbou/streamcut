@@ -28,5 +28,9 @@ actual object AuthStorage {
 
     actual fun clearHasSignedIn() {
         NSUserDefaults.standardUserDefaults.removeObjectForKey(KEY_HAS_SIGNED_IN)
+        // The legacy list answers loadHasSignedIn() on its own, so leaving it
+        // behind would keep the app out of the sign-in screen for good if the
+        // sign-out wipe that clears it ever fails.
+        NSUserDefaults.standardUserDefaults.removeObjectForKey("profile_payload")
     }
 }

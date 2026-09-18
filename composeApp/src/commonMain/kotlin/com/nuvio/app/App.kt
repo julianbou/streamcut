@@ -541,6 +541,7 @@ fun App(
             }
 
             val authState by AuthRepository.state.collectAsStateWithLifecycle()
+            val signInRequested by AuthRepository.signInRequested.collectAsStateWithLifecycle()
             val networkStatusUiState by remember {
                 NetworkStatusRepository.uiState
             }.collectAsStateWithLifecycle()
@@ -593,7 +594,11 @@ fun App(
             }
         }
 
-        LaunchedEffect(authState) {
+        // Keyed on the sign-out signal as well as the state: signing out while
+        // already unauthenticated writes the state value that is already
+        // current, so the state alone would never wake this effect and the gate
+        // would stay on Main with the account's data wiped out from under it.
+        LaunchedEffect(authState, signInRequested) {
             when (authState) {
                 is AuthState.Loading -> {
                     gateScreen = AppGateScreen.Loading.name
@@ -606,7 +611,10 @@ fun App(
                     // than a sign-in screen it may have no network to complete.
                     // A machine that has never had an account has nothing to
                     // show, so it goes to Auth.
-                    if (AuthRepository.hasEverSignedIn) {
+                    // ...unless the sign-in screen is what was asked for: an
+                    // explicit sign-out, or the button in account settings,
+                    // which is a lapsed session's only way back to an account.
+                    if (AuthRepository.hasEverSignedIn && !signInRequested) {
                         if (gateScreen != AppGateScreen.Main.name) enterMainGate(syncOnEnter = false)
                     } else {
                         gateScreen = AppGateScreen.Auth.name
