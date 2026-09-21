@@ -1407,6 +1407,62 @@ fun failOnDuplicatedPackagedResources() {
     )
 }
 
+/**
+ * Fails the build when a native library in the app image links against
+ * something outside the bundle and outside macOS itself.
+ *
+ * jpackage copies the runtime from whichever JDK runs the build. Homebrew's
+ * openjdk links its AWT libraries against Homebrew's own freetype, harfbuzz,
+ * libjpeg, lcms2, giflib and libpng by absolute path, so an app packaged with
+ * it runs on the machine that built it and nowhere else: on a Mac without
+ * Homebrew the JVM dies loading libfontmanager before any window appears, and
+ * launched from Finder that is an icon that bounces once and goes away.
+ * 0.2.0-alpha shipped exactly that. Package with a self-contained JDK --
+ * Temurin, as the release script already expects for Intel.
+ */
+fun failOnExternalNativeDependencies(appImage: File) {
+    if (!isMacHost || !appImage.exists()) return
+
+    val allowedPrefixes = listOf("/System/", "/usr/lib/", "@rpath/", "@loader_path", "@executable_path")
+    fun otool(vararg args: String): List<String> {
+        val process = ProcessBuilder(listOf("otool") + args).redirectErrorStream(true).start()
+        val lines = process.inputStream.bufferedReader().readLines()
+        process.waitFor()
+        return lines
+    }
+
+    val nativeFiles = appImage.walkTopDown().filter { file ->
+        file.isFile && (
+            file.extension in setOf("dylib", "jnilib", "so") ||
+                file.parentFile.name == "MacOS"
+            )
+    }
+    val offenders = nativeFiles.flatMap { file ->
+        // A dylib's first entry is its own install name, not a dependency --
+        // ours carry build-machine paths there, which is harmless.
+        val installName = otool("-D", file.absolutePath).drop(1).firstOrNull()?.trim()
+        otool("-L", file.absolutePath).drop(1)
+            .map { it.trim().substringBefore(" (compatibility") }
+            .filter { it.isNotEmpty() && it != installName }
+            .filterNot { dependency -> allowedPrefixes.any(dependency::startsWith) }
+            .map { dependency -> "${file.relativeTo(appImage)} -> $dependency" }
+    }.toList()
+    if (offenders.isEmpty()) return
+
+    error(
+        buildString {
+            appendLine("The app image links against ${offenders.size} librar(ies) outside the bundle.")
+            appendLine("It would start on this machine and crash on launch everywhere else.")
+            appendLine()
+            offenders.take(15).forEach { appendLine("  $it") }
+            if (offenders.size > 15) appendLine("  ... and ${offenders.size - 15} more")
+            appendLine()
+            appendLine("Package with a self-contained JDK instead of Homebrew's openjdk, e.g.:")
+            appendLine("  JAVA_HOME=~/.nuvio/jdks/temurin-17-arm64/Contents/Home ./gradlew :composeApp:packageReleaseDmg ...")
+        }
+    )
+}
+
 fun renameMacosDmgOutput(release: Boolean) {
     if (!isMacHost) return
 
@@ -1480,6 +1536,16 @@ tasks.matching {
 }.configureEach {
     doFirst {
         failOnDuplicatedPackagedResources()
+    }
+}
+
+// Checked once the image exists and before a DMG is made from it. Release
+// only: a dev distributable never leaves this machine.
+tasks.matching { it.name == "createReleaseDistributable" }.configureEach {
+    doLast {
+        failOnExternalNativeDependencies(
+            layout.buildDirectory.dir("compose/binaries/main-release/app").get().asFile,
+        )
     }
 }
 

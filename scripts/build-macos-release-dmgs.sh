@@ -17,8 +17,14 @@ Options:
   -h, --help       Show this help.
 
 Environment:
-  NUVIO_MACOS_X64_JDK_HOME  Optional x86_64 JDK home.
-                            Defaults to ~/.nuvio/jdks/temurin-17-x64/Contents/Home.
+  NUVIO_MACOS_ARM64_JDK_HOME  Optional arm64 JDK home.
+                              Defaults to ~/.nuvio/jdks/temurin-17-arm64/Contents/Home.
+  NUVIO_MACOS_X64_JDK_HOME    Optional x86_64 JDK home.
+                              Defaults to ~/.nuvio/jdks/temurin-17-x64/Contents/Home.
+
+Both must be self-contained JDKs such as Temurin. jpackage copies the build
+JDK's runtime into the app, and Homebrew's openjdk links it against Homebrew
+libraries: the result launches only on Macs that have them.
 USAGE
 }
 
@@ -98,8 +104,23 @@ if [[ "$skip_arm" == false ]]; then
   fi
   arm_tasks+=("$task")
 
+  arm64_jdk_home="${NUVIO_MACOS_ARM64_JDK_HOME:-$HOME/.nuvio/jdks/temurin-17-arm64/Contents/Home}"
+  if [[ ! -x "$arm64_jdk_home/bin/java" ]]; then
+    cat >&2 <<EOF
+arm64 JDK not found at:
+  $arm64_jdk_home
+
+Set NUVIO_MACOS_ARM64_JDK_HOME to a self-contained arm64 JDK (e.g. Temurin 17),
+or install one at the default path. Not Homebrew's openjdk: see --help.
+EOF
+    exit 1
+  fi
+
   echo "Building macOS arm64 release DMG..."
-  run_cmd ./gradlew "${arm_tasks[@]}" "${common_gradle_args[@]}" "${extra_gradle_args[@]}"
+  run_cmd env \
+    "JAVA_HOME=$arm64_jdk_home" \
+    "PATH=$arm64_jdk_home/bin:$PATH" \
+    ./gradlew "${arm_tasks[@]}" "${common_gradle_args[@]}" "${extra_gradle_args[@]}"
 fi
 
 if [[ "$skip_intel" == false ]]; then
