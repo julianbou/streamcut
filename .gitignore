@@ -36,3 +36,11 @@ PERFORMANCE_FINDINGS.md
 # Local MPVKit iOS build environment (sparse APFS image, see MPVKit docs)
 .mpvkit-build.sparseimage
 bin/
+
+# /brag launch video output (large media, not part of the app)
+brag-output/
+
+# Impeccable working files: render captures, decision-page logs, critique archive
+.impeccable/review/
+.impeccable/questions/
+.impeccable/critique/
