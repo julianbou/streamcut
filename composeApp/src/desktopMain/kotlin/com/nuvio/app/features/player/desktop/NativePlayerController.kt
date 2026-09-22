@@ -1040,6 +1040,8 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("clipSubtitlesAvailable", clipSubtitlesAvailable)
         append(',')
+        appendJsonField("clipFrameDurationUs", clipFrameDurationUs)
+        append(',')
         appendJsonField("clipStripSession", clipStripSession)
         append(',')
         appendJsonField("clipStripCount", clipStripCount)

@@ -40,6 +40,10 @@
       <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>
       <path d="M15.5 15.5L21 21" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"/>
     </symbol>
+    <symbol id="icon-keyboard" viewBox="0 0 24 24">
+      <rect x="2.5" y="6" width="19" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.75"/>
+      <path d="M6.5 10h1M10.5 10h1M14.5 10h1M18 10h-.5M7.5 14h9" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </symbol>
     <symbol id="icon-scenes" viewBox="0 0 24 24">
       <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.75"/>
       <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.75"/>
@@ -143,6 +147,7 @@
         <nav class="header-actions" aria-label="Player actions">
           <button class="header-button" id="clipSearchButton" type="button" aria-label="Find a line of dialogue" hidden><svg><use href="#icon-search"></use></svg></button>
           <button class="header-button" id="clipStripButton" type="button" aria-label="Scenes" title="Browse the film as stills to find a scene (B)" hidden><svg><use href="#icon-scenes"></use></svg></button>
+          <button class="header-button" id="clipKeysButton" type="button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" hidden><svg><use href="#icon-keyboard"></use></svg></button>
           <button class="header-button" id="submitIntroButton" data-command="submitIntro" aria-label="Submit intro"><svg><use href="#icon-flag"></use></svg></button>
           <button class="header-button" id="videoSettingsButton" data-command="videoSettings" aria-label="Video settings"><svg><use href="#icon-build"></use></svg></button>
           <button class="header-button" id="fullscreenButton" data-command="toggleFullscreen" aria-label="Enter fullscreen"><svg><use id="fullscreenIcon" href="#icon-fullscreen"></use></svg></button>
@@ -228,40 +233,54 @@
           <div class="clip-library-list" id="clipLibraryList"></div>
         </div>
         <div class="clip-row" id="clipRow" hidden>
-          <span class="clip-io-label">IN</span>
-          <input class="clip-io-time" id="clipInReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
-          <div class="clip-nudge-row" data-clip-target="in">
-            <button class="clip-nudge clip-mark" type="button" data-clip-mark="in" title="Mark IN at the frame on screen (I)">Set</button>
+          <div class="clip-row-main">
+            <div class="clip-group clip-group-marks" role="group" aria-label="Clip points">
+              <div class="clip-point">
+                <label class="clip-io-label" for="clipInReadout">IN</label>
+                <input class="clip-io-time" id="clipInReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
+                <button class="clip-nudge clip-mark" type="button" data-clip-mark="in" title="Mark IN at the frame on screen (I)">Mark In</button>
+              </div>
+              <div class="clip-point">
+                <label class="clip-io-label" for="clipOutReadout">OUT</label>
+                <input class="clip-io-time" id="clipOutReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
+                <button class="clip-nudge clip-mark" type="button" data-clip-mark="out" title="Mark OUT at the frame on screen (O)">Mark Out</button>
+              </div>
+              <div class="clip-point">
+                <label class="clip-io-label" for="clipLenReadout">LEN</label>
+                <input class="clip-io-time" id="clipLenReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Clip length -- type one to move OUT">
+              </div>
+            </div>
+            <div class="clip-group clip-group-ranges" id="clipRangeGroup" role="group" aria-label="Ranges set aside">
+              <button class="clip-action" id="clipAddRangeButton" type="button" title="Keep this range and start another (A)">&#43; Add range</button>
+              <div class="clip-range-chips" id="clipRangeChips"></div>
+            </div>
+            <div class="clip-row-spacer"></div>
+            <div class="clip-group clip-group-export" role="group" aria-label="Export">
+              <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
+              <button class="clip-action" id="clipPreviewButton" type="button" title="Loop the range (R)">Preview</button>
+              <button class="clip-action primary" id="clipExportButton" type="button" title="Export (X)">Export clip</button>
+            </div>
           </div>
-          <span class="clip-io-label">OUT</span>
-          <input class="clip-io-time" id="clipOutReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
-          <div class="clip-nudge-row" data-clip-target="out">
-            <button class="clip-nudge clip-mark" type="button" data-clip-mark="out" title="Mark OUT at the frame on screen (O)">Set</button>
+          <div class="clip-row-status">
+            <span class="clip-inline-status" id="clipStatus" role="status" aria-live="polite"></span>
+            <div class="clip-progress-track" id="clipProgressTrack" hidden>
+              <div class="clip-progress-bar" id="clipProgressBar"></div>
+            </div>
+            <button class="clip-action compact" id="clipUndoButton" type="button" hidden>Undo</button>
+            <button class="clip-action compact" id="clipCancelButton" type="button" hidden>Cancel export</button>
+            <button class="clip-action compact" id="clipRevealButton" type="button" hidden>Show file</button>
+            <button class="clip-action compact" id="clipDismissButton" type="button" aria-label="Dismiss" title="Dismiss" hidden><svg class="clip-dismiss-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+            <button class="clip-action compact" id="clipJobsButton" type="button" hidden>Exports</button>
+            <button class="clip-action compact" id="clipLibraryButton" type="button" hidden>Clips</button>
           </div>
-          <span class="clip-io-label">LEN</span>
-          <input class="clip-io-time" id="clipLenReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Clip length -- type one to move OUT">
-          <div class="clip-range-chips" id="clipRangeChips"></div>
-          <div class="clip-row-spacer"></div>
-          <span class="clip-inline-status" id="clipStatus"></span>
-          <div class="clip-progress-track" id="clipProgressTrack" hidden>
-            <div class="clip-progress-bar" id="clipProgressBar"></div>
-          </div>
-          <button class="clip-action" id="clipCancelButton" type="button" hidden>Cancel</button>
-          <button class="clip-action" id="clipRevealButton" type="button" hidden>Show file</button>
-          <button class="clip-action" id="clipDismissButton" type="button" hidden>&#10005;</button>
-          <button class="clip-action" id="clipJobsButton" type="button" hidden>Exports</button>
-          <button class="clip-action" id="clipLibraryButton" type="button" hidden>Clips</button>
-          <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
-          <button class="clip-action" id="clipAddRangeButton" type="button" title="Keep this range and start another (A)">&#43; Add</button>
-          <button class="clip-action" id="clipPreviewButton" type="button">Preview</button>
-          <button class="clip-action primary" id="clipExportButton" type="button">Export clip</button>
         </div>
         <div class="scrub-wrap" id="scrubWrap">
           <input id="seek" class="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek">
           <div class="clip-range-list" id="clipRangeList"></div>
           <div class="clip-range" id="clipRange" hidden></div>
-          <div class="clip-handle" id="clipHandleIn" data-clip-handle="in" hidden><span class="clip-handle-bar"></span></div>
-          <div class="clip-handle" id="clipHandleOut" data-clip-handle="out" hidden><span class="clip-handle-bar"></span></div>
+          <div class="clip-main-playhead" id="clipMainPlayhead" hidden></div>
+          <div class="clip-handle" id="clipHandleIn" data-clip-handle="in" role="slider" tabindex="0" aria-label="IN point" hidden><span class="clip-handle-bar"></span></div>
+          <div class="clip-handle" id="clipHandleOut" data-clip-handle="out" role="slider" tabindex="0" aria-label="OUT point" hidden><span class="clip-handle-bar"></span></div>
         </div>
         <div class="clip-zoom-wrap" id="clipZoomWrap" hidden>
           <span class="clip-zoom-edge" id="clipZoomStartLabel">--:--</span>
@@ -269,8 +288,8 @@
             <div class="clip-range-list" id="clipZoomRangeList"></div>
             <div class="clip-zoom-range" id="clipZoomRange"></div>
             <div class="clip-zoom-playhead" id="clipZoomPlayhead"></div>
-            <div class="clip-zoom-handle" id="clipZoomHandleIn" data-clip-handle="in"></div>
-            <div class="clip-zoom-handle" id="clipZoomHandleOut" data-clip-handle="out"></div>
+            <div class="clip-zoom-handle" id="clipZoomHandleIn" data-clip-handle="in" role="slider" tabindex="0" aria-label="IN point, zoomed"></div>
+            <div class="clip-zoom-handle" id="clipZoomHandleOut" data-clip-handle="out" role="slider" tabindex="0" aria-label="OUT point, zoomed"></div>
           </div>
           <span class="clip-zoom-edge" id="clipZoomEndLabel">--:--</span>
           <span class="clip-zoom-scale" id="clipZoomScale"></span>

@@ -296,11 +296,11 @@ const clipSearchClipFrom = result => {
   const delay = clipSearchDelayMs();
   const inMs = Math.max(0, result.startMs + delay - CLIP_SEARCH_PAD_MS);
   const outMs = Math.max(inMs + 100, result.endMs + delay + CLIP_SEARCH_PAD_MS);
-  // These two are in SECONDS; the Kotlin side multiplies back up.
-  send("clipStart", inMs / 1000);
-  send("clipEnd", outMs / 1000);
-  // Land on the in-point so the range that was just set is the thing on screen.
-  send("scrubFinish", inMs);
+  // Through the trim draft, not straight to Kotlin: the draft is what the row
+  // shows and what Export sends, so a range set behind its back looked like
+  // nothing happened and left Export disabled. setRange also lands on the IN
+  // frame, paused, so the range that was just set is the thing on screen.
+  window.clipUi?.setRange?.(inMs, outMs);
 };
 
 // --- rendering ---
@@ -343,7 +343,8 @@ const clipSearchRenderResults = () => {
 
     const tag = document.createElement("span");
     tag.className = "clip-search-tag" + (result.isExact ? " exact" : "");
-    tag.textContent = result.isExact ? "exact" : result.score.toFixed(2);
+    tag.textContent = result.isExact ? "exact" : "close";
+    tag.title = result.isExact ? "The line as written" : `Close match (${Math.round(result.score * 100)}%)`;
     meta.appendChild(tag);
 
     const spacer = document.createElement("span");
@@ -354,6 +355,7 @@ const clipSearchRenderResults = () => {
     goButton.className = "clip-search-action";
     goButton.type = "button";
     goButton.textContent = "Go";
+    goButton.title = "Jump to this line";
     goButton.addEventListener("click", () => clipSearchGoTo(result));
     meta.appendChild(goButton);
 
@@ -578,7 +580,8 @@ window.clipUi = Object.assign({}, clipSearchPreviousUi, {
   },
   handleKey(event) {
     if (!event.metaKey && !event.ctrlKey && !event.altKey) {
-      if (event.code === "Slash") {
+      // Shift+Slash is `?`, the shortcut sheet -- not search.
+      if (event.code === "Slash" && !event.shiftKey) {
         event.preventDefault();
         clipSearchToggle();
         return true;

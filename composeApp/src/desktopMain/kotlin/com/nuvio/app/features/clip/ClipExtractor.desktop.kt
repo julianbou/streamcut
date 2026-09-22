@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.awt.Desktop
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -147,6 +148,74 @@ internal actual object ClipExtractor {
                 job.cancel()
             }
         }
+    }
+
+    /**
+     * Probed frame rates by source URL. A rate is a property of the file, so one
+     * probe per source is enough for the life of the process -- and for a remote
+     * source the probe is an HTTP round trip, which the trim UI must not repeat
+     * every time the player re-renders.
+     */
+    private val frameRateCache = ConcurrentHashMap<String, Double>()
+
+    actual suspend fun probeFrameRate(
+        sourceUrl: String,
+        sourceHeaders: Map<String, String>,
+    ): Double {
+        if (sourceUrl.isBlank()) return 0.0
+        frameRateCache[sourceUrl]?.let { return it }
+        val rate = withContext(Dispatchers.IO) {
+            runCatching {
+                val ffmpeg = resolveFfmpegPath() ?: return@runCatching 0.0
+                val args = mutableListOf(ffprobePath(ffmpeg), "-v", "error")
+                headersArgument(sourceHeaders)?.let { headers ->
+                    args += "-headers"
+                    args += headers
+                }
+                args += listOf(
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream=avg_frame_rate,r_frame_rate",
+                    "-of", "default=noprint_wrappers=1",
+                    sourceUrl,
+                )
+                val process = ProcessBuilder(args).redirectErrorStream(false).start()
+                val output = process.inputStream.bufferedReader().readText()
+                if (!process.waitFor(20, TimeUnit.SECONDS)) {
+                    process.destroyForcibly()
+                    return@runCatching 0.0
+                }
+                parseFrameRate(output)
+            }.getOrElse { 0.0 }
+        }
+        if (rate > 0.0) frameRateCache[sourceUrl] = rate
+        return rate
+    }
+
+    /**
+     * ffprobe reports rates as rationals -- `24000/1001`, or `0/0` when the
+     * container does not say. The division happens here at full precision: 23.976
+     * rounded to three places drifts a whole frame within a few minutes.
+     */
+    private fun parseFrameRate(output: String): Double {
+        val fields = output.lineSequence()
+            .mapNotNull { line ->
+                val separator = line.indexOf('=')
+                if (separator <= 0) null else line.substring(0, separator).trim() to
+                    line.substring(separator + 1).trim()
+            }
+            .toMap()
+        // avg_frame_rate first: r_frame_rate is the smallest rate that ticks on
+        // every frame, which comes back doubled on telecined or interlaced input.
+        for (key in listOf("avg_frame_rate", "r_frame_rate")) {
+            val parts = fields[key]?.split('/') ?: continue
+            val numerator = parts.getOrNull(0)?.toDoubleOrNull() ?: continue
+            val denominator = parts.getOrNull(1)?.toDoubleOrNull() ?: 1.0
+            if (numerator <= 0.0 || denominator <= 0.0) continue
+            val rate = numerator / denominator
+            // Outside this band it is a misparse, not a real film.
+            if (rate >= 1.0 && rate <= 480.0) return rate
+        }
+        return 0.0
     }
 
     actual fun reveal(outputFileUri: String) {

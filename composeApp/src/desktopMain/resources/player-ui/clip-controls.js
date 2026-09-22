@@ -19,6 +19,7 @@ const clipRow = document.getElementById("clipRow");
 const clipRange = document.getElementById("clipRange");
 const clipHandleIn = document.getElementById("clipHandleIn");
 const clipHandleOut = document.getElementById("clipHandleOut");
+const clipMainPlayhead = document.getElementById("clipMainPlayhead");
 const clipInReadout = document.getElementById("clipInReadout");
 const clipOutReadout = document.getElementById("clipOutReadout");
 const clipLenReadout = document.getElementById("clipLenReadout");
@@ -52,6 +53,9 @@ const clipLibraryPanel = document.getElementById("clipLibraryPanel");
 const clipLibraryList = document.getElementById("clipLibraryList");
 const clipLibraryPath = document.getElementById("clipLibraryPath");
 const clipStripButton = document.getElementById("clipStripButton");
+const clipKeysButton = document.getElementById("clipKeysButton");
+const clipRowStatus = clipRow.querySelector(".clip-row-status");
+const clipUndoButton = document.getElementById("clipUndoButton");
 
 // --- clipper mode ---
 //
@@ -93,6 +97,15 @@ let clipLibraryOpen = false;
 let clipJobsOpen = false;
 // Window of the timeline the zoom track spans, or null when zoom is off.
 let clipZoomView = null;
+// The range a chip's remove button just took out, kept long enough to undo.
+let clipRemovedRange = null;
+let clipRemovedTimer = 0;
+const CLIP_UNDO_WINDOW_MS = 6000;
+// When a first Escape was swallowed to protect the draft; a second one inside
+// the window is taken as meaning it.
+let clipEscArmedAt = 0;
+let clipEscTimer = 0;
+const CLIP_ESC_WINDOW_MS = 2500;
 
 const clipHasRange = () =>
   clipDraft.inMs != null && clipDraft.outMs != null && clipDraft.outMs > clipDraft.inMs;
@@ -112,6 +125,29 @@ const clipExportableRanges = () => {
 const formatClipTime = ms => {
   const safe = Math.max(0, Number(ms) || 0);
   return `${formatTime(safe)}.${Math.floor((safe % 1000) / 100)}`;
+};
+
+/**
+ * Microseconds in one source frame, probed off the container by Kotlin, or 0
+ * while the probe is out (or failed). Microseconds rather than a rate so the
+ * step stays an exact integer -- a rounded 23.976 drifts a frame within a
+ * couple of dozen presses.
+ */
+const clipFrameDurationUs = () => Number(state.clipFrameDurationUs) || 0;
+
+/** Step used while the source rate is unknown. */
+const CLIP_FALLBACK_STEP_MS = 100;
+
+/**
+ * Where `frames` frames from `fromMs` lands. Snapped to the frame grid rather
+ * than added to the current value, so a playhead sitting mid-frame lands on a
+ * boundary at the first press instead of carrying the offset forever.
+ */
+const clipFrameStepMs = (fromMs, frames) => {
+  const frameUs = clipFrameDurationUs();
+  if (frameUs <= 0) return fromMs + frames * CLIP_FALLBACK_STEP_MS;
+  const index = Math.round((fromMs * 1000) / frameUs) + frames;
+  return Math.max(0, Math.round((index * frameUs) / 1000));
 };
 
 // --- zoomed trim window ---------------------------------------------------
@@ -301,7 +337,7 @@ const renderClipJobs = () => {
       track.className = "clip-progress-track";
       const bar = document.createElement("div");
       bar.className = "clip-progress-bar";
-      bar.style.width = `${Math.round((Number(item.progress) || 0) * 100)}%`;
+      bar.style.transform = `scaleX(${Math.max(0, Math.min(1, Number(item.progress) || 0))})`;
       track.appendChild(bar);
       row.appendChild(track);
     }
@@ -310,7 +346,7 @@ const renderClipJobs = () => {
       ? [["Cancel", "clipCancel", ""]]
       : [
           ...(item.canReveal ? [["Show file", "clipReveal", ""]] : []),
-          ["\u2715", "clipDismiss", ""],
+          ["Dismiss", "clipDismiss", ""],
         ];
     actions.forEach(([label, event, extraClass]) => {
       const button = document.createElement("button");
@@ -340,7 +376,7 @@ const renderClipLibrary = () => {
   clipLibraryPanel.hidden = !open;
   if (!open) return;
 
-  clipLibraryPath.textContent = state.clipOutputDir || "";
+  clipLibraryPath.textContent = clipShortPath(state.clipOutputDir);
   clipLibraryPath.title = state.clipOutputDir || "";
   clipLibraryList.textContent = "";
   items.forEach((item, index) => {
@@ -380,24 +416,80 @@ const renderClipLibrary = () => {
   });
 };
 
-/** One removable chip per set-aside range, so a wrong one can be taken back. */
+/**
+ * One chip per set-aside range, numbered in film order and named by where it
+ * sits -- a length alone stops telling ranges apart after the third. The chip
+ * itself jumps to its IN; only the small x takes it out, and even that can be
+ * undone for a few seconds, because a range can take minutes to find.
+ */
 const renderClipRangeChips = () => {
   clipRangeChips.textContent = "";
   clipRanges.forEach((range, index) => {
-    const chip = document.createElement("button");
-    chip.type = "button";
+    const label = `#${index + 1} ${formatClipTime(range.inMs)}\u2013${formatClipTime(range.outMs)}`;
+    const chip = document.createElement("span");
     chip.className = "clip-range-chip";
-    chip.title = `${formatClipTime(range.inMs)} - ${formatClipTime(range.outMs)} (click to remove)`;
-    chip.textContent = `${formatClipTime(range.outMs - range.inMs)} \u00d7`;
-    chip.addEventListener("click", event => {
+
+    const jump = document.createElement("button");
+    jump.type = "button";
+    jump.className = "clip-range-chip-jump";
+    jump.textContent = label;
+    jump.title = `Go to range ${index + 1} (${formatClipTime(range.outMs - range.inMs)} long)`;
+    jump.addEventListener("click", event => {
       event.stopPropagation();
-      clipRanges.splice(index, 1);
-      renderClipUi();
+      clipPauseForInspection();
+      clipSeekTo(range.inMs);
       noteChromeActivity();
     });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "clip-range-chip-remove";
+    remove.setAttribute("aria-label", `Remove range ${index + 1}, ${label}`);
+    remove.title = "Remove this range";
+    remove.innerHTML = `<svg aria-hidden="true"><use href="#icon-close"></use></svg>`;
+    remove.addEventListener("click", event => {
+      event.stopPropagation();
+      clipRemoveRange(index);
+    });
+
+    chip.append(jump, remove);
     clipRangeChips.appendChild(chip);
   });
 };
+
+/** Keeps set-aside ranges in film order, so chip numbers read left to right. */
+const clipSortRanges = () => clipRanges.sort((a, b) => a.inMs - b.inMs);
+
+const clipClearRemoved = () => {
+  clipRemovedRange = null;
+  if (clipRemovedTimer) clearTimeout(clipRemovedTimer);
+  clipRemovedTimer = 0;
+};
+
+const clipRemoveRange = index => {
+  const [range] = clipRanges.splice(index, 1);
+  if (!range) return;
+  clipClearRemoved();
+  clipRemovedRange = range;
+  clipRemovedTimer = setTimeout(() => {
+    clipClearRemoved();
+    renderClipUi();
+  }, CLIP_UNDO_WINDOW_MS);
+  renderClipUi();
+  noteChromeActivity();
+};
+
+const clipUndoRemove = () => {
+  if (!clipRemovedRange) return;
+  clipRanges.push(clipRemovedRange);
+  clipSortRanges();
+  clipClearRemoved();
+  renderClipUi();
+  noteChromeActivity();
+};
+
+/** `/Users/name/Movies/StreamCut` reads as `~/Movies/StreamCut`. */
+const clipShortPath = path => String(path || "").replace(/^\/(Users|home)\/[^/]+(?=\/|$)/, "~");
 
 const renderClipUi = () => {
   document.body.classList.toggle("clipper-mode", isClipperMode());
@@ -416,6 +508,7 @@ const renderClipUi = () => {
   clipHandleIn.hidden = !hasIn;
   clipHandleOut.hidden = !hasOut;
   if (clipStripButton) clipStripButton.hidden = !hasDuration;
+  clipMainPlayhead.hidden = !hasDuration;
   if (!show) {
     clipStripHide();
     clipZoomWrap.hidden = true;
@@ -445,6 +538,7 @@ const renderClipUi = () => {
   clipLenReadout.disabled = clipDraft.inMs == null;
   renderClipRangeChips();
   clipAddRangeButton.disabled = !clipHasRange();
+  if (clipKeysButton) clipKeysButton.hidden = !hasDuration;
   // Exports run in the background, so nothing below is gated on one: the trim
   // controls stay live while clips encode, and so does the export button.
   const exportable = clipExportableRanges().length;
@@ -457,10 +551,10 @@ const renderClipUi = () => {
   const burnSubtitles = Boolean(state.clipBurnSubtitles);
   clipSubsButton.hidden = !state.clipSubtitlesAvailable;
   clipSubsButton.classList.toggle("toggled-on", burnSubtitles);
-  clipSubsButton.textContent = burnSubtitles ? "Subtitles on" : "Subtitles off";
+  clipSubsButton.textContent = burnSubtitles ? "Subtitles: burn in" : "Subtitles: none";
   clipSubsButton.title = burnSubtitles
-    ? "The active subtitle is rendered into the clip"
-    : "Export the clip without subtitles";
+    ? "The subtitle on screen is rendered into the clip. Click to export without it."
+    : "The clip is exported without subtitles. Click to burn in the one on screen.";
   clipPreviewButton.textContent = clipPreviewActive ? "Stop preview" : "Preview";
   // The row's buttons act on a single job, so they only appear when there is no
   // ambiguity about which one; the rest is per-row in the exports panel.
@@ -477,18 +571,37 @@ const renderClipUi = () => {
   clipDismissButton.dataset.clipJobIndex = dismissIndex;
   if (running) {
     clipProgressTrack.hidden = false;
-    clipProgressBar.style.width = `${Math.round((Number(state.clipProgress) || 0) * 100)}%`;
+    clipProgressBar.style.transform = `scaleX(${Math.max(0, Math.min(1, Number(state.clipProgress) || 0))})`;
   } else {
     clipProgressTrack.hidden = true;
-    clipProgressBar.style.width = "0%";
+    clipProgressBar.style.transform = "scaleX(0)";
   }
-  clipStatus.textContent = state.clipStatusMessage || "";
+  // Local notices outrank the export status for the few seconds they live:
+  // they answer the key the user just pressed.
+  const escArmed = clipEscArmedAt > 0;
+  const pending = clipExportableRanges().length;
+  let statusText = state.clipStatusMessage || "";
+  let statusKind = state.clipStatusKind || "";
+  if (escArmed) {
+    statusText = `Press Esc again to leave \u2013 ${pending} unexported ${pending === 1 ? "range" : "ranges"} will be lost`;
+    statusKind = "warn";
+  } else if (clipRemovedRange) {
+    statusText = `Removed ${formatClipTime(clipRemovedRange.inMs)}\u2013${formatClipTime(clipRemovedRange.outMs)}`;
+    statusKind = "";
+  }
+  clipUndoButton.hidden = !clipRemovedRange || escArmed;
+  clipStatus.textContent = statusText;
   // Failure text can run long and the row truncates it; hovering shows all of it.
-  clipStatus.title = state.clipStatusMessage || "";
-  clipStatus.dataset.kind = state.clipStatusKind || "";
+  clipStatus.title = statusText;
+  clipStatus.dataset.kind = statusKind;
   renderClipZoom();
   renderClipJobs();
   renderClipLibrary();
+  // The line collapses when it has nothing to say, so an idle row is one line.
+  clipRowStatus.hidden = !statusText && !running && [
+    clipUndoButton, clipCancelButton, clipRevealButton, clipDismissButton, clipJobsButton, clipLibraryButton,
+  ].every(button => button.hidden);
+  clipSyncHandleAria();
 };
 
 const clipSeekTo = ms => {
@@ -563,6 +676,7 @@ const clipPauseForInspection = () => {
 const clipAddRange = () => {
   if (!clipHasRange()) return;
   clipRanges.push({ inMs: clipDraft.inMs, outMs: clipDraft.outMs });
+  clipSortRanges();
   clipDraft = { inMs: null, outMs: null };
   clipPreviewActive = false;
   clipZoomView = null;
@@ -618,10 +732,44 @@ const clipMarkAtPlayhead = target => {
 };
 
 /**
+ * Makes [inMs, outMs] the draft, as if both had been typed: the search panel's
+ * "Clip" lands here. Pauses on the IN frame so what was just set is on screen.
+ */
+const clipSetRange = (inMs, outMs) => {
+  if (clipDraftDurationMs <= 0) return;
+  const start = Math.max(0, Math.min(clipDraftDurationMs - CLIP_MIN_GAP_MS, inMs));
+  clipDraft = {
+    inMs: start,
+    outMs: Math.min(clipDraftDurationMs, Math.max(start + CLIP_MIN_GAP_MS, outMs)),
+  };
+  clipPreviewActive = false;
+  clipZoomView = null;
+  clipPauseForInspection();
+  clipSeekTo(start);
+  renderClipUi();
+  noteChromeActivity();
+};
+
+/**
+ * Moves the playhead one frame. Nothing about the draft changes -- step to the
+ * frame you want with `,` / `.`, then press I or O to pin it. Pauses first: a
+ * frame you cannot hold still is a frame you cannot judge.
+ */
+const clipStepPlayhead = frames => {
+  if (clipDraftDurationMs <= 0) return;
+  clipPauseForInspection();
+  const from = Math.max(0, Number(state.positionMs) || 0);
+  clipSeekTo(clipFrameStepMs(from, frames));
+  noteChromeActivity();
+};
+
+/**
  * The clipper's keyboard map. controls.js offers every keydown here before its
  * own shortcut table, so these win; a truthy return means the key was consumed.
  *
  *   I O        mark In / Out at the frame on screen
+ *   , .        step the playhead one frame back / forward
+ *   ?          the shortcut sheet
  *   A          set this range aside and start another
  *   X          export every range
  *   R          review the selection on a loop
@@ -642,9 +790,26 @@ const clipHandleKey = event => {
     }
     return false;
   }
+  if (clipKeysVisible) {
+    if (event.code === "Escape" || event.key === "?") {
+      clipKeysHide();
+      event.preventDefault();
+      return true;
+    }
+    return false;
+  }
   if (!state.showClip || clipDraftDurationMs <= 0) return false;
+  if (event.key === "?" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    clipKeysShow();
+    event.preventDefault();
+    return true;
+  }
   if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return false;
   switch (event.code) {
+    case "Comma":
+    case "Period":
+      clipStepPlayhead(event.code === "Comma" ? -1 : 1);
+      break;
     case "KeyI":
     case "KeyO":
       clipMarkAtPlayhead(event.code === "KeyI" ? "in" : "out");
@@ -811,6 +976,52 @@ const bindClipHandle = (handle, msFromEvent, onDrag) => {
   handle.addEventListener("pointercancel", finishDrag);
 };
 
+/**
+ * Arrow keys on a focused handle move its point: one frame, or a second with
+ * Shift. Stopped here so the transport's own arrow seek never fires under it.
+ */
+const bindClipHandleKeys = handle => {
+  const target = handle.dataset.clipHandle;
+  handle.addEventListener("keydown", event => {
+    if (event.code !== "ArrowLeft" && event.code !== "ArrowRight") return;
+    event.preventDefault();
+    event.stopPropagation();
+    const current = target === "in" ? clipDraft.inMs : clipDraft.outMs;
+    if (current == null) return;
+    const direction = event.code === "ArrowLeft" ? -1 : 1;
+    const next = event.shiftKey ? current + direction * 1000 : clipFrameStepMs(current, direction);
+    clipPauseForInspection();
+    clipSeekTo(clipApplyPoint(target, next));
+    clipZoomView = null;
+    renderClipUi();
+    noteChromeActivity();
+  });
+};
+[clipHandleIn, clipHandleOut, clipZoomHandleIn, clipZoomHandleOut].forEach(bindClipHandleKeys);
+
+/** Screen readers get the point's time, not a bare percentage. */
+const clipSyncHandleAria = () => {
+  [[clipHandleIn, clipZoomHandleIn, clipDraft.inMs], [clipHandleOut, clipZoomHandleOut, clipDraft.outMs]]
+    .forEach(([main, zoom, ms]) => {
+      [main, zoom].forEach(handle => {
+        handle.setAttribute("aria-valuemin", "0");
+        handle.setAttribute("aria-valuemax", String(Math.round(clipDraftDurationMs)));
+        handle.setAttribute("aria-valuenow", String(Math.round(ms || 0)));
+        handle.setAttribute("aria-valuetext", ms == null ? "not set" : formatClipTime(ms));
+      });
+    });
+};
+
+// The main-bar playhead follows the seek input's own --progress, which
+// controls.js sets on every path that moves it -- playback ticks, scrubbing,
+// keyboard seeks. Watching it means no call site in controls.js has to know.
+const clipSeekInput = document.getElementById("seek");
+const clipSyncMainPlayhead = () => {
+  clipMainPlayhead.style.left = clipSeekInput.style.getPropertyValue("--progress") || "0%";
+};
+new MutationObserver(clipSyncMainPlayhead).observe(clipSeekInput, { attributes: true, attributeFilter: ["style"] });
+clipSyncMainPlayhead();
+
 bindClipHandle(clipHandleIn, clipTrackMsFromEvent, null);
 bindClipHandle(clipHandleOut, clipTrackMsFromEvent, null);
 bindClipHandle(clipZoomHandleIn, clipZoomMsFromEvent, clipZoomPanTo);
@@ -895,6 +1106,136 @@ const bindClipRowJobAction = (button, event) => {
 bindClipRowJobAction(clipCancelButton, "clipCancel");
 bindClipRowJobAction(clipRevealButton, "clipReveal");
 bindClipRowJobAction(clipDismissButton, "clipDismiss");
+clipUndoButton.addEventListener("click", event => {
+  event.stopPropagation();
+  clipUndoRemove();
+});
+
+// --- Escape guard ----------------------------------------------------------
+//
+// controls.js reads a bare Escape as "leave the player", and the ranges being
+// built live only in this page -- so one reflexive press threw away minutes of
+// marking. While anything is unexported, the first Escape only warns; a second
+// inside the window leaves as before. A capture listener, because controls.js
+// handles Escape on document before any other key logic runs.
+const clipEscDisarm = () => {
+  clipEscArmedAt = 0;
+  if (clipEscTimer) clearTimeout(clipEscTimer);
+  clipEscTimer = 0;
+};
+
+window.addEventListener("keydown", event => {
+  if (event.key !== "Escape") return;
+  // A timecode field's own Escape reverts the field; that is not leaving.
+  if (isTextEntryTarget(event.target)) return;
+  if (!isClipperMode() || !state.showClip || state.isFullscreen) return;
+  // Anything open closes first, through its own handler.
+  if (activeModal || clipStripVisible || clipKeysVisible) return;
+  const search = document.getElementById("clipSearchPanel");
+  if (search && !search.hidden) return;
+  if (clipExportableRanges().length === 0) return;
+  if (clipEscArmedAt && Date.now() - clipEscArmedAt < CLIP_ESC_WINDOW_MS) {
+    clipEscDisarm();
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  clipEscDisarm();
+  clipEscArmedAt = Date.now();
+  clipEscTimer = setTimeout(() => {
+    clipEscDisarm();
+    renderClipUi();
+  }, CLIP_ESC_WINDOW_MS);
+  renderClipUi();
+  noteChromeActivity();
+}, true);
+
+// --- shortcut sheet ----------------------------------------------------------
+//
+// The one place every key is written down, including the ones with no button
+// (frame stepping, search, undo). Opened with ? or the keyboard icon.
+let clipKeysVisible = false;
+
+const CLIP_KEY_GROUPS = [
+  ["Mark", [
+    [["I"], "Mark IN at the frame on screen"],
+    [["O"], "Mark OUT at the frame on screen"],
+    [[",", "."], "Step one frame back / forward"],
+    [["\u2190", "\u2192"], "On a focused handle: move it one frame (Shift: one second)"],
+  ]],
+  ["Ranges", [
+    [["A"], "Set this range aside and start another"],
+    [["R"], "Loop the range"],
+    [["Backspace"], "Undo: the draft, then ranges newest first"],
+  ]],
+  ["Export and find", [
+    [["X"], "Export every range"],
+    [["/"], "Find a line of dialogue"],
+    [["B"], "Browse the film as stills"],
+    [["Space"], "Play / pause"],
+  ]],
+];
+
+const clipKeysOverlay = document.createElement("div");
+clipKeysOverlay.className = "clip-keys";
+clipKeysOverlay.hidden = true;
+clipKeysOverlay.setAttribute("role", "dialog");
+clipKeysOverlay.setAttribute("aria-modal", "true");
+clipKeysOverlay.setAttribute("aria-labelledby", "clipKeysTitle");
+clipKeysOverlay.innerHTML = `
+  <div class="clip-keys-card">
+    <div class="clip-keys-head">
+      <h2 class="clip-keys-title" id="clipKeysTitle">Keyboard shortcuts</h2>
+      <button class="clip-action compact" type="button" data-clip-keys-close>Close</button>
+    </div>
+    <div class="clip-keys-groups">${CLIP_KEY_GROUPS.map(([title, rows]) => `
+      <section class="clip-keys-group">
+        <h3 class="clip-keys-group-title">${title}</h3>
+        <dl class="clip-keys-list">${rows.map(([keys, what]) => `
+          <dt>${keys.map(key => `<kbd>${key}</kbd>`).join("")}</dt><dd>${what}</dd>`).join("")}
+        </dl>
+      </section>`).join("")}
+    </div>
+  </div>
+`;
+document.body.appendChild(clipKeysOverlay);
+
+const clipKeysShow = () => {
+  if (clipKeysVisible) return;
+  clipKeysVisible = true;
+  clipKeysOverlay.hidden = false;
+  clipKeysOverlay.querySelector("[data-clip-keys-close]").focus();
+  noteChromeActivity();
+};
+
+const clipKeysHide = () => {
+  if (!clipKeysVisible) return;
+  clipKeysVisible = false;
+  clipKeysOverlay.hidden = true;
+  if (clipKeysButton) clipKeysButton.focus();
+  noteChromeActivity();
+};
+
+clipKeysOverlay.addEventListener("click", event => {
+  if (event.target === clipKeysOverlay || event.target.closest("[data-clip-keys-close]")) {
+    event.stopPropagation();
+    clipKeysHide();
+  }
+});
+// Escape here must not reach controls.js, which would leave the player.
+clipKeysOverlay.addEventListener("keydown", event => {
+  if (event.key === "Escape" || event.key === "?") {
+    event.preventDefault();
+    event.stopPropagation();
+    clipKeysHide();
+  }
+});
+if (clipKeysButton) {
+  clipKeysButton.addEventListener("click", event => {
+    event.stopPropagation();
+    clipKeysShow();
+  });
+}
 
 // --- hover preview on the scrub bar -------------------------------------
 //
@@ -1153,6 +1494,10 @@ const clipStripBuild = (session, count, spacingMs) => {
     label.className = "clip-strip-time";
     label.textContent = formatTime(ms);
     cell.append(shot, label);
+    // One tab stop for the whole grid; arrows move within it. A thousand
+    // stills as a thousand tab stops made the grid unreachable by keyboard.
+    cell.tabIndex = index === 0 ? 0 : -1;
+    cell.setAttribute("aria-label", `Still at ${formatTime(ms)}`);
     cell.addEventListener("click", () => {
       send("clipStripSeek", ms);
       clipStripHide();
@@ -1230,6 +1575,31 @@ const clipStripTick = () => {
 
 clipStripGrid.addEventListener("scroll", clipStripRefresh, { passive: true });
 
+/** Columns in the grid as laid out now -- it reflows with the window. */
+const clipStripColumns = () => {
+  const cells = clipStripCells;
+  if (cells.length < 2) return 1;
+  const top = cells[0].cell.offsetTop;
+  const next = cells.findIndex(entry => entry.cell.offsetTop !== top);
+  return next > 0 ? next : cells.length;
+};
+
+clipStripGrid.addEventListener("keydown", event => {
+  const current = clipStripCells.findIndex(entry => entry.cell === document.activeElement);
+  if (current < 0) return;
+  const columns = clipStripColumns();
+  const moves = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -columns, ArrowDown: columns, Home: -current,
+    End: clipStripCells.length - 1 - current };
+  if (!(event.code in moves)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const target = Math.max(0, Math.min(clipStripCells.length - 1, current + moves[event.code]));
+  clipStripCells[current].cell.tabIndex = -1;
+  const next = clipStripCells[target].cell;
+  next.tabIndex = 0;
+  next.focus();
+});
+
 const clipStripShow = () => {
   if (clipStripVisible || clipDraftDurationMs <= 0) return;
   clipStripVisible = true;
@@ -1269,8 +1639,8 @@ const clipStripRender = () => {
     clipStripBuild(session, count, spacingMs);
   }
   clipStripCountLabel.textContent = count > 0 && ready >= count
-    ? `${count} frames`
-    : `building - ${ready} of ${count}`;
+    ? `${count.toLocaleString()} stills`
+    : `Building stills \u2013 ${ready.toLocaleString()} of ${count.toLocaleString()}`;
   if (!clipStripRetryTimer) clipStripTick();
 };
 
@@ -1292,6 +1662,8 @@ const clipSyncPlayback = (durationMs, positionMs) => {
     // you actually were.
     clipDraft = { inMs: null, outMs: null };
     clipRanges = [];
+    clipClearRemoved();
+    clipEscDisarm();
     clipPreviewActive = false;
     clipZoomView = null;
     // A new source means a different title, so a stale open panel would be
@@ -1322,6 +1694,7 @@ window.clipUi = {
   syncPlayback: clipSyncPlayback,
   shouldPinChrome: clipShouldPinChrome,
   handleKey: clipHandleKey,
+  setRange: clipSetRange,
 };
 
 // controls.js runs its initial render() before this file loads, so the clip row
