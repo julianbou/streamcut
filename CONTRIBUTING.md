@@ -1,172 +1,55 @@
 # Contributing
 
-Thanks for helping improve Nuvio Desktop.
+StreamCut is a personal fork of [Nuvio Desktop](https://github.com/NuvioMedia/NuvioDesktop),
+maintained by one person for their own use. It is alpha software and its direction changes
+whenever the author wants it to.
 
-## Strict rules - read before opening anything
+You are welcome to open issues and pull requests, but please read this first — it is short,
+and it sets expectations honestly rather than promising a review process that does not exist.
 
-These rules are enforced strictly. Issues and PRs that do not follow them will be closed without review.
+## What to expect
 
----
+- **There is no maintenance commitment.** Issues and PRs may sit untouched, or be closed
+  because the change doesn't fit where the app is going. That is not a judgment of the work.
+- **No support for the packaged builds.** Releases are unsigned, macOS-only and built by hand.
+  If a build doesn't launch on your machine, an issue is fine, but a fix isn't guaranteed.
+- **Fork it instead, if you want control.** GPL-3.0 — take it and go. That is what this repo
+  is, after all.
 
-## What PRs are for
+## Bugs
 
-Pull requests are accepted only when they fit one of these categories:
+Useful reports include:
 
-- Reproducible bug fixes for documented issues
-- UI glitch fixes for visible bugs or regressions, with before/after proof
-- Behavior bug fixes that restore expected behavior without changing product direction
-- Small maintenance work that does not change UI, UX, behavior, dependencies, architecture, or public contracts
-- Small documentation fixes that improve accuracy
-- Translation/localization updates
+- StreamCut version (from Settings → About, or the commit hash)
+- OS and hardware, and whether you used a release DMG or built from source
+- Your ffmpeg build — `ffmpeg -version`, and whether it has libass and libzimg (see the
+  README's Requirements section). A large share of export failures are this.
+- Exact steps, expected vs actual behavior, and how often it happens
+- For crashes and export failures: the terminal output. Run the app from the command line
+  (`/Applications/StreamCut.app/Contents/MacOS/StreamCut`) and paste what it prints.
 
-Pull requests are not accepted for:
+## Pull requests
 
-- New major features
-- Product direction changes
-- UX/UI redesigns
-- Cosmetic-only UI changes
-- "Minor polish" changes to colors, spacing, typography, icons, copy, layout, animations, or visual style
-- Behavior changes that are not tied to a reproducible bug or approved feature request
-- Refactors without a clear maintenance need
-- Dependency additions or architecture changes without prior approval
+No template, no checklist. Just:
 
-Translation PRs are allowed, as long as they stay focused on translation/localization work and do not bundle unrelated feature or UI changes.
+- Keep it to one problem, and say in the description what you tested.
+- Include a before/after screenshot or clip for anything visual.
+- **Don't delete upstream's viewing features to "clean up".** They are gated behind
+  `AppFeaturePolicy.viewingChromeEnabled` on purpose so merges from NuvioMedia/NuvioDesktop
+  keep applying. Gate, don't delete.
+- Keep clipper code in its own files where it already is (`clip-controls.{js,css}`,
+  `clip-search.{js,css}`, `clip_strings.xml`) for the same reason.
+- Touching an `expect` declaration means finding **all six** `actual`s. `AppFeaturePolicy` is
+  the reference case: something that compiles on desktop can break iOS or Android silently.
+- Translations are welcome. Clipper strings live in
+  `composeApp/src/commonMain/composeResources/values/clip_strings.xml`; only the default
+  locale is filled in and the other 25 fall back to it.
 
----
+Build and test instructions are in the [README](README.md#development).
 
-## UI changes
+## Upstream
 
-Do not open a pull request for a UI change just because it looks better, cleaner, more modern, or more consistent to you.
-
-UI PRs are accepted only when they fix a specific, documented glitch or bug, such as:
-
-- Broken layout
-- Overlapping or clipped text
-- Unreadable content
-- Incorrect visual state
-- Navigation, keyboard/mouse, window focus, or fullscreen glitches
-- A visible regression from a previous version
-- A crash, blank screen, or unusable screen caused by UI code
-
-Every UI PR must include:
-
-- A linked bug issue
-- A short explanation of the exact glitch being fixed
-- Before and after screenshots or a short video
-- The smallest possible change that fixes the glitch
-
-Cosmetic-only UI PRs will be closed, even if the change is small.
-
----
-
-## Behavior changes
-
-Behavior includes, but is not limited to, playback, stream/source selection, resume state, watched state, search, sync, settings defaults, navigation, keyboard/mouse input, windowing, fullscreen, error handling, caching, networking, storage, downloads, offline behavior, and account-related flows.
-
-Do not open a PR that changes behavior unless one of these is true:
-
-- It fixes a linked, reproducible bug or regression and restores the intended behavior.
-- It links an approved feature request where a maintainer explicitly approved implementation.
-
-Behavior PRs must explain:
-
-- The old behavior
-- The broken or unwanted behavior
-- The new behavior
-- How the behavior was tested
-
-Minor behavior tweaks are still behavior changes. They need the same issue link or approval.
-
----
-
-## Large PRs and large changes
-
-**Any large PR or change that is not a simple bug fix must be discussed and approved via a feature request issue first.**
-
-1. Open a **Feature Request** issue describing the change.
-2. Wait for explicit maintainer approval on that issue.
-3. Link the approved issue in your PR description.
-
-PRs that introduce large changes without a linked, approved feature request **will not be reviewed at all** and will be closed immediately. No exceptions.
-
-This applies to UI changes, behavior changes, new features, architecture changes, dependency additions, large refactors, migrations, and changes that affect product direction.
-
-Approval means a maintainer has clearly said the implementation is approved. A feature request being open, popular, or labeled `enhancement` is not approval.
-
----
-
-## Where to ask questions
-
-- Use **Issues** for bugs, feature requests, setup help, and general support.
-
----
-
-## Bug reports (rules)
-
-To keep issues fixable, bug reports should include:
-
-- A short, specific issue title that describes the bug
-- App version (release version or commit hash)
-- Desktop platform (Windows / macOS / Linux), hardware, and OS version
-- Install method (GitHub Release desktop installer/package / CI / built from source)
-- Steps to reproduce (exact steps)
-- Expected vs actual behavior
-- Frequency (always/sometimes/once)
-
-Do not leave the title as just `[Bug]:` or another generic placeholder.
-
-Logs are optional for most issues, but they are **required** for crash reports.
-
-### How to capture logs (optional)
-
-**Desktop:**
-
-Copy the relevant terminal/console output, installer logs, updater logs, or Windows Event Viewer crash details from around the time the issue occurred.
-
----
-
-## Feature requests (rules)
-
-Please include:
-
-- The problem you are solving (use case)
-- Your proposed solution
-- Alternatives considered (if any)
-
-Opening a feature request does **not** mean a pull request will be accepted for it. If the feature affects product scope, UX direction, or adds a significant new surface area, do not start implementation unless a maintainer explicitly approves it first.
-
-**Large changes require an approved feature request before any PR is submitted.** See the [Large PRs and large changes](#large-prs-and-large-changes) section above.
-
----
-
-## Before opening a PR
-
-Please make sure your PR is all of the following:
-
-- Allowed by this policy
-- Small in scope and focused on one problem
-- Scoped to the desktop app, desktop packaging, desktop documentation, or shared code required for desktop behavior
-- Clearly aligned with the current direction of the project
-- Not cosmetic-only
-- Not changing behavior unless it fixes a linked bug or has explicit approval
-- Not changing UI unless it fixes a linked glitch/bug and includes visual proof
-- Not bundling refactors, cleanups, or drive-by changes with a bug fix
-- Tested manually and/or automatically in a way that matches the risk
-- Linked to an approved feature request issue if large, directional, or non-trivial
-
-PRs will be closed without review if they:
-
-- Are cosmetic-only UI changes
-- Change behavior without a linked bug or approved feature request
-- Change UI without screenshots/video
-- Bundle unrelated changes
-- Leave the PR template incomplete
-- Add dependencies, architecture changes, or broad refactors without approval
-
-Review time is reserved for bugs, regressions, stability, translations, documentation accuracy, and approved work.
-
----
-
-## One issue per problem
-
-Please open separate issues for separate bugs/features. It makes tracking, fixing, and closing issues much faster.
+Bugs in browsing, addons, catalogs, stream resolution, sync or playback are most likely
+inherited and better reported to [Nuvio Desktop](https://github.com/NuvioMedia/NuvioDesktop)
+— they will reach more users and, if fixed there, land here on the next merge. Anything about
+clipping, trimming, export, the filmstrip or subtitle search belongs here.

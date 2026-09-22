@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Downloads / Releases
-    url: https://github.com/NuvioMedia/NuvioDesktop/releases
-    about: Grab the latest desktop release here.
+    url: https://github.com/julianbou/streamcut/releases
+    about: Grab the latest StreamCut release here.
   - name: Documentation
-    url: https://github.com/NuvioMedia/NuvioDesktop/blob/main/README.md
-    about: Read the desktop README for setup and usage details.
+    url: https://github.com/julianbou/streamcut/blob/main/README.md
+    about: Read the README for setup, requirements and usage details.
+  - name: Upstream project (Nuvio Desktop)
+    url: https://github.com/NuvioMedia/NuvioDesktop
+    about: Report bugs in browsing, addons, sync or playback upstream instead.
