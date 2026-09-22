@@ -1,0 +1,314 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-21T22:09:01+00:00",
+  "title": "Design System: StreamCut",
+  "extensions": {
+    "colorMeta": {
+      "ink-pink": {
+        "role": "primary",
+        "displayName": "Fluorescent Pink",
+        "canonical": "oklch(69.3% 0.236 350.2)",
+        "tonalRamp": [
+          "#1f000f",
+          "#47002b",
+          "#75004b",
+          "#a4106c",
+          "#d91790",
+          "#f958b0",
+          "#fca5ce",
+          "#ffe7f1"
+        ],
+        "note": "Acting: search, the thing you are about to do."
+      },
+      "ink-blue": {
+        "role": "secondary",
+        "displayName": "Riso Blue",
+        "canonical": "oklch(55.5% 0.243 268.8)",
+        "tonalRamp": [
+          "#030036",
+          "#0d096f",
+          "#1c03bd",
+          "#2d3fe3",
+          "#4a6bfd",
+          "#7a99f8",
+          "#adc2fc",
+          "#e8eefe"
+        ],
+        "note": "Where you were: resume positions, recently opened."
+      },
+      "ink-sun": {
+        "role": "tertiary",
+        "displayName": "Sunflower",
+        "canonical": "oklch(89.1% 0.159 93.2)",
+        "tonalRamp": [
+          "#120a00",
+          "#2d2300",
+          "#4d3e00",
+          "#705c0c",
+          "#957b12",
+          "#bd9b02",
+          "#e7c128",
+          "#feeebb"
+        ],
+        "note": "Set aside. Defined, not yet printed on a built surface. Hue to be reconciled with the player's amber #ffb938."
+      },
+      "stock": {
+        "role": "neutral",
+        "displayName": "Plum Stock",
+        "canonical": "oklch(18.2% 0.019 304.8)",
+        "tonalRamp": [
+          "#0d0912",
+          "#26222c",
+          "#423d48",
+          "#605b67",
+          "#807b87",
+          "#a19ca8",
+          "#c7c1ce",
+          "#f1ecf9"
+        ]
+      },
+      "stock-raised": {
+        "role": "neutral",
+        "displayName": "Raised Stock",
+        "canonical": "oklch(21.8% 0.026 305.4)",
+        "tonalRamp": [
+          "#0e0814",
+          "#27212e",
+          "#433c4b",
+          "#615a6a",
+          "#817a8a",
+          "#a29bac",
+          "#c8c0d2",
+          "#f3eafd"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "canonical": "oklch(94.6% 0.013 75.4)",
+        "tonalRamp": [
+          "#0e0a06",
+          "#28231d",
+          "#443f39",
+          "#625d56",
+          "#827c75",
+          "#a39d96",
+          "#c9c3bb",
+          "#f3ede5"
+        ]
+      },
+      "paper-dim": {
+        "role": "neutral",
+        "displayName": "Dim Paper",
+        "canonical": "rgba(242, 236, 228, 0.66)"
+      },
+      "paper-faint": {
+        "role": "neutral",
+        "displayName": "Faint Paper",
+        "canonical": "rgba(242, 236, 228, 0.14)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Masthead",
+        "purpose": "The search field's own text; the largest type in the app."
+      },
+      "headline": {
+        "displayName": "Section",
+        "purpose": "Section titles and the browse toggle."
+      },
+      "title": {
+        "displayName": "Listing Title",
+        "purpose": "Film titles under posters, max two lines."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text such as empty states, about 60% of content width."
+      },
+      "body-small": {
+        "displayName": "Hint",
+        "purpose": "Keyboard and browse hints, in dim paper."
+      },
+      "label": {
+        "displayName": "Meta",
+        "purpose": "Year, episode, addon name, stopped-at positions."
+      }
+    },
+    "shadows": [],
+    "material": [
+      {
+        "name": "grain",
+        "value": "192px seeded stochastic tile (~16% light, ~20% dark px), overlay blend at 0.07 over the whole surface including content",
+        "purpose": "Paper grain; Modifier.risoGrain."
+      },
+      {
+        "name": "bloom",
+        "value": "radial gradient stops 0:1, 0.35:0.7, 0.6:0.32, 0.8:0.1, 0.92:0.025, 1:0 of strength; vertical squash 0.7-0.8; screen blend on an offscreen layer",
+        "purpose": "Ink blooms; Modifier.risoBlooms."
+      },
+      {
+        "name": "bloom-erosion",
+        "value": "grain tile at 0.55, destination-out, over the bloom layer",
+        "purpose": "Breaks bloom edges into specks like a riso drum."
+      },
+      {
+        "name": "misregistration",
+        "value": "lead bloom reprinted at 25% strength, offset (3px, -2px)",
+        "purpose": "Off-register second pass."
+      }
+    ],
+    "motion": [
+      {
+        "name": "bloom-drift",
+        "value": "22000ms linear, reverse-repeating, up to 18px, alternating direction per bloom",
+        "purpose": "Blooms drift slowly at rest."
+      },
+      {
+        "name": "bloom-swell",
+        "value": "scale 1.14, 900ms tween",
+        "purpose": "Every bloom swells while search is focused."
+      },
+      {
+        "name": "masthead-rule-fill",
+        "value": "420ms tween",
+        "purpose": "A pink ink line runs in under the search field while it is focused or holds text; nothing at rest."
+      },
+      {
+        "name": "listing-hover-bloom",
+        "value": "360ms tween",
+        "purpose": "A bloom of the listing's ink rises behind the poster on hover."
+      },
+      {
+        "name": "browse-chevron",
+        "value": "320ms tween, 180deg",
+        "purpose": "Browse toggle open/close."
+      }
+    ],
+    "breakpoints": [],
+    "openItems": [
+      "Player chrome hues: accent/amber #ffb938 vs ink pink/sun; meanings align, hues to be reconciled when the world reaches the player.",
+      "Display face: none added; masthead is JetBrains Sans Bold.",
+      "Rollout: only the clipper-build home is built in this world; other screens use core/ui/Theme.kt."
+    ]
+  },
+  "components": [
+    {
+      "name": "Search Masthead",
+      "kind": "input",
+      "refersTo": "search-masthead",
+      "description": "The page headline is the search field; pink ink runs under it while in use.",
+      "html": "<div class=\"ds-masthead\"><input class=\"ds-masthead-input\" placeholder=\"Find a film or series\"><p class=\"ds-masthead-hint\">Results appear as you type. Esc clears.</p></div>",
+      "css": ".ds-masthead{background:#141019;padding:96px 56px 36px;font-family:'JetBrains Sans',sans-serif;} .ds-masthead-input{display:block;width:100%;background:transparent;border:none;outline:none;color:#F2ECE4;caret-color:#FF48B0;font:800 124px/120px 'Big Shoulders Display',sans-serif;letter-spacing:0;padding:0 0 10px;background-image:linear-gradient(#FF48B0,#FF48B0),linear-gradient(rgba(242,236,228,.14),rgba(242,236,228,.14));background-repeat:no-repeat;background-position:0 100%,0 100%;background-size:0% 3px,0% 3px;transition:background-size 420ms ease;} .ds-masthead-input::placeholder{color:rgba(242,236,228,.62);} .ds-masthead-input:focus-visible,.ds-masthead-input:focus{background-size:100% 3px,0% 3px;} .ds-masthead-hint{margin:22px 0 0;color:rgba(242,236,228,.66);font-size:13px;letter-spacing:0.01em;}"
+    },
+    {
+      "name": "Programme Listing (recent)",
+      "kind": "card",
+      "refersTo": "listing",
+      "description": "A film you opened: poster, title, meta, blue position mark; hover prints a blue bloom behind it.",
+      "html": "<a class=\"ds-listing ds-listing--blue\" href=\"#\"><span class=\"ds-listing-poster\">Heat</span><span class=\"ds-listing-title\">Heat</span><span class=\"ds-listing-meta\">1995</span><span class=\"ds-mark\"><span class=\"ds-mark-fill\" style=\"width:48%\"></span></span><span class=\"ds-listing-meta ds-listing-pos\">Stopped at 1:24:09</span></a>",
+      "css": ".ds-listing{display:flex;flex-direction:column;width:156px;text-decoration:none;cursor:pointer;position:relative;font-family:'JetBrains Sans',sans-serif;} .ds-listing::before{content:'';position:absolute;left:50%;top:55%;width:400px;height:400px;margin:-200px 0 0 -200px;border-radius:50%;background:radial-gradient(closest-side,var(--ink),transparent);opacity:0;transition:opacity 360ms;pointer-events:none;} .ds-listing--blue{--ink:rgba(61,90,254,.55);} .ds-listing--pink{--ink:rgba(255,72,176,.55);} .ds-listing:hover::before,.ds-listing:focus-visible::before{opacity:1;} .ds-listing:focus-visible{outline:none;} .ds-listing-poster{position:relative;aspect-ratio:2/3;border-radius:14px;background:#1D1724;display:flex;align-items:center;justify-content:center;color:rgba(242,236,228,.66);font-weight:600;font-size:14px;} .ds-listing-title{position:relative;margin-top:10px;color:#F2ECE4;font:600 14px/18px 'JetBrains Sans',sans-serif;} .ds-listing-meta{position:relative;margin-top:2px;color:rgba(242,236,228,.66);font-size:12px;line-height:16px;} .ds-listing-pos{margin-top:5px;} .ds-mark{position:relative;display:block;margin-top:8px;height:3px;border-radius:9999px;background:rgba(242,236,228,.14);} .ds-mark-fill{display:block;height:3px;border-radius:9999px;background:#3D5AFE;}"
+    },
+    {
+      "name": "Programme Listing (search result)",
+      "kind": "card",
+      "refersTo": "listing",
+      "description": "A search result: poster, title, year; hover prints a pink bloom behind it.",
+      "html": "<a class=\"ds-listing ds-listing--pink\" href=\"#\"><span class=\"ds-listing-poster\">The Heat</span><span class=\"ds-listing-title\">The Heat</span><span class=\"ds-listing-meta\">2013</span></a>",
+      "css": ".ds-listing{display:flex;flex-direction:column;width:156px;text-decoration:none;cursor:pointer;position:relative;font-family:'JetBrains Sans',sans-serif;} .ds-listing::before{content:'';position:absolute;left:50%;top:55%;width:400px;height:400px;margin:-200px 0 0 -200px;border-radius:50%;background:radial-gradient(closest-side,var(--ink),transparent);opacity:0;transition:opacity 360ms;pointer-events:none;} .ds-listing--pink{--ink:rgba(255,72,176,.55);} .ds-listing:hover::before,.ds-listing:focus-visible::before{opacity:1;} .ds-listing:focus-visible{outline:none;} .ds-listing-poster{position:relative;aspect-ratio:2/3;border-radius:14px;background:#1D1724;display:flex;align-items:center;justify-content:center;color:rgba(242,236,228,.66);font-weight:600;font-size:14px;} .ds-listing-title{position:relative;margin-top:10px;color:#F2ECE4;font:600 14px/18px 'JetBrains Sans',sans-serif;} .ds-listing-meta{position:relative;margin-top:2px;color:rgba(242,236,228,.66);font-size:12px;line-height:16px;}"
+    },
+    {
+      "name": "Position Mark",
+      "kind": "custom",
+      "refersTo": "position-mark",
+      "description": "Where you stopped: a 3px blue pill on a faint-paper track.",
+      "html": "<div class=\"ds-pos\"><span class=\"ds-pos-track\"><span class=\"ds-pos-fill\"></span></span><span class=\"ds-pos-label\">Stopped at 20:10</span></div>",
+      "css": ".ds-pos{width:156px;font-family:'JetBrains Sans',sans-serif;} .ds-pos-track{display:block;height:3px;border-radius:9999px;background:rgba(242,236,228,.14);} .ds-pos-fill{display:block;width:30%;height:3px;border-radius:9999px;background:#3D5AFE;} .ds-pos-label{display:block;margin-top:5px;color:rgba(242,236,228,.66);font-size:12px;line-height:16px;}"
+    },
+    {
+      "name": "Browse Toggle",
+      "kind": "button",
+      "refersTo": "browse-toggle",
+      "description": "Catalog browsing folded to the bottom as a headline-size text button.",
+      "html": "<button class=\"ds-browse\" aria-expanded=\"false\">Browse catalogs<svg width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z\" fill=\"currentColor\"/></svg></button>",
+      "css": ".ds-browse{display:inline-flex;align-items:center;gap:8px;background:none;border:none;padding:0;cursor:pointer;color:rgba(242,236,228,.66);font:700 21px/26px 'JetBrains Sans',sans-serif;letter-spacing:-0.01em;transition:color 200ms;} .ds-browse svg{transition:transform 320ms;} .ds-browse[aria-expanded=true] svg{transform:rotate(180deg);} .ds-browse:hover,.ds-browse:focus-visible{color:#F2ECE4;outline:none;}"
+    },
+    {
+      "name": "Riso Page",
+      "kind": "custom",
+      "refersTo": "stock",
+      "description": "Stock, then screen-blended grain-eroded blooms, then grain over everything.",
+      "html": "<div class=\"ds-riso\"><h2 class=\"ds-riso-title\">Recently opened</h2></div>",
+      "css": ".ds-riso{position:relative;height:320px;overflow:hidden;background:#141019;padding:48px;font-family:'JetBrains Sans',sans-serif;} .ds-riso::before{content:'';position:absolute;inset:-20%;background:radial-gradient(ellipse 60% 42% at 16% 16%,rgba(255,72,176,.6),rgba(255,72,176,.42) 35%,rgba(255,72,176,.19) 60%,rgba(255,72,176,.06) 80%,rgba(255,72,176,.015) 92%,transparent),radial-gradient(ellipse 56% 45% at 88% 66%,rgba(61,90,254,.42),rgba(61,90,254,.29) 35%,rgba(61,90,254,.13) 60%,rgba(61,90,254,.04) 80%,transparent);mix-blend-mode:screen;animation:ds-drift 22s linear infinite alternate;} .ds-riso::after{content:'';position:absolute;inset:0;opacity:.35;mix-blend-mode:overlay;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.5) 0.5px,transparent 0.6px),radial-gradient(rgba(0,0,0,.6) 0.5px,transparent 0.6px);background-size:3px 3px,4px 4px;background-position:0 0,1px 2px;} .ds-riso-title{position:relative;margin:0;color:#F2ECE4;font:700 21px/26px 'JetBrains Sans',sans-serif;letter-spacing:-0.01em;} @keyframes ds-drift{from{transform:translate(-18px,5px)}to{transform:translate(18px,-5px)}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Riso Repertory Programme",
+    "overview": "StreamCut is printed, not rendered. Every surface is a sheet of near-black plum card stock overprinted with translucent spot inks, and the whole sheet carries one stochastic paper grain, content included. The inks land as soft, organic blooms: dense at the centre, breaking into specks at their thin edges, every ink printed twice, visibly off register. They drift very slowly and swell when the user acts. The feel is warm, grainy and quiet; the user's own films and their posters are the only full-colour objects on the page.\n\nColour is state, not decoration. Each ink means one thing wherever it appears, so a user who has learned \"blue is where I was\" on the home reads it the same way everywhere. Hierarchy comes from type scale and from where ink pools, not from boxes, panels or shadows. Sections are divided by space and by bloom edges; there are no printed lines at rest: pink ink runs under the search field only while it is in use.\n\nStatus: this is the app-wide system, but so far only the clipper-build home (`features/home/ClipperHome.kt`, composed in `HomeScreen.kt` when `AppFeaturePolicy.viewingChromeEnabled` is false) is built in it. Every other Compose screen still wears the inherited Nuvio theme from `core/ui/Theme.kt`, and the HTML player chrome (`desktopMain/resources/player-ui/`) keeps its own palette. New and migrated surfaces take their material from `core/ui/RisoMaterial.kt`; they do not reinvent it.",
+    "keyCharacteristics": [
+      "Dark plum stock, paper-white type, three spot inks with fixed meanings.",
+      "One grain over the whole print, and a coarser grain eroding every bloom.",
+      "Organic, squashed, eased-falloff blooms that drift over 16 seconds and swell on focus.",
+      "Posters shown in their own colour, never tinted or duotoned.",
+      "Two faces: Big Shoulders Display for what a programme sets big, JetBrains Sans for everything you read.",
+      "No shadows, no borders, no cards-in-cards."
+    ],
+    "rules": [
+      {
+        "name": "The One Meaning Per Ink Rule",
+        "body": "Pink is acting, blue is where you were, sun is set aside. An ink is never used for decoration or for a meaning another ink owns; a surface with nothing to act on, return to or set aside prints no ink at all.",
+        "section": "colors"
+      },
+      {
+        "name": "The Own Colour Rule",
+        "body": "Posters and frame art keep their own colour. Ink blooms sit behind them, never over them.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink Pairing Rule (open)",
+        "body": "The player chrome already runs the same colour logic in HTML: white = playhead, theme accent = range being marked, amber (`#ffb938`) = set-aside ranges (`clip-controls.css`). The meanings align (amber and sun both mean set aside), but the hues differ. Reconciling the player's accent and amber with pink and sun is an open decision for when the world reaches the player; do not change either side piecemeal.",
+        "section": "colors"
+      },
+      {
+        "name": "The Loudest Line Rule",
+        "body": "The thing the user types is the biggest type on the page. No title, hero or wordmark outranks the search masthead on the home.",
+        "section": "typography"
+      },
+      {
+        "name": "The Open Display Face Item",
+        "body": "No display face was added; the masthead is JetBrains Sans Bold. Whether the programme gets its own display face is undecided. Until it is, do not introduce one per surface.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Print Rule",
+        "body": "Stock, ink, grain, in that order, on the full surface. Grain goes over content, never under it; a surface without grain is not in this world.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Never Boxed Rule",
+        "body": "Blooms go on a surface at least as large as they are. A bloom clipped by an element edge reads as a box, which ink never is.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Eased Edge Rule",
+        "body": "Ink never fades on a linear tail; a linear falloff leaves a visible seam where the ink stops.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take stock, ink, grain and the palette from `RisoMaterial.kt` (`Riso`, `Modifier.risoBlooms`, `Modifier.risoGrain`) when bringing a screen into the world.",
+      "Do place ink where its meaning lives: pink behind the thing the user acts on, blue behind what they returned to, sun behind what is set aside.",
+      "Do let a hovered item answer with a bloom of its own ink rather than an outline or lift.",
+      "Do keep posters and frames in their own colour at 2:3, 14px corners.",
+      "Do carry hierarchy with the type ramp: display 58px for the one thing the user types, headline 21px for sections, 12px to 14px for everything in a listing.",
+      "Do keep running text to about 60% of the content width."
+    ],
+    "donts": [
+      "Don't use an ink for a meaning it does not own, or as decoration.",
+      "Don't add drop shadows, borders or cards-in-cards; depth is ink and raised stock.",
+      "Don't fade a bloom linearly, or clip a bloom to a component's edge.",
+      "Don't tint, duotone or overprint ink onto poster art.",
+      "Don't introduce a second typeface on one surface while the display-face question is open.",
+      "Don't repaint the player chrome's accent or amber to match the riso inks until the hue reconciliation is decided."
+    ]
+  }
+}
