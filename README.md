@@ -62,12 +62,17 @@ user-provided sources, exactly as upstream.
 | Key | Action |
 | --- | --- |
 | `I` / `O` | Mark in / out at the playhead |
+| `,` / `.` | Step one frame back / forward (pauses first) |
+| `←` / `→` on a focused handle | Move that point one frame (`Shift`: one second) |
 | `A` | Add the current range to the draft |
 | `X` | Export |
 | `R` | Loop-preview the range |
 | `B` | Show / hide the filmstrip |
-| `Backspace` | Clear the draft |
-| `Cmd`/`Ctrl` + `F` | Subtitle phrase search |
+| `Backspace` | Undo: the current draft first, then set-aside ranges newest-first |
+| `/` or `Cmd`/`Ctrl` + `F` | Subtitle phrase search |
+| `?` | Show every shortcut |
+
+With unexported ranges, the first `Esc` only warns; press it again to leave the player.
 
 ## Installation
 
