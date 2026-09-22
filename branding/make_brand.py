@@ -4,7 +4,11 @@
 Needs Pillow and numpy (`pip install pillow numpy`) and macOS `iconutil` for
 the .icns. Run from anywhere:  python3 branding/make_brand.py
 
-The source is a logo on a dark navy ground. This writes:
+The source is a logo on a dark navy ground. Since 2026-09-21 the outputs are
+re-printed in StreamCut's riso world (DESIGN.md): the mark's blue becomes riso
+blue ink with grain, and the icon tile is plum card stock with pink and blue
+ink blooms instead of the photographed navy. The source file is untouched, so
+the original look is one revert of this script away. This writes:
   - the desktop app icons (.icns/.ico/.png) under every legacy file name --
     upstream still looks icons up by colour key, so each key must resolve to
     the one logo, whatever colour a user picked before;
@@ -56,6 +60,57 @@ colour = np.clip((crop - (1.0 - a3) * bg) / np.where(a3 > 1e-3, a3, 1.0), 0, 255
 mark = Image.fromarray(np.dstack([colour, alpha * 255]).astype(np.uint8), "RGBA")
 mark = mark.resize((round(mark.width * 640 / mark.height), 640), Image.LANCZOS)
 
+# --- riso re-print -------------------------------------------------------
+STOCK = np.array([20, 16, 25], np.float32)
+PAPER = np.array([242, 236, 228], np.float32)
+RISO_BLUE = np.array([61, 90, 254], np.float32)
+RISO_PINK = np.array([255, 72, 176], np.float32)
+rng = np.random.default_rng(1966)
+
+def grain(h, w, strength):
+    """Stochastic paper grain in [-strength, strength]."""
+    return (rng.random((h, w), dtype=np.float32) - 0.5) * 2.0 * strength
+
+def riso_mark(img):
+    """The mark printed in two inks: blue parts in riso blue, the rest paper."""
+    a = np.asarray(img).astype(np.float32)
+    rgb, alpha = a[..., :3], a[..., 3] / 255.0
+    blueness = np.clip((rgb[..., 2] - rgb[..., 0]) / 160.0, 0.0, 1.0)[..., None]
+    shade = (rgb.mean(axis=2, keepdims=True) / 255.0) * 0.35 + 0.65
+    col = (PAPER * (1 - blueness) + RISO_BLUE * blueness * shade)
+    col = np.clip(col + grain(*alpha.shape, 14.0)[..., None], 0, 255)
+    # Ink breaks up a little at its edges, like a drum that ran thin.
+    speck = rng.random(alpha.shape) < (1.0 - alpha) * 0.9
+    alpha = np.where((alpha < 0.95) & speck, alpha * 0.4, alpha)
+    return Image.fromarray(np.dstack([col, alpha * 255]).astype(np.uint8), "RGBA")
+
+def bloom_field(size, blooms):
+    """Plum stock with screen-blended, eased ink blooms and grain."""
+    y, x = np.mgrid[0:size, 0:size].astype(np.float32) / size
+    out = np.tile(STOCK, (size, size, 1))
+    for ink, cx_, cy_, r, squash, strength in blooms:
+        d = np.sqrt((x - cx_) ** 2 + ((y - cy_) / squash) ** 2) / r
+        t = np.clip(1.0 - d, 0.0, 1.0)
+        a = (t ** 1.6 * strength)[..., None]
+        layer = ink * a
+        out = 255.0 - (255.0 - out) * (255.0 - layer) / 255.0   # screen blend
+    out = out + grain(size, size, 10.0)[..., None]
+    return np.clip(out, 0, 255)
+
+riso = riso_mark(mark)
+
+def riso_tile(size):
+    field = bloom_field(size, [
+        (RISO_PINK, 0.22, 0.2, 1.0, 0.8, 0.66),
+        # Blue kept to the far corner: behind the mark it would drown the
+        # mark's own blue ink.
+        (RISO_BLUE, 0.98, 1.0, 0.55, 0.9, 0.5),
+    ])
+    tile_img = Image.fromarray(field.astype(np.uint8), "RGB").convert("RGBA")
+    m = riso.resize((round(riso.width * size * 0.72 / riso.height), round(size * 0.72)), Image.LANCZOS)
+    tile_img.alpha_composite(m, ((size - m.width) // 2 + round(size * 0.02), (size - m.height) // 2))
+    return tile_img
+
 # --- squircle icons -----------------------------------------------------
 def superellipse_mask(size, n=5.0, ss=4):
     """Continuous-corner squircle (Apple's icon shape), supersampled."""
@@ -71,7 +126,7 @@ side = min(side, 2 * min(cx, src.width - cx), 2 * min(cy, src.height - cy))
 tile = src.crop((cx - side // 2, cy - side // 2, cx + side // 2, cy + side // 2))
 
 def squircle(size):
-    body = tile.resize((size, size), Image.LANCZOS).convert("RGBA")
+    body = riso_tile(size)
     body.putalpha(superellipse_mask(size))
     return body
 
@@ -112,9 +167,9 @@ for key in ICON_KEYS:
     for name in (f"app_icon_{key}.png", f"app_icon_{key}_transparent.png"):
         png256.save(DRAWABLE / name, optimize=True)
         written.append(name)
-mark.save(DRAWABLE / "app_brand_mark.png", optimize=True)
+riso.save(DRAWABLE / "app_brand_mark.png", optimize=True)
 written.append("app_brand_mark.png")
 for old in sorted(DRAWABLE.glob("app_logo_wordmark*.png")):
-    mark.save(old, optimize=True)
+    riso.save(old, optimize=True)
     written.append(old.name)
 print(f"wrote {len(written)} files; mark {mark.size}")
