@@ -1,5 +1,6 @@
 package com.nuvio.app.features.details.components
 
+import com.nuvio.app.core.ui.risoWorldActive
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -88,8 +89,10 @@ fun DesktopDetailHero(
     onSaveLongClick: (() -> Unit)?,
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val bottomGradientColor = heroGradientColor ?: colorScheme.background
-    val sideGradientColor = heroGradientColor ?: colorScheme.background
+    // Riso: the backdrop dissolves into the plum stock, not into a colour
+    // sampled from the art, so every title sits on the same printed sheet.
+    val bottomGradientColor = if (risoWorldActive) colorScheme.background else heroGradientColor ?: colorScheme.background
+    val sideGradientColor = if (risoWorldActive) colorScheme.background else heroGradientColor ?: colorScheme.background
     val space = NuvioTokens.Space
     val opacity = NuvioTokens.Opacity
     val trailerAlpha by animateFloatAsState(

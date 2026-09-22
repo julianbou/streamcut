@@ -85,6 +85,7 @@ fun TrackingMembershipRemovalConfirmationHost(
         isVisible = pending != null,
         isBusy = isBusy,
         confirmText = stringResource(Res.string.action_remove_anyway),
+        isDestructive = true,
         dismissText = stringResource(Res.string.action_cancel),
         onConfirm = {
             val request = pending ?: return@NuvioStatusModal

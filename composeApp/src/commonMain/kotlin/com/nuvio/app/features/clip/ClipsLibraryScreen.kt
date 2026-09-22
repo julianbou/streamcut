@@ -1,5 +1,10 @@
 package com.nuvio.app.features.clip
 
+import com.nuvio.app.core.ui.Riso
+import com.nuvio.app.core.ui.RisoBloom
+import com.nuvio.app.core.ui.RisoDisplay
+import com.nuvio.app.core.ui.risoBlooms
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -123,7 +128,9 @@ internal fun ClipsLibraryScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(top = topChromePadding ?: 0.dp, start = 24.dp, end = 24.dp),
+            // Sun ink: exported clips are the ranges you set aside, made real.
+            .risoBlooms(ClipsPageBlooms)
+            .padding(top = topChromePadding ?: 0.dp, start = 32.dp, end = 32.dp),
     ) {
         ClipsLibraryHeader(
             total = entries.size,
@@ -218,7 +225,7 @@ internal fun ClipsLibraryScreen(
                     ClipLibrary.delete(deleting.map { it.id })
                     selection = emptySet()
                     pendingDelete = emptyList()
-                }) { Text(stringResource(Res.string.clip_action_delete)) }
+                }) { Text(stringResource(Res.string.clip_action_delete), color = Riso.Red) }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = emptyList() }) { Text(stringResource(Res.string.clip_action_cancel)) }
@@ -249,8 +256,8 @@ private fun ClipsLibraryHeader(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = stringResource(Res.string.clip_library_title),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                style = TextStyle(fontFamily = RisoDisplay, fontSize = 52.sp, lineHeight = 52.sp, fontWeight = FontWeight.ExtraBold),
+                color = Riso.Paper,
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
@@ -259,8 +266,8 @@ private fun ClipsLibraryHeader(
                 } else {
                     stringResource(Res.string.clip_library_count_format, shown, total)
                 },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                style = TextStyle(fontFamily = RisoDisplay, fontSize = 30.sp, fontWeight = FontWeight.Bold),
+                color = Riso.Sun,
             )
             Spacer(modifier = Modifier.weight(1f))
             ClipsChip(
@@ -278,7 +285,7 @@ private fun ClipsLibraryHeader(
                         ?.let { stringResource(Res.string.clip_library_free_format, it) },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                color = Riso.PaperDim,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -334,16 +341,16 @@ private fun ClipsLibraryHeader(
 private fun ClipsSearchField(query: String, onQueryChange: (String) -> Unit) {
     Box(
         modifier = Modifier
-            .width(240.dp)
-            .clip(RoundedCornerShape(9.dp))
-            .background(Color.White.copy(alpha = 0.07f))
-            .padding(horizontal = 10.dp, vertical = 7.dp),
+            .width(260.dp)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(Riso.Paper.copy(alpha = 0.07f))
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         if (query.isEmpty()) {
             Text(
                 text = stringResource(Res.string.clip_library_filter_placeholder),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                color = Riso.PaperDim,
             )
         }
         BasicTextField(
@@ -353,7 +360,7 @@ private fun ClipsSearchField(query: String, onQueryChange: (String) -> Unit) {
             textStyle = MaterialTheme.typography.bodyMedium.merge(
                 TextStyle(color = MaterialTheme.colorScheme.onSurface),
             ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            cursorBrush = SolidColor(Riso.Pink),
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -365,14 +372,12 @@ private fun ClipsChip(label: String, selected: Boolean = false, onClick: () -> U
         text = label,
         style = MaterialTheme.typography.bodySmall,
         fontWeight = FontWeight.SemiBold,
-        color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+        color = if (selected) Riso.Stock else Riso.Paper.copy(alpha = 0.82f),
         modifier = Modifier
-            .clip(RoundedCornerShape(9.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.07f),
-            )
+            .clip(RoundedCornerShape(percent = 50))
+            .background(if (selected) Riso.Pink else Riso.Paper.copy(alpha = 0.07f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 7.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }
 
@@ -389,44 +394,55 @@ private fun ClipsChip(label: String, selected: Boolean = false, onClick: () -> U
 @Composable
 internal fun ClipsEmptyCard(modifier: Modifier = Modifier) {
     val outputDir = remember { ClipRepository.outputDirPath() }
+    // No box: the steps are set like a programme's running order, numbered in
+    // sun ink, straight on the page.
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.05f))
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .padding(vertical = 12.dp),
     ) {
         Text(
             text = stringResource(Res.string.clip_empty_title),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = TextStyle(fontFamily = RisoDisplay, fontSize = 34.sp, lineHeight = 36.sp, fontWeight = FontWeight.ExtraBold),
+            color = Riso.Paper,
         )
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(18.dp))
         listOf(
             Res.string.clip_empty_step_find,
             Res.string.clip_empty_step_mark,
             Res.string.clip_empty_step_export,
         ).forEachIndexed { index, step ->
-            Text(
-                text = stringResource(
-                    Res.string.clip_empty_step_format,
-                    index + 1,
-                    stringResource(step),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
-                modifier = Modifier.padding(vertical = 2.dp),
-            )
+            Row(
+                modifier = Modifier.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${index + 1}",
+                    style = TextStyle(fontFamily = RisoDisplay, fontSize = 40.sp, lineHeight = 40.sp, fontWeight = FontWeight.ExtraBold),
+                    color = Riso.Sun,
+                    modifier = Modifier.width(40.dp),
+                )
+                Text(
+                    text = stringResource(step),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Riso.Paper.copy(alpha = 0.86f),
+                )
+            }
         }
         if (outputDir.isNotBlank()) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = stringResource(Res.string.clip_empty_saved_to_format, outputDir),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                color = Riso.PaperDim,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
     }
 }
+
+private val ClipsPageBlooms = listOf(
+    RisoBloom(color = Riso.Sun, centerX = 0.12f, centerY = 0.06f, radius = 0.55f, squash = 0.6f, strength = 0.34f),
+    RisoBloom(color = Riso.Pink, centerX = 0.95f, centerY = 0.9f, radius = 0.5f, squash = 0.8f, strength = 0.18f),
+)

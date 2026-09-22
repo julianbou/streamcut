@@ -1,5 +1,6 @@
 package com.nuvio.app.features.addons
 
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -265,7 +266,12 @@ private fun OverviewStat(
     ) {
         Text(
             text = value,
-            style = MaterialTheme.typography.headlineLarge,
+            // Riso: numbers are data -- UI face, never the display face.
+            style = if (com.nuvio.app.core.ui.risoWorldActive) {
+                MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+            } else {
+                MaterialTheme.typography.headlineLarge
+            },
             color = MaterialTheme.colorScheme.onSurface,
         )
         Text(
@@ -409,7 +415,7 @@ private fun InstalledAddonCard(
             AddonIconBadge(
                 imageUrl = manifest?.logoUrl,
                 icon = Icons.Rounded.Extension,
-                tint = if (manifest != null) Color(0xFF71BDE8) else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (manifest != null) (if (com.nuvio.app.core.ui.risoWorldActive) com.nuvio.app.core.ui.Riso.Blue else Color(0xFF71BDE8)) else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {

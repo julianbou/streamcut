@@ -38,6 +38,10 @@ fun NuvioLoadingIndicator(
     color: Color = MaterialTheme.nuvio.colors.textSecondary,
     size: Dp = NuvioTokens.Space.s40,
 ) {
+    if (risoWorldActive) {
+        RisoLoadingBloom(modifier = modifier, size = size)
+        return
+    }
     Box(
         modifier = modifier.size(size),
         contentAlignment = Alignment.Center,

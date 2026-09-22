@@ -197,6 +197,7 @@ fun CollectionManagementScreen(
         message = stringResource(Res.string.collections_delete_message, deleteCollection?.title.orEmpty()),
         isVisible = deleteId != null,
         confirmText = stringResource(Res.string.action_delete),
+        isDestructive = true,
         dismissText = stringResource(Res.string.action_cancel),
         onConfirm = {
             if (deleteId != null) {

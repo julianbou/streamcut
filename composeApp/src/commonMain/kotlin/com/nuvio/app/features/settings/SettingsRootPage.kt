@@ -126,7 +126,8 @@ internal fun LazyListScope.settingsRootContent(
     if (showGeneralSection) {
         item {
             SettingsSection(
-                title = stringResource(Res.string.compose_settings_root_general_section),
+                // Riso: the page title already says "General"; no eyebrow above it.
+                title = if (com.nuvio.app.core.ui.risoWorldActive) "" else stringResource(Res.string.compose_settings_root_general_section),
                 isTablet = isTablet,
             ) {
                 SettingsGroup(isTablet = isTablet) {

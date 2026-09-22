@@ -1,5 +1,9 @@
 package com.nuvio.app.core.branding
 
+import com.nuvio.app.core.ui.Riso
+import com.nuvio.app.core.ui.RisoBloom
+import com.nuvio.app.core.ui.risoBlooms
+import com.nuvio.app.core.ui.risoWorldActive
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -51,13 +55,18 @@ internal fun AppBrandMark(
 @Composable
 internal fun BrandLaunchScreen(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.background(
-            Brush.radialGradient(
-                0f to Color(0xFF181A3B),
-                0.55f to Color(0xFF131432),
-                1f to Color(0xFF0E0D28),
-            ),
-        ),
+        modifier = if (risoWorldActive) {
+            // The first frame is already the print: plum stock and the two inks.
+            modifier.background(Riso.Stock).risoBlooms(LaunchBlooms)
+        } else {
+            modifier.background(
+                Brush.radialGradient(
+                    0f to Color(0xFF181A3B),
+                    0.55f to Color(0xFF131432),
+                    1f to Color(0xFF0E0D28),
+                ),
+            )
+        },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -70,3 +79,8 @@ internal fun BrandLaunchScreen(modifier: Modifier = Modifier) {
         }
     }
 }
+
+private val LaunchBlooms = listOf(
+    RisoBloom(color = Riso.Pink, centerX = 0.34f, centerY = 0.38f, radius = 0.7f, squash = 0.75f, strength = 0.5f),
+    RisoBloom(color = Riso.Blue, centerX = 0.7f, centerY = 0.7f, radius = 0.6f, squash = 0.8f, strength = 0.38f),
+)

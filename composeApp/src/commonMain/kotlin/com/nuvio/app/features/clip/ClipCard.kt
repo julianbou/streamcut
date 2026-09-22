@@ -1,5 +1,14 @@
 package com.nuvio.app.features.clip
 
+import com.nuvio.app.core.ui.Riso
+import com.nuvio.app.core.ui.risoInkTile
+import com.nuvio.app.core.ui.risoSelectionInk
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -70,9 +79,9 @@ internal fun ClipCard(
     // everywhere else in the clip feature is the file: URI.
     val filePath = remember(entry.outputFileUri) { ClipRepository.filePathOf(entry.outputFileUri) }
 
+    val glow by animateFloatAsState(if (hovered || selected) 1f else 0f, tween(320), label = "clipCardGlow")
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
             .hoverable(interactionSource)
             .fileDragSource(filePath)
             .secondaryClick { menuOpen = true }
@@ -82,15 +91,14 @@ internal fun ClipCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White.copy(alpha = 0.06f))
-                .then(
-                    if (selected) {
-                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
-                    } else {
-                        Modifier
-                    },
-                ),
+                // Hover prints sun ink behind the still; a selected clip is
+                // held in pink (you are about to act on it).
+                .risoSelectionInk(if (selected) Riso.Pink else Riso.Sun, glow, spread = 1.2f)
+                .clip(RoundedCornerShape(14.dp))
+                // Sun is the brightest ink; at full strength a missing still
+                // shouts louder than the clips that have one.
+                // Selection is the pink bloom plus the check -- never an outline.
+                .risoInkTile(Riso.Sun, strength = 0.42f),
         ) {
             // The clip's own midpoint frame, falling back to the title's poster
             // for clips exported before stills were captured.
@@ -125,14 +133,17 @@ internal fun ClipCard(
                     ClipHoverAction(
                         label = stringResource(Res.string.clip_action_delete_short),
                         onClick = onDelete,
+                        color = Riso.Red,
                     )
                 }
             }
 
             if (selected) {
-                ClipBadge(
-                    text = "✓",
-                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = Riso.Pink,
+                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp).size(22.dp),
                 )
             }
 
@@ -152,7 +163,7 @@ internal fun ClipCard(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text(stringResource(Res.string.clip_action_delete)) },
+                    text = { Text(stringResource(Res.string.clip_action_delete), color = Riso.Red) },
                     onClick = {
                         menuOpen = false
                         onDelete()
@@ -166,13 +177,14 @@ internal fun ClipCard(
                 text = entry.content.label.ifBlank { entry.fileName },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
+                color = Riso.Paper,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = clipSubtitle(entry),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color = Riso.PaperDim,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -184,28 +196,28 @@ internal fun ClipCard(
 private fun ClipBadge(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        color = Color.White,
+        color = Riso.Paper,
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color.Black.copy(alpha = 0.66f))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+            .clip(RoundedCornerShape(percent = 50))
+            .background(Riso.Stock.copy(alpha = 0.8f))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
     )
 }
 
 @Composable
-private fun ClipHoverAction(label: String, onClick: () -> Unit) {
+private fun ClipHoverAction(label: String, onClick: () -> Unit, color: Color = Riso.Paper) {
     Text(
         text = label,
-        color = Color.White,
-        fontSize = 10.sp,
+        color = color,
+        fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color.Black.copy(alpha = 0.72f))
+            .clip(RoundedCornerShape(percent = 50))
+            .background(Riso.Stock.copy(alpha = 0.82f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 7.dp, vertical = 3.dp),
+            .padding(horizontal = 9.dp, vertical = 3.dp),
     )
 }
 

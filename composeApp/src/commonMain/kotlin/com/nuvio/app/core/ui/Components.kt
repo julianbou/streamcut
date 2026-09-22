@@ -1,5 +1,7 @@
 package com.nuvio.app.core.ui
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -82,6 +84,9 @@ fun NuvioScreen(
     horizontalPadding: Dp = MaterialTheme.nuvio.spacing.screenHorizontal,
     topPadding: Dp? = null,
     listState: LazyListState = rememberLazyListState(),
+    backgroundColor: Color? = null,
+    /** Riso: the page's corner ink. A screen that prints its own passes an empty list. */
+    pageInk: List<RisoBloom> = DefaultPageInk,
     content: LazyListScope.() -> Unit,
 ) {
     val tokens = MaterialTheme.nuvio
@@ -89,7 +94,7 @@ fun NuvioScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(tokens.colors.background),
+            .background(backgroundColor ?: tokens.colors.background),
     ) {
         LazyColumn(
             state = listState,
@@ -103,6 +108,13 @@ fun NuvioScreen(
             verticalArrangement = Arrangement.spacedBy(tokens.spacing.listGap),
             content = content,
         )
+        if (risoWorldActive && pageInk.isNotEmpty()) {
+            // Overprinted, not underlaid: the sticky header paints an opaque
+            // strip that would cut an underlying bloom into a rectangle. Ink
+            // printed last lands on the title the way a second riso pass does.
+            // A plain Box has no input handling, so clicks pass straight through.
+            Box(Modifier.matchParentSize().risoBlooms(pageInk))
+        }
         NuvioDesktopVerticalScrollbar(
             state = listState,
             modifier = Modifier
@@ -232,6 +244,22 @@ fun NuvioSectionLabel(
     text: String,
     modifier: Modifier = Modifier,
 ) {
+    if (risoWorldActive) {
+        // Riso: no small tracked eyebrows. A section is named by a headline
+        // in the programme face; all-caps upstream labels read in sentence case.
+        val sentence = if (text.any { it.isLetter() } && text == text.uppercase()) {
+            text.lowercase().replaceFirstChar { it.titlecase() }
+        } else {
+            text
+        }
+        Text(
+            text = sentence,
+            modifier = modifier,
+            style = TextStyle(fontFamily = RisoDisplay, fontSize = 26.sp, lineHeight = 28.sp, fontWeight = FontWeight.ExtraBold),
+            color = MaterialTheme.nuvio.colors.textPrimary,
+        )
+        return
+    }
     Text(
         text = text,
         modifier = modifier,
@@ -334,8 +362,11 @@ fun NuvioPrimaryButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = tokens.colors.accent,
             contentColor = tokens.colors.onAccent,
-            disabledContainerColor = tokens.colors.accent.copy(alpha = tokens.opacity.disabled),
-            disabledContentColor = tokens.colors.onAccent.copy(alpha = tokens.opacity.disabled),
+            // Riso: a disabled action has no ink yet -- faint paper, not a muddy pink.
+            disabledContainerColor = if (risoWorldActive) Riso.Paper.copy(alpha = 0.07f)
+            else tokens.colors.accent.copy(alpha = tokens.opacity.disabled),
+            disabledContentColor = if (risoWorldActive) tokens.colors.textDisabled
+            else tokens.colors.onAccent.copy(alpha = tokens.opacity.disabled),
         ),
     ) {
         AnimatedContent(
@@ -446,6 +477,8 @@ fun NuvioStatusModal(
     dismissText: String? = null,
     onConfirm: () -> Unit,
     onDismiss: (() -> Unit)? = null,
+    /** Confirming destroys something: the confirm takes the danger ink. */
+    isDestructive: Boolean = false,
 ) {
     if (!isVisible) return
     val tokens = MaterialTheme.nuvio
@@ -463,7 +496,9 @@ fun NuvioStatusModal(
             shape = tokens.shapes.dialog,
         ) {
             Column(
-                modifier = Modifier.padding(tokens.spacing.dialogPadding),
+                modifier = Modifier
+                    .then(if (risoWorldActive) Modifier.risoBlooms(StatusModalBlooms) else Modifier)
+                    .padding(tokens.spacing.dialogPadding),
             ) {
                 if (isBusy) {
                     NuvioLoadingIndicator(
@@ -504,6 +539,14 @@ fun NuvioStatusModal(
                         onClick = onConfirm,
                         enabled = !isBusy,
                         shape = tokens.shapes.button,
+                        colors = if (isDestructive) {
+                            ButtonDefaults.buttonColors(
+                                containerColor = tokens.colors.danger,
+                                contentColor = tokens.colors.textInverse,
+                            )
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        },
                     ) {
                         Text(confirmText)
                     }
@@ -606,3 +649,13 @@ object NuvioToastController {
         }
     }
 }
+
+/** A dialog is a small print of its own: one pink bloom in its corner. */
+private val StatusModalBlooms = listOf(
+    RisoBloom(color = Riso.Pink, centerX = 0.08f, centerY = 0.05f, radius = 0.9f, squash = 0.7f, strength = 0.32f),
+)
+
+/** One quiet pink bloom behind the page title: every standard page is a print. */
+private val DefaultPageInk = listOf(
+    RisoBloom(color = Riso.Pink, centerX = 0.04f, centerY = 0.02f, radius = 0.42f, squash = 0.62f, strength = 0.26f),
+)

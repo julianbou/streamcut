@@ -114,7 +114,8 @@ internal fun LazyListScope.appearanceSettingsContent(
     onPosterCustomizationClick: () -> Unit,
     onHoverPreviewClick: () -> Unit,
 ) {
-    item {
+    // The clipper build has one look (the riso world); the picker would only lie.
+    if (AppFeaturePolicy.viewingChromeEnabled) item {
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_theme),
             isTablet = isTablet,
@@ -183,13 +184,15 @@ internal fun LazyListScope.appearanceSettingsContent(
             isTablet = isTablet,
         ) {
             SettingsGroup(isTablet = isTablet) {
-                SettingsSwitchRow(
-                    title = stringResource(Res.string.settings_appearance_amoled_black),
-                    description = stringResource(Res.string.settings_appearance_amoled_description),
-                    checked = amoledEnabled,
-                    isTablet = isTablet,
-                    onCheckedChange = onAmoledToggle,
-                )
+                if (AppFeaturePolicy.viewingChromeEnabled) {
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_appearance_amoled_black),
+                        description = stringResource(Res.string.settings_appearance_amoled_description),
+                        checked = amoledEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = onAmoledToggle,
+                    )
+                }
                 if (liquidGlassNativeTabBarSupported) {
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsSwitchRow(

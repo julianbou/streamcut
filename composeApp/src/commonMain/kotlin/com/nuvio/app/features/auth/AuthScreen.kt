@@ -1,5 +1,9 @@
 package com.nuvio.app.features.auth
 
+import com.nuvio.app.core.ui.Riso
+import com.nuvio.app.core.ui.RisoBloom
+import com.nuvio.app.core.ui.risoBlooms
+import com.nuvio.app.core.ui.risoWorldActive
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -104,16 +108,19 @@ import nuvio.composeapp.generated.resources.compose_auth_sign_up
 import nuvio.composeapp.generated.resources.compose_auth_sign_up_subtitle
 import nuvio.composeapp.generated.resources.compose_auth_store_locally
 import nuvio.composeapp.generated.resources.compose_auth_tagline
+import nuvio.composeapp.generated.resources.clip_auth_tagline
 import nuvio.composeapp.generated.resources.compose_auth_terms_link
 import nuvio.composeapp.generated.resources.compose_auth_terms_prefix
 import nuvio.composeapp.generated.resources.compose_auth_welcome_back
 import org.jetbrains.compose.resources.stringResource
 
-private val AuthTextPrimary = Color(0xFFF5F7F8)
-private val AuthTextSecondary = Color(0xFF969CA3)
-private val AuthTextMuted = Color(0xFF6E7178)
-private val AuthPrimaryButtonBackground = Color(0xFFF5F5F5)
-private val AuthPrimaryButtonText = Color(0xFF111111)
+// Riso (clipper build): paper text on plum stock, and the one action --
+// signing in -- in pink ink. Getters, because the world is chosen per build.
+private val AuthTextPrimary get() = if (risoWorldActive) Riso.Paper else Color(0xFFF5F7F8)
+private val AuthTextSecondary get() = if (risoWorldActive) Color(0xFFB3ACA8) else Color(0xFF969CA3)
+private val AuthTextMuted get() = if (risoWorldActive) Color(0xFF8F8984) else Color(0xFF6E7178)
+private val AuthPrimaryButtonBackground get() = if (risoWorldActive) Riso.Pink else Color(0xFFF5F5F5)
+private val AuthPrimaryButtonText get() = if (risoWorldActive) Riso.Stock else Color(0xFF111111)
 private val AuthFieldBackground = Color.White.copy(alpha = 0.04f)
 private val AuthFieldBackgroundMobile = Color.White.copy(alpha = 0.035f)
 private val AuthFieldBorder = Color.White.copy(alpha = 0.08f)
@@ -226,7 +233,7 @@ fun AuthScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(if (risoWorldActive) Riso.Stock else Color.Black)
             .pointerInput(emailFieldBounds, passwordFieldBounds) {
                 awaitEachGesture {
                     val down = awaitFirstDown(
@@ -251,7 +258,15 @@ fun AuthScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .authGradientBackground(largeScreen = largeScreen),
+                    .then(
+                        // Riso: the welcome side is printed with ink, not a
+                        // purple-to-black screen gradient.
+                        if (risoWorldActive) {
+                            Modifier.risoBlooms(AuthBlooms)
+                        } else {
+                            Modifier.authGradientBackground(largeScreen = largeScreen)
+                        },
+                    ),
             ) {
                 if (largeScreen) {
                     val largeScale = largeAuthScale(screenWidth)
@@ -502,7 +517,7 @@ private fun AuthLargeLayout(
             )
             Spacer(modifier = Modifier.height(32.dp * scale))
             Text(
-                text = stringResource(Res.string.compose_auth_tagline),
+                text = stringResource(if (risoWorldActive) Res.string.clip_auth_tagline else Res.string.compose_auth_tagline),
                 modifier = Modifier.widthIn(max = 440.dp * scale),
                 style = MaterialTheme.typography.displayLarge.copy(
                     color = AuthTextPrimary,
@@ -598,7 +613,7 @@ private fun AuthBrandLockup(
         )
         Spacer(modifier = Modifier.height(14.dp))
         Text(
-            text = stringResource(Res.string.compose_auth_tagline),
+            text = stringResource(if (risoWorldActive) Res.string.clip_auth_tagline else Res.string.compose_auth_tagline),
             style = MaterialTheme.typography.bodyMedium.copy(
                 color = AuthTextSecondary,
                 fontSize = 14.sp,
@@ -1127,3 +1142,8 @@ private fun LayoutCoordinates.boundsInRoot(): Rect {
         bottom = position.y + size.height,
     )
 }
+
+private val AuthBlooms = listOf(
+    RisoBloom(color = Riso.Pink, centerX = 0.22f, centerY = 0.3f, radius = 0.75f, squash = 0.75f, strength = 0.5f),
+    RisoBloom(color = Riso.Blue, centerX = 0.6f, centerY = 0.82f, radius = 0.6f, squash = 0.8f, strength = 0.36f),
+)

@@ -1,5 +1,7 @@
 package com.nuvio.app.features.details.components
 
+import com.nuvio.app.core.ui.Riso
+import com.nuvio.app.core.ui.risoWorldActive
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -96,7 +98,8 @@ fun DetailActionButtons(
                     .weight(1f)
                     .height(buttonHeight),
                 shape = playShape,
-                color = MaterialTheme.colorScheme.onBackground,
+                // Riso: the one action on this page -- Clip -- is pink ink.
+                color = if (risoWorldActive) Riso.Pink else MaterialTheme.colorScheme.onBackground,
                 contentColor = MaterialTheme.colorScheme.background,
             ) {
                 Row(

@@ -12,6 +12,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusRequester
+import com.nuvio.app.core.ui.Riso
+import com.nuvio.app.core.ui.risoBlooms
+import com.nuvio.app.features.search.SearchRepository
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -490,6 +499,30 @@ fun HomeScreen(
     val enabledAddons = remember(addonsUiState.addons) {
         addonsUiState.addons.enabledAddons()
     }
+    // Clipper home: a search masthead and the films you opened; the catalog
+    // rows below stay folded away until asked for. See ClipperHome.kt.
+    val isClipperHome = !AppFeaturePolicy.viewingChromeEnabled
+    var clipperQuery by rememberSaveable { mutableStateOf("") }
+    var clipperBrowseExpanded by rememberSaveable { mutableStateOf(false) }
+    val clipperSearchFocus = remember { FocusRequester() }
+    var clipperSearchFocused by remember { mutableStateOf(false) }
+    val clipperItemHeights = remember { HashMap<Int, Int>() }
+    val clipperSearchState by SearchRepository.uiState.collectAsStateWithLifecycle()
+    if (isClipperHome) {
+        LaunchedEffect(Unit) {
+            // Arriving at home means looking for a film: the cursor is already there.
+            runCatching { clipperSearchFocus.requestFocus() }
+        }
+        LaunchedEffect(clipperQuery, enabledAddons) {
+            if (clipperQuery.isBlank()) {
+                SearchRepository.clear()
+            } else {
+                // Results as you type, without firing a request per keystroke.
+                kotlinx.coroutines.delay(260)
+                SearchRepository.search(clipperQuery, enabledAddons)
+            }
+        }
+    }
     val availableManifests = remember(enabledAddons) {
         enabledAddons.mapNotNull { addon -> addon.manifest }
     }
@@ -867,15 +900,68 @@ fun HomeScreen(
         }
 
         NuvioScreen(
-            modifier = Modifier.fillMaxSize().then(heroStretchModifier),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(heroStretchModifier)
+                .then(
+                    if (isClipperHome) {
+                        // Stock, then ink, then grain over everything: the page is one print.
+                        val swell by animateFloatAsState(
+                            targetValue = if (clipperSearchFocused) 1.14f else 1f,
+                            animationSpec = tween(durationMillis = 900),
+                            label = "clipperHomeSwell",
+                        )
+                        Modifier
+                            .background(Riso.Stock)
+                            .risoBlooms(
+                                blooms = ClipperHomeBlooms,
+                                swell = swell,
+                                scrollY = {
+                                    // Page-space ink, lifted by the true scroll distance so it
+                                    // travels with the content instead of vanishing at item 1.
+                                    val info = homeListState.layoutInfo
+                                    info.visibleItemsInfo.forEach { clipperItemHeights[it.index] = it.size }
+                                    val first = homeListState.firstVisibleItemIndex
+                                    var above = 0f
+                                    for (index in 0 until first) {
+                                        above += (clipperItemHeights[index] ?: 0) + info.mainAxisItemSpacing
+                                    }
+                                    above + homeListState.firstVisibleItemScrollOffset
+                                },
+                            )
+                    } else {
+                        Modifier
+                    },
+                ),
             horizontalPadding = 0.dp,
-            topPadding = if (showHeroSlot) 0.dp else null,
+            topPadding = if (showHeroSlot || isClipperHome) 0.dp else null,
             listState = homeListState,
+            backgroundColor = if (isClipperHome) Color.Transparent else null,
+            // Home prints its own ink (ClipperHomeBlooms) on the page modifier.
+            pageInk = emptyList(),
         ) {
-            // Above the hero, not below it: in a clipper the clips are the page
-            // and the catalog is the tool for finding the next one. In a viewing
-            // build the hero is present and this sits under it, as before.
-            homeClipsSection(sectionPadding = homeSectionPadding)
+            if (isClipperHome) {
+                clipperHomeSections(
+                    query = clipperQuery,
+                    onQueryChange = { clipperQuery = it },
+                    searchFocusRequester = clipperSearchFocus,
+                    onSearchFocusChange = { clipperSearchFocused = it },
+                    // The search owns the upper half of the window; the films you
+                    // opened fill the rest, and catalogs start below the fold.
+                    mastheadHeight = maxHeight * 0.5f,
+                    searchState = clipperSearchState,
+                    recentItems = continueWatchingItems.openedInPlayer(),
+                    browseExpanded = clipperBrowseExpanded,
+                    onBrowseToggle = { clipperBrowseExpanded = !clipperBrowseExpanded },
+                    sectionPadding = homeSectionPadding,
+                    onRecentClick = onContinueWatchingClick,
+                    onResultClick = onPosterClick,
+                )
+                // Catalogs are the last resort: nothing below renders until asked.
+                if (!clipperBrowseExpanded) return@NuvioScreen
+            } else {
+                homeClipsSection(sectionPadding = homeSectionPadding)
+            }
 
             if (showHeroSlot) {
                 item {

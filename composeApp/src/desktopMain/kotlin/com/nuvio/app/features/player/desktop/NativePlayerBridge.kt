@@ -273,6 +273,11 @@ internal object NativePlayerBridge {
             "fonts/jetbrains_sans_bold.ttf" to readResourceBytes(
                 "/composeResources/nuvio.composeapp.generated.resources/font/jetbrains_sans_bold.ttf",
             ),
+            // StreamCut's display face (riso world). Registered here like every
+            // chrome file, or the page asks for it and silently gets nothing.
+            "fonts/big_shoulders_display.ttf" to readResourceBytes(
+                "/composeResources/nuvio.composeapp.generated.resources/font/big_shoulders_display.ttf",
+            ),
         )
         val root = DesktopCache.installVersionedFiles("player-ui", files).toFile()
         return ControlsPageAssets(
@@ -302,6 +307,13 @@ internal object NativePlayerBridge {
               font-weight: 700 900;
               font-style: normal;
               font-display: block;
+            }
+            @font-face {
+              font-family: "Riso Display";
+              src: url("fonts/big_shoulders_display.ttf") format("truetype");
+              font-weight: 100 900;
+              font-style: normal;
+              font-display: swap;
             }
         """.trimIndent()
 

@@ -1,5 +1,9 @@
 package com.nuvio.app.features.streams
 
+import com.nuvio.app.core.ui.Riso
+import com.nuvio.app.core.ui.RisoBloom
+import com.nuvio.app.core.ui.risoBlooms
+import com.nuvio.app.core.ui.risoWorldActive
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -303,7 +307,7 @@ fun StreamsScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f)),
+                    .background((if (risoWorldActive) Riso.Stock else Color.Black).copy(alpha = 0.85f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(
@@ -482,7 +486,13 @@ private fun MobileStreamsLayout(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = if (isEpisode) 0.9f else 0.82f)),
+                    // Riso: the blurred art sinks into plum stock, and pink ink
+                    // pools where you choose -- picking a stream is the act here.
+                    .background(
+                        (if (risoWorldActive) Riso.Stock else Color.Black)
+                            .copy(alpha = if (isEpisode) 0.9f else 0.82f),
+                    )
+                    .then(if (risoWorldActive) Modifier.risoBlooms(StreamsPageBlooms) else Modifier),
             )
         }
 
@@ -1439,3 +1449,8 @@ private fun FooterLoadingBlock(modifier: Modifier = Modifier) {
         )
     }
 }
+
+private val StreamsPageBlooms = listOf(
+    RisoBloom(color = Riso.Pink, centerX = 0.82f, centerY = 0.18f, radius = 0.6f, squash = 0.7f, strength = 0.28f),
+    RisoBloom(color = Riso.Blue, centerX = 0.1f, centerY = 0.92f, radius = 0.5f, squash = 0.8f, strength = 0.18f),
+)

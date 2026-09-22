@@ -75,4 +75,21 @@
          the title to cut from, and "Resume" describes watching, not clipping. -->
     <string name="clip_details_action">Clip</string>
     <string name="clip_details_action_resume">Clip from here</string>
+    <!-- Home in the clipper build: a search masthead, the films you opened,
+         and the addon catalogs folded away at the bottom. -->
+    <string name="clip_home_search_placeholder">Find a film or series</string>
+    <string name="clip_home_search_hint">Results appear as you type. Esc clears.</string>
+    <string name="clip_home_recent_title">Recently opened</string>
+    <string name="clip_home_recent_empty">Films you open in the player show up here, ready to pick up where you stopped.</string>
+    <string name="clip_home_stopped_at">Stopped at %1$s</string>
+    <string name="clip_home_searching">Searching your addons</string>
+    <string name="clip_home_no_results">Nothing matches "%1$s". Try the original title, or fewer words.</string>
+    <string name="clip_home_no_addons">Search needs at least one addon with a search catalog. Add one in Settings.</string>
+    <string name="clip_home_search_failed">Search failed: %1$s</string>
+    <string name="clip_home_browse_title">Browse catalogs</string>
+    <string name="clip_home_browse_hint">Everything your addons list, for when you do not know what you are looking for.</string>
+    <string name="clip_home_browse_hide">Hide catalogs</string>
+
+    <!-- Sign-in welcome line in the clipper build (upstream's is about streaming). -->
+    <string name="clip_auth_tagline">Cut the moment. Keep the frame.</string>
 </resources>

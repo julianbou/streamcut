@@ -1,5 +1,6 @@
 package com.nuvio.app.features.settings
 
+import com.nuvio.app.core.ui.risoSelectionInk
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -161,8 +162,10 @@ internal fun SettingsSidebarItem(
 ) {
     val tokens = MaterialTheme.nuvio
     val primary = tokens.colors.accent
-    val background = if (selected) primary.copy(alpha = tokens.opacity.hover) else Color.Transparent
-    val iconChip = if (selected) primary.copy(alpha = tokens.opacity.selected) else Color.Transparent
+    // Riso: selection is pink ink pooling behind the icon, not a filled row.
+    val riso = com.nuvio.app.core.ui.risoWorldActive
+    val background = if (selected && !riso) primary.copy(alpha = tokens.opacity.hover) else Color.Transparent
+    val iconChip = if (selected && !riso) primary.copy(alpha = tokens.opacity.selected) else Color.Transparent
     val contentColor = if (selected) tokens.colors.textPrimary else tokens.colors.textMuted
 
     Row(
@@ -175,7 +178,15 @@ internal fun SettingsSidebarItem(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
-            modifier = Modifier.size(tokens.icons.xl),
+            modifier = Modifier
+                .size(tokens.icons.xl)
+                .then(
+                    if (riso) {
+                        Modifier.risoSelectionInk(com.nuvio.app.core.ui.Riso.Pink, if (selected) 1f else 0f, spread = 1.6f)
+                    } else {
+                        Modifier
+                    },
+                ),
             color = iconChip,
             shape = RoundedCornerShape(NuvioTokens.Radius.md),
         ) {
@@ -187,7 +198,7 @@ internal fun SettingsSidebarItem(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (selected) primary else contentColor,
+                    tint = if (selected && !riso) primary else contentColor,
                 )
             }
         }
@@ -210,7 +221,7 @@ internal fun SettingsSection(
 ) {
     val tokens = MaterialTheme.nuvio
     Column {
-        Row(
+        if (title.isNotEmpty()) Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,

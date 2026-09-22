@@ -5,6 +5,13 @@ import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.Typography
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.em
+import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -24,6 +31,7 @@ import nuvio.composeapp.generated.resources.jetbrains_sans_bold
 import nuvio.composeapp.generated.resources.jetbrains_sans_regular
 import nuvio.composeapp.generated.resources.jetbrains_sans_semibold
 import org.jetbrains.compose.resources.Font
+import com.nuvio.app.core.build.AppFeaturePolicy
 
 val LocalAppTheme = staticCompositionLocalOf { AppTheme.WHITE }
 
@@ -214,9 +222,16 @@ fun NuvioTheme(
     desktopUiScale: Float = NuvioDesktopMinUiScale,
     content: @Composable () -> Unit,
 ) {
-    val palette = ThemeColors.getColorPalette(appTheme)
-    val colorScheme = buildColorScheme(palette, amoled = amoled)
-    val tokens = defaultNuvioThemeTokens(palette, amoled = amoled, colorScheme = colorScheme)
+    // The clipper build wears the riso world whatever theme is stored: the
+    // picker is hidden there, and the stored value is kept for upstream builds.
+    val riso = !AppFeaturePolicy.viewingChromeEnabled
+    val palette = if (riso) ThemeColors.Riso else ThemeColors.getColorPalette(appTheme)
+    val colorScheme = buildColorScheme(palette, amoled = amoled && !riso)
+        .let { if (riso) it.withRisoInks() else it }
+    val tokens = defaultNuvioThemeTokens(palette, amoled = amoled && !riso, colorScheme = colorScheme)
+        .let { if (riso) it.withRisoInks() else it }
+    val typography = if (riso) NuvioTypography.withRisoDisplay() else NuvioTypography
+    val typeScale = if (riso) NuvioTypeTokens.withRisoDisplay() else NuvioTypeTokens
 
     val density = LocalDensity.current
     val effectiveDesktopUiScale = if (isDesktop) {
@@ -231,14 +246,113 @@ fun NuvioTheme(
             fontScale = if (isDesktop) NuvioDesktopFontScale else 1f,
         ),
         LocalNuvioThemeTokens provides tokens,
-        LocalNuvioTypeScale provides NuvioTypeTokens,
+        LocalNuvioTypeScale provides typeScale,
         LocalRippleConfiguration provides NuvioRippleConfiguration,
         LocalAppTheme provides appTheme,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = NuvioTypography,
-            content = content,
-        )
+            typography = typography,
+        ) {
+            if (riso) {
+                // One paper grain over the whole print, drawn once here rather
+                // than per screen. The desktop video is a native view above
+                // Compose, so this can never land on the picture.
+                Box(Modifier.fillMaxSize().risoGrain()) { content() }
+            } else {
+                content()
+            }
+        }
     }
 }
+
+// --- riso world (clipper build) -------------------------------------------
+//
+// Applied over the regular palette plumbing rather than instead of it, so every
+// screen that reads MaterialTheme.colorScheme or MaterialTheme.nuvio picks the
+// world up without being touched. See RisoMaterial.kt and DESIGN.md.
+
+private fun ColorScheme.withRisoInks(): ColorScheme = copy(
+    background = Riso.Stock,
+    onBackground = Riso.Paper,
+    surface = Riso.StockRaised,
+    onSurface = Riso.Paper,
+    surfaceVariant = Color(0xFF241C2C),
+    onSurfaceVariant = Color(0xFFB3ACA8),
+    // No borders at rest (DESIGN.md): fields and groups separate by raised
+    // stock and space; focus draws pink ink instead.
+    outline = Color.Transparent,
+    outlineVariant = Color.Transparent,
+    error = Riso.Red,
+    onError = Riso.Stock,
+)
+
+private fun NuvioThemeTokens.withRisoInks(): NuvioThemeTokens = copy(
+    // Organic, not boxy: pills for controls, generous radii for fields.
+    shapes = shapes.copy(
+        card = RoundedCornerShape(22.dp),
+        compactCard = RoundedCornerShape(18.dp),
+        sheet = RoundedCornerShape(28.dp),
+        dialog = RoundedCornerShape(28.dp),
+        button = RoundedCornerShape(percent = 50),
+        chip = RoundedCornerShape(percent = 50),
+    ),
+    colors = colors.copy(
+        // In-page fields are translucent so the page's ink and grain show
+        // through; anything that floats over other content stays opaque.
+        surface = Riso.StockRaised.copy(alpha = 0.78f),
+        surfaceElevated = Riso.StockRaised.copy(alpha = 0.78f),
+        surfaceCard = Color(0xFF261D2F).copy(alpha = 0.72f),
+        surfaceSheet = Color(0xFF1F1826),
+        surfaceDialog = Color(0xFF1F1826),
+        surfacePopover = Color(0xFF261D2F),
+        textPrimary = Riso.Paper,
+        textSecondary = Color(0xFFCFC8C2),
+        textMuted = Color(0xFFA39D98),
+        textDisabled = Riso.Paper.copy(alpha = 0.34f),
+        textInverse = Riso.Stock,
+        // Boxes give way to space and ink: borders all but vanish.
+        borderSubtle = Color.Transparent,
+        borderDefault = Color.Transparent,
+        borderStrong = Riso.Paper.copy(alpha = 0.16f),
+        // One meaning per ink.
+        success = Riso.Blue,
+        warning = Riso.Sun,
+        danger = Riso.Red,
+        info = Riso.Blue,
+        overlayScrim = Color(0xFF0A080D).copy(alpha = 0.72f),
+        // Player: white is where you are (played fill, buffering), so the pink
+        // range being marked and the sun ranges set aside stay readable on it.
+        playerTimelineFill = Riso.Paper.copy(alpha = 0.92f),
+        playerBuffering = Riso.Paper,
+        playerControlsBackground = Riso.Stock.copy(alpha = 0.82f),
+        shimmer = Riso.Paper.copy(alpha = 0.08f),
+        skeleton = Riso.Paper.copy(alpha = 0.05f),
+    ),
+)
+
+/**
+ * What a programme sheet sets big -- page and section display lines -- goes to
+ * the condensed poster face, scaled up because it is narrow. Everything read in
+ * running text stays in the UI face.
+ */
+@Composable
+private fun TextStyle.inRisoDisplay(scale: Float = 1.12f): TextStyle = copy(
+    fontFamily = RisoDisplay,
+    fontWeight = FontWeight.ExtraBold,
+    fontSize = fontSize * scale,
+    lineHeight = lineHeight * scale,
+    letterSpacing = 0.01.em,
+)
+
+@Composable
+private fun Typography.withRisoDisplay(): Typography = copy(
+    displayLarge = displayLarge.inRisoDisplay(),
+    headlineLarge = headlineLarge.inRisoDisplay(),
+)
+
+@Composable
+private fun NuvioTypeScale.withRisoDisplay(): NuvioTypeScale = copy(
+    displaySm = displaySm.inRisoDisplay(),
+    displayMd = displayMd.inRisoDisplay(),
+)

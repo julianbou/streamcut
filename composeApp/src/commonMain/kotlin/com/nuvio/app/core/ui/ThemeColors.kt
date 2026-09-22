@@ -173,6 +173,24 @@ object ThemeColors {
         backgroundCard = Color(0xFF222222),
     )
 
+    /**
+     * The clipper build's only palette: plum card stock with pink as the acting
+     * ink. Not an [AppTheme] entry -- it is not picked, it is the build's look
+     * (see NuvioTheme), so the upstream enum and its persisted values stay as-is.
+     */
+    val Riso = ThemeColorPalette(
+        secondary = com.nuvio.app.core.ui.Riso.Pink,
+        secondaryVariant = Color(0xFFD93A95),
+        nativeAccentHex = "#FF48B0",
+        onSecondary = com.nuvio.app.core.ui.Riso.Stock,
+        onSecondaryVariant = com.nuvio.app.core.ui.Riso.Stock,
+        focusRing = com.nuvio.app.core.ui.Riso.Pink,
+        focusBackground = Color(0xFF2B2033),
+        background = com.nuvio.app.core.ui.Riso.Stock,
+        backgroundElevated = com.nuvio.app.core.ui.Riso.StockRaised,
+        backgroundCard = Color(0xFF241C2C),
+    )
+
     fun getColorPalette(theme: AppTheme): ThemeColorPalette = when (theme) {
         AppTheme.GOLD -> Gold
         AppTheme.JADE -> Jade

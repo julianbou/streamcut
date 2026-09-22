@@ -99,6 +99,10 @@ import coil3.request.CachePolicy
 import coil3.request.crossfade
 import coil3.svg.SvgDecoder
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.ui.risoWorldActive
+import com.nuvio.app.core.ui.risoSelectionInk
+import com.nuvio.app.core.ui.Riso
+import androidx.compose.animation.core.animateFloatAsState
 import com.nuvio.app.features.clip.ClipsLibraryScreen
 import com.nuvio.app.core.auth.AuthRepository
 import com.nuvio.app.core.auth.AuthState
@@ -1769,12 +1773,15 @@ private fun MainAppContent(
                                             icon = Icons.Filled.Home,
                                             contentDescription = stringResource(Res.string.compose_nav_home),
                                         )
-                                        NavItem(
-                                            selected = selectedTab == AppScreenTab.Search,
-                                            onClick = { handleRootTabClick(AppScreenTab.Search) },
-                                            icon = Res.drawable.sidebar_search,
-                                            contentDescription = stringResource(Res.string.compose_nav_search),
-                                        )
+                                        // Clipper build: home is the search page.
+                                        if (AppFeaturePolicy.viewingChromeEnabled) {
+                                            NavItem(
+                                                selected = selectedTab == AppScreenTab.Search,
+                                                onClick = { handleRootTabClick(AppScreenTab.Search) },
+                                                icon = Res.drawable.sidebar_search,
+                                                contentDescription = stringResource(Res.string.compose_nav_search),
+                                            )
+                                        }
                                         NavItem(
                                             selected = selectedTab == AppScreenTab.Library,
                                             onClick = { handleRootTabClick(AppScreenTab.Library) },
@@ -1966,13 +1973,15 @@ private fun MainAppContent(
                                             contentDescription = stringResource(Res.string.compose_nav_home),
                                             label = stringResource(Res.string.compose_nav_home),
                                         )
-                                        NavItem(
-                                            selected = selectedTab == AppScreenTab.Search,
-                                            onClick = { handleRootTabClick(AppScreenTab.Search) },
-                                            icon = Res.drawable.sidebar_search,
-                                            contentDescription = stringResource(Res.string.compose_nav_search),
-                                            label = stringResource(Res.string.compose_nav_search),
-                                        )
+                                        if (AppFeaturePolicy.viewingChromeEnabled) {
+                                            NavItem(
+                                                selected = selectedTab == AppScreenTab.Search,
+                                                onClick = { handleRootTabClick(AppScreenTab.Search) },
+                                                icon = Res.drawable.sidebar_search,
+                                                contentDescription = stringResource(Res.string.compose_nav_search),
+                                                label = stringResource(Res.string.compose_nav_search),
+                                            )
+                                        }
                                         NavItem(
                                             selected = selectedTab == AppScreenTab.Library,
                                             onClick = { handleRootTabClick(AppScreenTab.Library) },
@@ -3842,18 +3851,21 @@ private fun DesktopHoverSidebar(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                DesktopSidebarItem(
-                    label = stringResource(Res.string.compose_nav_search),
-                    selected = selectedTab == AppScreenTab.Search,
-                    expanded = sidebarExpanded,
-                    onClick = { selectTab(AppScreenTab.Search) },
-                ) { color ->
-                    Icon(
-                        painter = painterResource(Res.drawable.sidebar_search),
-                        contentDescription = stringResource(Res.string.compose_nav_search),
-                        modifier = Modifier.size(DesktopSidebarIconSize),
-                        tint = color,
-                    )
+                // Clipper build: home is the search page, so the tab would be a duplicate.
+                if (AppFeaturePolicy.viewingChromeEnabled) {
+                    DesktopSidebarItem(
+                        label = stringResource(Res.string.compose_nav_search),
+                        selected = selectedTab == AppScreenTab.Search,
+                        expanded = sidebarExpanded,
+                        onClick = { selectTab(AppScreenTab.Search) },
+                    ) { color ->
+                        Icon(
+                            painter = painterResource(Res.drawable.sidebar_search),
+                            contentDescription = stringResource(Res.string.compose_nav_search),
+                            modifier = Modifier.size(DesktopSidebarIconSize),
+                            tint = color,
+                        )
+                    }
                 }
                 DesktopSidebarItem(
                     label = stringResource(Res.string.compose_nav_home),
@@ -3913,7 +3925,13 @@ private fun DesktopSidebarItem(
 ) {
     val tokens = MaterialTheme.nuvio
     val contentColor = if (selected) tokens.colors.textPrimary else tokens.colors.textMuted
-    val iconColor = if (selected) tokens.colors.onAccent else contentColor
+    // Riso: the selected tab is where pink ink pools, not a filled tile.
+    val iconColor = if (selected && !risoWorldActive) tokens.colors.onAccent else contentColor
+    val selectionInk by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = tween(durationMillis = 420),
+        label = "sidebarSelectionInk",
+    )
 
     Surface(
         modifier = Modifier
@@ -3938,8 +3956,12 @@ private fun DesktopSidebarItem(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
-                    modifier = Modifier.size(DesktopSidebarIconSlotSize),
-                    color = if (selected) tokens.colors.accent else Color.Transparent,
+                    modifier = Modifier
+                        .size(DesktopSidebarIconSlotSize)
+                        .then(
+                            if (risoWorldActive) Modifier.risoSelectionInk(Riso.Pink, selectionInk) else Modifier,
+                        ),
+                    color = if (selected && !risoWorldActive) tokens.colors.accent else Color.Transparent,
                     shape = RoundedCornerShape(14.dp),
                 ) {
                     Box(
