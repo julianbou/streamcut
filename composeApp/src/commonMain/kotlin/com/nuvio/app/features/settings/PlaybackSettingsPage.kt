@@ -97,6 +97,20 @@ import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 
+/**
+ * The groups the playback page is made of, so a build can show them apart:
+ * the clipper settings spread them over Clips, Sources and Player, and leave
+ * the watching-only ones (skip segments, next episode) out entirely.
+ */
+internal enum class PlaybackSettingsGroup {
+    Clips,
+    Player,
+    Languages,
+    Streams,
+    SkipSegments,
+    NextEpisode,
+}
+
 internal fun LazyListScope.playbackSettingsContent(
     isTablet: Boolean,
     showLoadingOverlay: Boolean,
@@ -118,6 +132,7 @@ internal fun LazyListScope.playbackSettingsContent(
     tunnelingEnabled: Boolean,
     useLibass: Boolean,
     libassRenderType: String,
+    groups: Set<PlaybackSettingsGroup> = PlaybackSettingsGroup.entries.toSet(),
 ) {
     item {
         PlaybackSettingsSection(
@@ -141,6 +156,7 @@ internal fun LazyListScope.playbackSettingsContent(
             tunnelingEnabled = tunnelingEnabled,
             useLibass = useLibass,
             libassRenderType = libassRenderType,
+            groups = groups,
         )
     }
 }
@@ -305,6 +321,7 @@ private fun PlaybackSettingsSection(
     tunnelingEnabled: Boolean,
     useLibass: Boolean,
     libassRenderType: String,
+    groups: Set<PlaybackSettingsGroup>,
 ) {
     var showPreferredAudioDialog by remember { mutableStateOf(false) }
     var showSecondaryAudioDialog by remember { mutableStateOf(false) }
@@ -368,7 +385,10 @@ private fun PlaybackSettingsSection(
     Column(
         verticalArrangement = Arrangement.spacedBy(sectionSpacing),
     ) {
+        if (PlaybackSettingsGroup.Clips in groups) {
         ClipsSettingsSection(isTablet = isTablet)
+        }
+        if (PlaybackSettingsGroup.Player in groups) {
         SettingsSection(
             title = stringResource(Res.string.settings_playback_section_player),
             isTablet = isTablet,
@@ -472,7 +492,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.Languages in groups) {
         SettingsSection(
             title = stringResource(Res.string.settings_playback_section_subtitle_audio),
             isTablet = isTablet,
@@ -579,7 +601,9 @@ private fun PlaybackSettingsSection(
                 )
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.Languages in groups) {
         SettingsSection(
             title = stringResource(Res.string.settings_playback_section_subtitle_rendering),
             isTablet = isTablet,
@@ -684,7 +708,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.Streams in groups) {
         if (P2pSettingsRepository.isVisible) {
             SettingsSection(
                 title = stringResource(Res.string.settings_playback_section_p2p),
@@ -767,7 +793,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.Streams in groups) {
         SettingsSection(
             title = stringResource(Res.string.settings_playback_section_stream_selection),
             isTablet = isTablet,
@@ -791,7 +819,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.Streams in groups) {
         SettingsSection(
             title = stringResource(Res.string.settings_playback_section_stream_auto_play),
             isTablet = isTablet,
@@ -915,7 +945,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.Player in groups) {
         if (!isIos) {
             val decoderEnabled = !autoPlayPlayerSettings.externalPlayerEnabled
             val exoOptionsEnabled = decoderEnabled && androidPlaybackEngine != AndroidPlaybackEngine.Libmpv
@@ -990,7 +1022,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.Player in groups) {
         if (isWindows) {
             SettingsSection(
                 title = stringResource(Res.string.settings_playback_nvidia_rtx_video_section),
@@ -1007,7 +1041,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.Player in groups) {
         if (isIos) {
             SettingsSection(
                 title = stringResource(Res.string.settings_playback_ios_audio_output_section),
@@ -1067,7 +1103,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.SkipSegments in groups) {
         SettingsSection(
             title = stringResource(Res.string.settings_playback_section_skip_segments),
             isTablet = isTablet,
@@ -1148,7 +1186,9 @@ private fun PlaybackSettingsSection(
                 }
             }
         }
+        }
 
+        if (PlaybackSettingsGroup.NextEpisode in groups) {
         SettingsSection(
             title = stringResource(Res.string.settings_playback_section_next_episode),
             isTablet = isTablet,
@@ -1318,6 +1358,7 @@ private fun PlaybackSettingsSection(
                     }
                 }
             }
+        }
         }
     }
 

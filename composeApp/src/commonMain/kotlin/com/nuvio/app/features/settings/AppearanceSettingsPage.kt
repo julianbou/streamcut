@@ -311,7 +311,8 @@ internal fun LazyListScope.appearanceSettingsContent(
         }
     }
 
-    item {
+    // Clipper build: the home, stream list and detail layouts these tune are gone.
+    if (AppFeaturePolicy.viewingChromeEnabled) item {
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_home),
             isTablet = isTablet,
@@ -347,7 +348,8 @@ internal fun LazyListScope.appearanceSettingsContent(
             }
         }
     }
-    item {
+    // Clipper build: the home, stream list and detail layouts these tune are gone.
+    if (AppFeaturePolicy.viewingChromeEnabled) item {
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_streams),
             isTablet = isTablet,
@@ -362,7 +364,8 @@ internal fun LazyListScope.appearanceSettingsContent(
             }
         }
     }
-    item {
+    // Clipper build: the home, stream list and detail layouts these tune are gone.
+    if (AppFeaturePolicy.viewingChromeEnabled) item {
         SettingsSection(
             title = stringResource(Res.string.settings_appearance_section_detail_page),
             isTablet = isTablet,

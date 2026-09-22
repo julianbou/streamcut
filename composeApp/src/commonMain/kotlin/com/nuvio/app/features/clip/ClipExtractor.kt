@@ -89,6 +89,13 @@ internal expect object ClipExtractor {
      */
     suspend fun probeFrameRate(sourceUrl: String, sourceHeaders: Map<String, String>): Double
 
+    /**
+     * Which ffmpeg an export would use and what it can do, for the Clips
+     * settings page. Suspending: finding out runs the binary. Null where clip
+     * export is not supported.
+     */
+    suspend fun toolStatus(): ClipToolStatus?
+
     /** Reveal the finished clip in the platform file manager. No-op where unsupported. */
     fun reveal(outputFileUri: String)
 
@@ -124,3 +131,16 @@ internal expect object ClipExtractor {
      */
     fun setOutputDirPath(path: String?): Boolean
 }
+
+/**
+ * The export toolchain as found on this machine. [path] is null when no ffmpeg
+ * could be run at all; the booleans are the capabilities whose absence
+ * degrades an export silently rather than failing it.
+ */
+data class ClipToolStatus(
+    val path: String?,
+    val version: String,
+    val burnInSubtitles: Boolean,
+    val hdrTonemap: Boolean,
+    val hardwareEncoder: String?,
+)

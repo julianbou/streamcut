@@ -964,6 +964,11 @@ private val ViewingOnlySettingsPages = setOf(
     SettingsPage.Notifications,
     SettingsPage.ContinueWatching,
     SettingsPage.HoverPreview,
+    // Layout of the viewing home, detail page, stream list and posters.
+    SettingsPage.Homescreen,
+    SettingsPage.MetaScreen,
+    SettingsPage.PosterCustomization,
+    SettingsPage.Streams,
 )
 
 private data class PlaybackSearchRow(

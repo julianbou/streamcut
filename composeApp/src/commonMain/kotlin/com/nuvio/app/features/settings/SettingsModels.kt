@@ -6,6 +6,14 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Apps
+import nuvio.composeapp.generated.resources.clip_settings_category_clips
+import nuvio.composeapp.generated.resources.clip_settings_category_sources
+import nuvio.composeapp.generated.resources.clip_settings_category_player
+import nuvio.composeapp.generated.resources.clip_settings_category_app
 import androidx.compose.ui.graphics.vector.ImageVector
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.compose_settings_category_about
@@ -44,6 +52,11 @@ internal enum class SettingsCategory(
     General(Res.string.compose_settings_category_general, Icons.Rounded.Settings),
     About(Res.string.compose_settings_category_about, Icons.Rounded.Info),
     Advanced(Res.string.compose_settings_page_advanced, Icons.Rounded.Tune),
+    // Clipper build only; see ClipperSettings.kt for which categories each build shows.
+    Clips(Res.string.clip_settings_category_clips, Icons.Rounded.ContentCut),
+    Sources(Res.string.clip_settings_category_sources, Icons.Rounded.Extension),
+    Player(Res.string.clip_settings_category_player, Icons.Rounded.PlayCircle),
+    App(Res.string.clip_settings_category_app, Icons.Rounded.Apps),
 }
 
 internal enum class SettingsPage(

@@ -1,5 +1,6 @@
 package com.nuvio.app.features.settings
 
+import androidx.compose.foundation.lazy.LazyListScope
 import com.nuvio.app.core.build.AppFeaturePolicy
 
 import androidx.compose.foundation.background
@@ -841,19 +842,19 @@ private fun TabletSettingsScreen(
     onTestUpdateBannerClick: (() -> Unit)? = null,
     onCollectionsClick: () -> Unit = {},
 ) {
-    var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.General.name) }
+    var selectedCategory by rememberSaveable { mutableStateOf(defaultSettingsCategory().name) }
     val activeCategory = SettingsCategory.valueOf(selectedCategory)
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val topOffset = max(statusBarPadding + 24.dp, 48.dp) + 64.dp
 
     LaunchedEffect(page) {
         if (page.opensInlineOnTablet) {
-            selectedCategory = page.category.name
+            selectedCategory = page.categoryForBuild().name
         }
     }
 
     fun openInlinePage(page: SettingsPage) {
-        selectedCategory = page.category.name
+        selectedCategory = page.categoryForBuild().name
         onPageChange(page)
     }
 
@@ -884,7 +885,7 @@ private fun TabletSettingsScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 Spacer(modifier = Modifier.height(10.dp))
-                SettingsCategory.entries.forEach { category ->
+                settingsCategoriesForBuild().forEach { category ->
                     SettingsSidebarItem(
                         label = stringResource(category.labelRes),
                         icon = category.icon,
@@ -908,7 +909,7 @@ private fun TabletSettingsScreen(
             val hapticScope = rememberCoroutineScope()
             val searchEntries = settingsSearchEntries(
                 pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                downloadsEnabled = AppFeaturePolicy.downloadsEnabled,
+                downloadsEnabled = AppFeaturePolicy.downloadsEnabled && AppFeaturePolicy.viewingChromeEnabled,
                 notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
                 externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
                 supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
@@ -1003,7 +1004,76 @@ private fun TabletSettingsScreen(
                                 onQueryChange = { settingsSearchQuery = it },
                                 onTargetClick = { openSearchTarget(it) },
                             )
-                            if (settingsSearchQuery.isBlank()) {
+                            if (settingsSearchQuery.isBlank() && clipperSettings) {
+                                // Clipper build: each category shows its settings directly.
+                                val playbackGroups: LazyListScope.(Set<PlaybackSettingsGroup>) -> Unit = { groups ->
+                                    playbackSettingsContent(
+                                        isTablet = true,
+                                        showLoadingOverlay = showLoadingOverlay,
+                                        holdToSpeedEnabled = holdToSpeedEnabled,
+                                        holdToSpeedValue = holdToSpeedValue,
+                                        touchGesturesEnabled = touchGesturesEnabled,
+                                        preferredAudioLanguage = preferredAudioLanguage,
+                                        secondaryPreferredAudioLanguage = secondaryPreferredAudioLanguage,
+                                        preferredSubtitleLanguage = preferredSubtitleLanguage,
+                                        secondaryPreferredSubtitleLanguage = secondaryPreferredSubtitleLanguage,
+                                        streamReuseLastLinkEnabled = streamReuseLastLinkEnabled,
+                                        streamReuseLastLinkCacheHours = streamReuseLastLinkCacheHours,
+                                        androidPlaybackEngine = androidPlaybackEngine,
+                                        androidLibmpvVideoOutput = androidLibmpvVideoOutput,
+                                        androidLibmpvHardwareDecodingEnabled = androidLibmpvHardwareDecodingEnabled,
+                                        androidLibmpvYuv420pEnabled = androidLibmpvYuv420pEnabled,
+                                        decoderPriority = decoderPriority,
+                                        mapDV7ToHevc = mapDV7ToHevc,
+                                        tunnelingEnabled = tunnelingEnabled,
+                                        useLibass = useLibass,
+                                        libassRenderType = libassRenderType,
+                                        groups = groups,
+                                    )
+                                }
+                                when (activeCategory) {
+                                    SettingsCategory.Clips -> clipsCategoryContent(
+                                        isTablet = true,
+                                        onPlayerSettingsClick = { selectedCategory = SettingsCategory.Player.name },
+                                    )
+                                    SettingsCategory.Sources -> {
+                                        sourcesCategoryLinks(isTablet = true, onOpenPage = { openInlinePage(it) })
+                                        playbackGroups(setOf(PlaybackSettingsGroup.Streams))
+                                    }
+                                    SettingsCategory.Player -> playbackGroups(
+                                        setOf(PlaybackSettingsGroup.Player, PlaybackSettingsGroup.Languages),
+                                    )
+                                    else -> {
+                                        if (activeCategory == SettingsCategory.App) {
+                                            appCategoryLinks(isTablet = true, onOpenPage = { openInlinePage(it) })
+                                        }
+                                        settingsRootContent(
+                                            isTablet = true,
+                                            onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
+                                            onAppearanceClick = { openInlinePage(SettingsPage.Appearance) },
+                                            onAdvancedClick = { openInlinePage(SettingsPage.Advanced) },
+                                            onNotificationsClick = { openInlinePage(SettingsPage.Notifications) },
+                                            onContentDiscoveryClick = { openInlinePage(SettingsPage.ContentDiscovery) },
+                                            onIntegrationsClick = { openInlinePage(SettingsPage.Integrations) },
+                                            onTrackingClick = { openInlinePage(SettingsPage.TraktAuthentication) },
+                                            onSupportersContributorsClick = { openInlinePage(SettingsPage.SupportersContributors) },
+                                            onLicensesAttributionsClick = { openInlinePage(SettingsPage.LicensesAttributions) },
+                                            onCheckForUpdatesClick = onCheckForUpdatesClick,
+                                            onTestUpdateBannerClick = onTestUpdateBannerClick,
+                                            onDownloadsClick = onDownloadsClick,
+                                            onAccountClick = { openInlinePage(SettingsPage.Account) },
+                                            showDownloadsEntry = false,
+                                            showNotificationsEntry = false,
+                                            showTrackingEntry = false,
+                                            showAccountSection = activeCategory == SettingsCategory.Account,
+                                            showGeneralSection = false,
+                                            showAboutSection = activeCategory == SettingsCategory.App,
+                                            showAdvancedSection = activeCategory == SettingsCategory.App,
+                                            showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
+                                        )
+                                    }
+                                }
+                            } else if (settingsSearchQuery.isBlank()) {
                                 settingsRootContent(
                                     isTablet = true,
                                     onPlaybackClick = { openInlinePage(SettingsPage.Playback) },
@@ -1062,6 +1132,12 @@ private fun TabletSettingsScreen(
                             tunnelingEnabled = tunnelingEnabled,
                             useLibass = useLibass,
                             libassRenderType = libassRenderType,
+                            // Clipper: reachable from search; never the watching-only groups.
+                            groups = if (clipperSettings) {
+                                setOf(PlaybackSettingsGroup.Player, PlaybackSettingsGroup.Languages, PlaybackSettingsGroup.Streams)
+                            } else {
+                                PlaybackSettingsGroup.entries.toSet()
+                            },
                         )
                         SettingsPage.Streams -> streamsSettingsContent(
                             isTablet = true,

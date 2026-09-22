@@ -56,7 +56,7 @@
     <string name="clip_empty_saved_to_format">Clips are saved to %1$s</string>
 
     <!-- Settings -->
-    <string name="clip_settings_section">Clips</string>
+    <string name="clip_settings_section">Saving clips</string>
     <string name="clip_settings_folder_title">Clips folder</string>
     <string name="clip_settings_folder_default_format">%1$s (default)</string>
     <string name="clip_settings_folder_error">Can\'t write to that folder — keeping the previous one</string>
@@ -92,4 +92,28 @@
 
     <!-- Sign-in welcome line in the clipper build (upstream's is about streaming). -->
     <string name="clip_auth_tagline">Cut the moment. Keep the frame.</string>
+
+    <!-- Settings, clipper build: organised around making clips, not watching. -->
+    <string name="clip_settings_category_clips">Clips</string>
+    <string name="clip_settings_category_sources">Sources</string>
+    <string name="clip_settings_category_player">Player</string>
+    <string name="clip_settings_category_app">App</string>
+    <string name="clip_settings_sources_section">Where clips come from</string>
+    <string name="clip_settings_sources_addons_description">Catalogs and streams from your installed addons.</string>
+    <string name="clip_settings_sources_integrations_description">Debrid services, TMDB and MDBList.</string>
+    <string name="clip_settings_app_section">App</string>
+    <string name="clip_settings_app_appearance_description">Language and window navigation.</string>
+    <string name="clip_settings_languages_note">Clips carry the audio track and subtitle that are playing. Set which languages the player picks first under Player.</string>
+    <string name="clip_settings_languages_link">Open Player settings</string>
+    <string name="clip_settings_tools_section">Export tools</string>
+    <string name="clip_settings_tools_checking">Checking ffmpeg...</string>
+    <string name="clip_settings_tools_missing">No ffmpeg found. Clips cannot be exported until ffmpeg is installed or NUVIO_FFMPEG_PATH points at one.</string>
+    <string name="clip_settings_tools_ffmpeg">ffmpeg</string>
+    <string name="clip_settings_tools_subtitles">Subtitle burn-in</string>
+    <string name="clip_settings_tools_subtitles_missing">Needs an ffmpeg built with libass (jellyfin-ffmpeg has it).</string>
+    <string name="clip_settings_tools_hdr">HDR to SDR tonemapping</string>
+    <string name="clip_settings_tools_hdr_missing">Needs an ffmpeg built with libzimg; HDR clips will look grey without it.</string>
+    <string name="clip_settings_tools_encoder">Hardware encoder</string>
+    <string name="clip_settings_tools_encoder_none">None found; exports use libx264 (slower, same quality).</string>
+    <string name="clip_settings_tools_available">Available</string>
 </resources>

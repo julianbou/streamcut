@@ -218,6 +218,26 @@ internal actual object ClipExtractor {
         return 0.0
     }
 
+    actual suspend fun toolStatus(): ClipToolStatus? = withContext(Dispatchers.IO) {
+        val ffmpeg = resolveFfmpegPath() ?: return@withContext ClipToolStatus(null, "", false, false, null)
+        val version = runCatching {
+            val process = ProcessBuilder(ffmpeg, "-hide_banner", "-version").redirectErrorStream(true).start()
+            val first = process.inputStream.bufferedReader().readLine().orEmpty()
+            process.waitFor(10, TimeUnit.SECONDS)
+            first
+        }.getOrNull()
+            // Not runnable at all: report it as missing rather than as a toolchain
+            // that merely lacks features.
+            ?: return@withContext ClipToolStatus(null, "", false, false, null)
+        ClipToolStatus(
+            path = ffmpeg,
+            version = version.removePrefix("ffmpeg version ").substringBefore(" Copyright").trim(),
+            burnInSubtitles = hasFilter(ffmpeg, "subtitles"),
+            hdrTonemap = hasFilter(ffmpeg, "zscale"),
+            hardwareEncoder = candidateVideoEncoders(ffmpeg).firstOrNull { it != "libx264" },
+        )
+    }
+
     actual fun reveal(outputFileUri: String) {
         runCatching {
             val file = File(java.net.URI(outputFileUri))
