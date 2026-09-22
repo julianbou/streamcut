@@ -373,7 +373,7 @@ internal fun SettingsSwitchRow(
                 checkedThumbColor = tokens.colors.onAccent,
                 checkedTrackColor = tokens.colors.accent,
                 uncheckedThumbColor = tokens.colors.textMuted,
-                uncheckedTrackColor = tokens.colors.borderDefault,
+                uncheckedTrackColor = if (com.nuvio.app.core.ui.risoWorldActive) com.nuvio.app.core.ui.Riso.SwitchOffTrack else tokens.colors.borderDefault,
             ),
         )
     }
@@ -471,7 +471,7 @@ internal fun HomescreenCatalogRow(
                         checkedThumbColor = tokens.colors.onAccent,
                         checkedTrackColor = tokens.colors.accent,
                         uncheckedThumbColor = tokens.colors.textMuted,
-                        uncheckedTrackColor = tokens.colors.borderDefault,
+                        uncheckedTrackColor = if (com.nuvio.app.core.ui.risoWorldActive) com.nuvio.app.core.ui.Riso.SwitchOffTrack else tokens.colors.borderDefault,
                     ),
                 )
                 if (item.isPinnedToTop) {

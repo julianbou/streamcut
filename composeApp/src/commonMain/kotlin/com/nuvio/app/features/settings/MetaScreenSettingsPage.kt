@@ -391,7 +391,7 @@ private fun MetaSectionRow(
                     checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                     checkedTrackColor = MaterialTheme.colorScheme.primary,
                     uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    uncheckedTrackColor = MaterialTheme.colorScheme.outlineVariant,
+                    uncheckedTrackColor = if (com.nuvio.app.core.ui.risoWorldActive) com.nuvio.app.core.ui.Riso.SwitchOffTrack else MaterialTheme.colorScheme.outlineVariant,
                 ),
             )
             IconButton(

@@ -64,6 +64,12 @@ object Riso {
     val Paper = Color(0xFFF2ECE4)
     val PaperDim = Color(0xFFF2ECE4).copy(alpha = 0.66f)
     val PaperFaint = Color(0xFFF2ECE4).copy(alpha = 0.14f)
+    /**
+     * An off switch's track. Switches read their track from the outline colour,
+     * which the riso world makes transparent (no outlines at rest) -- without
+     * this an off switch is a lone grey dot on the page.
+     */
+    val SwitchOffTrack = Color(0xFFF2ECE4).copy(alpha = 0.16f)
 }
 
 /** One patch of ink: where it sits (fractions of the area), how big, and its shape. */
