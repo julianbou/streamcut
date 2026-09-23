@@ -13,7 +13,9 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# The checkout being synced is the one you run from, not the one holding this
+# script, so a sync can run in its own worktree while other work goes on in main.
+ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 HERE="scripts/upstream"
 UPSTREAM_URL="https://github.com/NuvioMedia/NuvioDesktop.git"
@@ -89,10 +91,10 @@ cmd_start() {
   local tag="${1:-$(latest_tag)}"
   local ref="refs/upstream-tags/$tag"
   git rev-parse --verify --quiet "$ref^{commit}" >/dev/null || die "unknown upstream tag: $tag"
-  [[ "$(git branch --show-current)" == "main" ]] || die "start from main"
   git diff --quiet && git diff --cached --quiet || die "working tree has uncommitted changes"
   git fetch --quiet origin main
-  [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || die "main is not in sync with origin/main"
+  [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] \
+    || die "start from origin/main, e.g. in a worktree: git worktree add --detach ../streamcut-sync origin/main"
 
   # rerere replays how each conflict was resolved last time; most conflicts
   # recur on every sync (strings, App.kt, the player chrome).

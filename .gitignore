@@ -34,6 +34,10 @@ AGENTS.md
 PERFORMANCE_FINDINGS.md
 scripts/*
 !scripts/sign-ios-device-app.py
+# StreamCut: upstream ignores new files under scripts/; keep ours visible.
+!scripts/upstream/
+!scripts/*.sh
+!scripts/*.py
 iosApp/Configuration/DeviceSigning.local.json
 
 # Local MPVKit iOS build environment (sparse APFS image, see MPVKit docs)
