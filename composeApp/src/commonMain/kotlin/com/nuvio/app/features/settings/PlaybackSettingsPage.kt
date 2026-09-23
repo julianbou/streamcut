@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
-import com.nuvio.app.features.player.AddonSubtitleStartupMode
 import com.nuvio.app.features.player.AndroidLibmpvVideoOutput
 import com.nuvio.app.features.player.AndroidPlaybackEngine
 import com.nuvio.app.features.player.AudioLanguageOption
@@ -67,7 +66,6 @@ import com.nuvio.app.features.player.localizedLabel
 import com.nuvio.app.features.player.IosTargetPrimaries
 import com.nuvio.app.features.player.IosTargetTransfer
 import com.nuvio.app.features.player.PlayerSettingsRepository
-import com.nuvio.app.features.player.skip.AutoSkipSegmentType
 import com.nuvio.app.features.player.STREAM_AUTO_PLAY_TIMEOUT_VALUES
 import com.nuvio.app.features.player.SubtitleBackgroundColorSwatches
 import com.nuvio.app.features.player.SubtitleColorSwatches
@@ -194,17 +192,6 @@ private fun formatP2pCacheBytes(bytes: Long): String {
     }
 }
 
-@Composable
-private fun addonSubtitleStartupModeLabel(mode: AddonSubtitleStartupMode): String =
-    when (mode) {
-        AddonSubtitleStartupMode.FAST_STARTUP ->
-            stringResource(Res.string.settings_playback_addon_subtitle_startup_fast)
-        AddonSubtitleStartupMode.PREFERRED_ONLY ->
-            stringResource(Res.string.settings_playback_addon_subtitle_startup_preferred)
-        AddonSubtitleStartupMode.ALL_SUBTITLES ->
-            stringResource(Res.string.settings_playback_addon_subtitle_startup_all)
-    }
-
 fun snapToStep(value: Float, step: Float): Float {
     return (value / step).roundToInt() * step
 }
@@ -327,7 +314,6 @@ private fun PlaybackSettingsSection(
     var showSecondaryAudioDialog by remember { mutableStateOf(false) }
     var showPreferredSubtitleDialog by remember { mutableStateOf(false) }
     var showSecondarySubtitleDialog by remember { mutableStateOf(false) }
-    var showAddonSubtitleStartupModeDialog by remember { mutableStateOf(false) }
     var showSubtitleTextColorDialog by remember { mutableStateOf(false) }
     var showSubtitleBackgroundColorDialog by remember { mutableStateOf(false) }
     var showSubtitleOutlineColorDialog by remember { mutableStateOf(false) }
@@ -394,6 +380,16 @@ private fun PlaybackSettingsSection(
             isTablet = isTablet,
         ) {
             SettingsGroup(isTablet = isTablet) {
+                if (!isDesktop) {
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_playback_legacy_layout),
+                        description = stringResource(Res.string.settings_playback_legacy_layout_description),
+                        checked = autoPlayPlayerSettings.useLegacyPlayerLayout,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setUseLegacyPlayerLayout,
+                    )
+                    SettingsGroupDivider(isTablet = isTablet)
+                }
                 SettingsSwitchRow(
                     title = stringResource(Res.string.settings_playback_show_loading_overlay),
                     description = stringResource(Res.string.settings_playback_show_loading_overlay_description),
@@ -401,10 +397,26 @@ private fun PlaybackSettingsSection(
                     isTablet = isTablet,
                     onCheckedChange = PlayerSettingsRepository::setShowLoadingOverlay,
                 )
-                // The parental-guidance overlay is gated off in the clipper
-                // build -- nothing may cover a frame you are trying to judge --
-                // so this switch had nothing left to switch.
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsSwitchRow(
+                    title = stringResource(Res.string.playback_show_loading_status),
+                    description = stringResource(Res.string.playback_show_loading_status_sub),
+                    checked = autoPlayPlayerSettings.showPlayerLoadingStatus,
+                    isTablet = isTablet,
+                    onCheckedChange = PlayerSettingsRepository::setShowPlayerLoadingStatus,
+                )
+                // The pause and parental-guidance overlays are gated off in the
+                // clipper build -- nothing may cover a frame you are trying to
+                // judge -- so these switches have nothing to switch there.
                 if (AppFeaturePolicy.viewingChromeEnabled) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsSwitchRow(
+                        title = stringResource(Res.string.settings_playback_pause_overlay),
+                        description = stringResource(Res.string.settings_playback_pause_overlay_description),
+                        checked = autoPlayPlayerSettings.pauseOverlayEnabled,
+                        isTablet = isTablet,
+                        onCheckedChange = PlayerSettingsRepository::setPauseOverlayEnabled,
+                    )
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsSwitchRow(
                         title = stringResource(Res.string.settings_playback_parental_guide),
@@ -591,14 +603,6 @@ private fun PlaybackSettingsSection(
                         )
                     },
                 )
-                SettingsGroupDivider(isTablet = isTablet)
-                SettingsNavigationRow(
-                    title = stringResource(Res.string.settings_playback_addon_subtitle_startup_mode),
-                    description = addonSubtitleStartupModeLabel(autoPlayPlayerSettings.addonSubtitleStartupMode),
-                    enabled = otherSubtitleOptionsEnabled,
-                    isTablet = isTablet,
-                    onClick = { showAddonSubtitleStartupModeDialog = true },
-                )
             }
         }
         }
@@ -684,7 +688,7 @@ private fun PlaybackSettingsSection(
                         onClick = { showSubtitleOutlineColorDialog = true },
                     )
                 }
-                val showLibassSettings = !isIos && androidPlaybackEngine != AndroidPlaybackEngine.Libmpv
+                val showLibassSettings = !isIos && (isDesktop || androidPlaybackEngine != AndroidPlaybackEngine.Libmpv)
                 if (showLibassSettings) {
                     SettingsGroupDivider(isTablet = isTablet)
                     SettingsSwitchRow(
@@ -695,7 +699,7 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onCheckedChange = PlayerSettingsRepository::setUseLibass,
                     )
-                    if (useLibass) {
+                    if (useLibass && !isDesktop) {
                         SettingsGroupDivider(isTablet = isTablet)
                         SettingsNavigationRow(
                             title = stringResource(Res.string.settings_playback_render_type),
@@ -950,21 +954,23 @@ private fun PlaybackSettingsSection(
         if (PlaybackSettingsGroup.Player in groups) {
         if (!isIos) {
             val decoderEnabled = !autoPlayPlayerSettings.externalPlayerEnabled
-            val exoOptionsEnabled = decoderEnabled && androidPlaybackEngine != AndroidPlaybackEngine.Libmpv
-            val libmpvOptionsVisible = androidPlaybackEngine != AndroidPlaybackEngine.ExoPlayer
+            val exoOptionsEnabled = decoderEnabled && (isDesktop || androidPlaybackEngine != AndroidPlaybackEngine.Libmpv)
+            val libmpvOptionsVisible = !isDesktop && androidPlaybackEngine != AndroidPlaybackEngine.ExoPlayer
             val libmpvOptionsEnabled = decoderEnabled && libmpvOptionsVisible
             SettingsSection(
                 title = stringResource(Res.string.settings_playback_section_decoder),
                 isTablet = isTablet,
             ) {
                 SettingsGroup(isTablet = isTablet) {
-                    SettingsNavigationRow(
-                        title = stringResource(Res.string.settings_playback_engine),
-                        description = androidPlaybackEngine.label,
-                        enabled = decoderEnabled,
-                        isTablet = isTablet,
-                        onClick = { showPlaybackEngineDialog = true },
-                    )
+                    if (!isDesktop) {
+                        SettingsNavigationRow(
+                            title = stringResource(Res.string.settings_playback_engine),
+                            description = androidPlaybackEngine.label,
+                            enabled = decoderEnabled,
+                            isTablet = isTablet,
+                            onClick = { showPlaybackEngineDialog = true },
+                        )
+                    }
                     if (libmpvOptionsVisible) {
                         SettingsGroupDivider(isTablet = isTablet)
                         SettingsNavigationRow(
@@ -993,7 +999,9 @@ private fun PlaybackSettingsSection(
                             onCheckedChange = PlayerSettingsRepository::setAndroidLibmpvYuv420pEnabled,
                         )
                     }
-                    SettingsGroupDivider(isTablet = isTablet)
+                    if (!isDesktop) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                    }
                     SettingsNavigationRow(
                         title = stringResource(Res.string.settings_playback_decoder_priority),
                         description = decoderPriorityLabel(decoderPriority),
@@ -1001,24 +1009,26 @@ private fun PlaybackSettingsSection(
                         isTablet = isTablet,
                         onClick = { showDecoderPriorityDialog = true },
                     )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsSwitchRow(
-                        title = stringResource(Res.string.settings_playback_map_dv7_to_hevc),
-                        description = stringResource(Res.string.settings_playback_map_dv7_to_hevc_description),
-                        checked = mapDV7ToHevc,
-                        enabled = exoOptionsEnabled,
-                        isTablet = isTablet,
-                        onCheckedChange = PlayerSettingsRepository::setMapDV7ToHevc,
-                    )
-                    SettingsGroupDivider(isTablet = isTablet)
-                    SettingsSwitchRow(
-                        title = stringResource(Res.string.settings_playback_tunneled_playback),
-                        description = stringResource(Res.string.settings_playback_tunneled_playback_description),
-                        checked = tunnelingEnabled,
-                        enabled = exoOptionsEnabled,
-                        isTablet = isTablet,
-                        onCheckedChange = PlayerSettingsRepository::setTunnelingEnabled,
-                    )
+                    if (!isDesktop) {
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsSwitchRow(
+                            title = stringResource(Res.string.settings_playback_map_dv7_to_hevc),
+                            description = stringResource(Res.string.settings_playback_map_dv7_to_hevc_description),
+                            checked = mapDV7ToHevc,
+                            enabled = exoOptionsEnabled,
+                            isTablet = isTablet,
+                            onCheckedChange = PlayerSettingsRepository::setMapDV7ToHevc,
+                        )
+                        SettingsGroupDivider(isTablet = isTablet)
+                        SettingsSwitchRow(
+                            title = stringResource(Res.string.settings_playback_tunneled_playback),
+                            description = stringResource(Res.string.settings_playback_tunneled_playback_description),
+                            checked = tunnelingEnabled,
+                            enabled = exoOptionsEnabled,
+                            isTablet = isTablet,
+                            onCheckedChange = PlayerSettingsRepository::setTunnelingEnabled,
+                        )
+                    }
                 }
             }
         }
@@ -1115,6 +1125,7 @@ private fun PlaybackSettingsSection(
                     title = stringResource(Res.string.settings_playback_skip_intro_outro_recap),
                     description = stringResource(Res.string.settings_playback_skip_intro_outro_recap_description),
                     checked = autoPlayPlayerSettings.skipIntroEnabled,
+                    enabled = !externalPlayerSupported || !autoPlayPlayerSettings.externalPlayerEnabled,
                     isTablet = isTablet,
                     onCheckedChange = PlayerSettingsRepository::setSkipIntroEnabled,
                 )
@@ -1122,7 +1133,8 @@ private fun PlaybackSettingsSection(
                 SettingsNavigationRow(
                     title = stringResource(Res.string.settings_playback_auto_skip_segments),
                     description = autoSkipSelectionSummary(autoPlayPlayerSettings.autoSkipSegmentTypes),
-                    enabled = autoPlayPlayerSettings.skipIntroEnabled,
+                    enabled = autoPlayPlayerSettings.skipIntroEnabled &&
+                        (!externalPlayerSupported || !autoPlayPlayerSettings.externalPlayerEnabled),
                     isTablet = isTablet,
                     onClick = { showAutoSkipSegmentDialog = true },
                 )
@@ -1474,17 +1486,6 @@ private fun PlaybackSettingsSection(
                 showSecondarySubtitleDialog = false
             },
             onDismiss = { showSecondarySubtitleDialog = false },
-        )
-    }
-
-    if (showAddonSubtitleStartupModeDialog) {
-        AddonSubtitleStartupModeDialog(
-            selectedMode = autoPlayPlayerSettings.addonSubtitleStartupMode,
-            onModeSelected = {
-                PlayerSettingsRepository.setAddonSubtitleStartupMode(it)
-                showAddonSubtitleStartupModeDialog = false
-            },
-            onDismiss = { showAddonSubtitleStartupModeDialog = false },
         )
     }
 
@@ -2202,124 +2203,6 @@ private fun ReuseCacheDurationDialog(
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun AutoSkipSegmentSelectionDialog(
-    selectedTypes: Set<AutoSkipSegmentType>,
-    onTypeToggled: (AutoSkipSegmentType, Boolean) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    BasicAlertDialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = stringResource(Res.string.settings_playback_auto_skip_segments),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.SemiBold,
-                )
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    AutoSkipSegmentType.entries.forEach { segmentType ->
-                        val isSelected = segmentType in selectedTypes
-                        val containerColor = if (isSelected) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                        }
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onTypeToggled(segmentType, !isSelected) },
-                            shape = RoundedCornerShape(12.dp),
-                            color = containerColor,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Text(
-                                        text = autoSkipTypeLabel(segmentType),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        text = autoSkipTypeDescription(segmentType),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier.size(24.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = stringResource(Res.string.settings_playback_dialog_close),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun autoSkipSelectionSummary(selectedTypes: Set<AutoSkipSegmentType>): String {
-    if (selectedTypes.isEmpty()) return stringResource(Res.string.settings_playback_auto_skip_none)
-    val introLabel = stringResource(Res.string.settings_playback_auto_skip_intro)
-    val recapLabel = stringResource(Res.string.settings_playback_auto_skip_recap)
-    val outroLabel = stringResource(Res.string.settings_playback_auto_skip_outro)
-    return buildList {
-        if (AutoSkipSegmentType.INTRO in selectedTypes) add(introLabel)
-        if (AutoSkipSegmentType.RECAP in selectedTypes) add(recapLabel)
-        if (AutoSkipSegmentType.OUTRO in selectedTypes) add(outroLabel)
-    }.joinToString(", ")
-}
-
-@Composable
-private fun autoSkipTypeLabel(segmentType: AutoSkipSegmentType): String = when (segmentType) {
-    AutoSkipSegmentType.INTRO -> stringResource(Res.string.settings_playback_auto_skip_intro)
-    AutoSkipSegmentType.RECAP -> stringResource(Res.string.settings_playback_auto_skip_recap)
-    AutoSkipSegmentType.OUTRO -> stringResource(Res.string.settings_playback_auto_skip_outro)
-}
-
-@Composable
-private fun autoSkipTypeDescription(segmentType: AutoSkipSegmentType): String = when (segmentType) {
-    AutoSkipSegmentType.INTRO -> stringResource(Res.string.settings_playback_auto_skip_intro_description)
-    AutoSkipSegmentType.RECAP -> stringResource(Res.string.settings_playback_auto_skip_recap_description)
-    AutoSkipSegmentType.OUTRO -> stringResource(Res.string.settings_playback_auto_skip_outro_description)
-}
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
 private fun DecoderPriorityDialog(
     selectedPriority: Int,
     onPrioritySelected: (Int) -> Unit,
@@ -2783,108 +2666,7 @@ private fun LibassRenderTypeDialog(
     }
 }
 
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun AddonSubtitleStartupModeDialog(
-    selectedMode: AddonSubtitleStartupMode,
-    onModeSelected: (AddonSubtitleStartupMode) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val options = listOf(
-        Triple(
-            AddonSubtitleStartupMode.FAST_STARTUP,
-            Res.string.settings_playback_addon_subtitle_startup_fast,
-            Res.string.settings_playback_addon_subtitle_startup_fast_description,
-        ),
-        Triple(
-            AddonSubtitleStartupMode.PREFERRED_ONLY,
-            Res.string.settings_playback_addon_subtitle_startup_preferred,
-            Res.string.settings_playback_addon_subtitle_startup_preferred_description,
-        ),
-        Triple(
-            AddonSubtitleStartupMode.ALL_SUBTITLES,
-            Res.string.settings_playback_addon_subtitle_startup_all,
-            Res.string.settings_playback_addon_subtitle_startup_all_description,
-        ),
-    )
 
-    BasicAlertDialog(
-        onDismissRequest = onDismiss,
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = stringResource(Res.string.settings_playback_addon_subtitle_startup_mode),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.SemiBold,
-                )
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    options.forEach { (mode, titleRes, descriptionRes) ->
-                        val isSelected = mode == selectedMode
-                        val containerColor = if (isSelected) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                        }
-
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onModeSelected(mode) },
-                            shape = RoundedCornerShape(12.dp),
-                            color = containerColor,
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(titleRes),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = stringResource(descriptionRes),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier.size(24.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)

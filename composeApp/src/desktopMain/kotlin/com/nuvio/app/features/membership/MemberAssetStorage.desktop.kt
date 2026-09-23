@@ -5,6 +5,7 @@ import java.io.File
 
 internal actual object MemberAssetStorage {
     private const val accessPayloadKey = "access_payload"
+    private const val backgroundCatalogPayloadKey = "profile_background_catalog_payload"
 
     private val store = DesktopStorage.store("nuvio_member_access")
 

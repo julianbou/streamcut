@@ -50,6 +50,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.auth.AuthRepository
+import com.nuvio.app.core.auth.DeviceLinkAuthRepository
+import com.nuvio.app.core.auth.DeviceLinkAuthState
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.settings.AppBrandWordmark
 import kotlin.math.abs
@@ -116,14 +119,14 @@ import org.jetbrains.compose.resources.stringResource
 
 // Riso (clipper build): paper text on plum stock, and the one action --
 // signing in -- in pink ink. Getters, because the world is chosen per build.
-private val AuthTextPrimary get() = if (risoWorldActive) Riso.Paper else Color(0xFFF5F7F8)
-private val AuthTextSecondary get() = if (risoWorldActive) Color(0xFFB3ACA8) else Color(0xFF969CA3)
+internal val AuthTextPrimary get() = if (risoWorldActive) Riso.Paper else Color(0xFFF5F7F8)
+internal val AuthTextSecondary get() = if (risoWorldActive) Color(0xFFB3ACA8) else Color(0xFF969CA3)
 private val AuthTextMuted get() = if (risoWorldActive) Color(0xFF8F8984) else Color(0xFF6E7178)
 private val AuthPrimaryButtonBackground get() = if (risoWorldActive) Riso.Pink else Color(0xFFF5F5F5)
 private val AuthPrimaryButtonText get() = if (risoWorldActive) Riso.Stock else Color(0xFF111111)
-private val AuthFieldBackground = Color.White.copy(alpha = 0.04f)
+internal val AuthFieldBackground = Color.White.copy(alpha = 0.04f)
 private val AuthFieldBackgroundMobile = Color.White.copy(alpha = 0.035f)
-private val AuthFieldBorder = Color.White.copy(alpha = 0.08f)
+internal val AuthFieldBorder = Color.White.copy(alpha = 0.08f)
 private val AuthPaneBackground = Color.White.copy(alpha = 0.022f)
 private val AuthPaneBorder = Color.White.copy(alpha = 0.07f)
 private val AuthDividerColor = Color.White.copy(alpha = 0.10f)
@@ -193,6 +196,7 @@ fun AuthScreen(
     modifier: Modifier = Modifier,
 ) {
     val authError by AuthRepository.error.collectAsStateWithLifecycle()
+    val deviceLinkAuthState by DeviceLinkAuthRepository.state.collectAsStateWithLifecycle()
     val serverConnectionState by ServerConnectionController.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
@@ -208,6 +212,7 @@ fun AuthScreen(
 
     fun submitAuth() {
         if (email.isBlank() || password.length < 6 || isLoading) return
+        DeviceLinkAuthRepository.cancel()
         isLoading = true
         focusManager.clearFocus(force = true)
         scope.launch {
@@ -218,16 +223,29 @@ fun AuthScreen(
     }
 
     fun toggleAuthMode() {
+        DeviceLinkAuthRepository.cancel()
         isSignUp = !isSignUp
         AuthRepository.clearError()
     }
 
+    fun startDeviceLink() {
+        if (isLoading) return
+        focusManager.clearFocus(force = true)
+        AuthRepository.clearError()
+        DeviceLinkAuthRepository.start()
+    }
+
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    LaunchedEffect(serverConnectionState.activeServer.isCustom) {
+    LaunchedEffect(serverConnectionState.activeServer.backendUrl) {
+        DeviceLinkAuthRepository.cancel()
         if (!serverConnectionState.activeServer.isCustom) {
             showOfficialServerDialog = false
         }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose(DeviceLinkAuthRepository::cancel)
     }
 
     Box(
@@ -283,6 +301,8 @@ fun AuthScreen(
                         passwordVisible = passwordVisible,
                         isLoading = isLoading,
                         authError = authError,
+                        deviceLinkAuthState = deviceLinkAuthState,
+                        deviceLinkEnabled = serverConnectionState.activeServer.capabilities.tvLogin,
                         formPaneWidth = if (compactLargeScreen) 460.dp else formPaneWidth,
                         brandHorizontalPadding = brandHorizontalPadding,
                         formHorizontalPadding = formHorizontalPadding,
@@ -301,8 +321,11 @@ fun AuthScreen(
                         onToggleAuthMode = ::toggleAuthMode,
                         onContinueWithoutAccount = {
                             focusManager.clearFocus(force = true)
+                            DeviceLinkAuthRepository.cancel()
                             AuthRepository.signInAnonymously()
                         },
+                        onStartDeviceLink = ::startDeviceLink,
+                        onCancelDeviceLink = DeviceLinkAuthRepository::cancel,
                         onEmailBoundsChange = { emailFieldBounds = it },
                         onPasswordBoundsChange = { passwordFieldBounds = it },
                     )
@@ -314,6 +337,8 @@ fun AuthScreen(
                         passwordVisible = passwordVisible,
                         isLoading = isLoading,
                         authError = authError,
+                        deviceLinkAuthState = deviceLinkAuthState,
+                        deviceLinkEnabled = serverConnectionState.activeServer.capabilities.tvLogin,
                         statusBarTop = statusBarTop,
                         onEmailChange = {
                             email = it
@@ -328,8 +353,11 @@ fun AuthScreen(
                         onToggleAuthMode = ::toggleAuthMode,
                         onContinueWithoutAccount = {
                             focusManager.clearFocus(force = true)
+                            DeviceLinkAuthRepository.cancel()
                             AuthRepository.signInAnonymously()
                         },
+                        onStartDeviceLink = ::startDeviceLink,
+                        onCancelDeviceLink = DeviceLinkAuthRepository::cancel,
                         onEmailBoundsChange = { emailFieldBounds = it },
                         onPasswordBoundsChange = { passwordFieldBounds = it },
                     )
@@ -406,6 +434,8 @@ private fun AuthMobileLayout(
     passwordVisible: Boolean,
     isLoading: Boolean,
     authError: String?,
+    deviceLinkAuthState: DeviceLinkAuthState,
+    deviceLinkEnabled: Boolean,
     statusBarTop: Dp,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
@@ -413,6 +443,8 @@ private fun AuthMobileLayout(
     onSubmit: () -> Unit,
     onToggleAuthMode: () -> Unit,
     onContinueWithoutAccount: () -> Unit,
+    onStartDeviceLink: () -> Unit,
+    onCancelDeviceLink: () -> Unit,
     onEmailBoundsChange: (Rect) -> Unit,
     onPasswordBoundsChange: (Rect) -> Unit,
 ) {
@@ -463,6 +495,8 @@ private fun AuthMobileLayout(
                 passwordVisible = passwordVisible,
                 isLoading = isLoading,
                 authError = authError,
+                deviceLinkAuthState = deviceLinkAuthState,
+                deviceLinkEnabled = deviceLinkEnabled,
                 metrics = MobileAuthFormMetrics,
                 onEmailChange = onEmailChange,
                 onPasswordChange = onPasswordChange,
@@ -470,6 +504,8 @@ private fun AuthMobileLayout(
                 onSubmit = onSubmit,
                 onToggleAuthMode = onToggleAuthMode,
                 onContinueWithoutAccount = onContinueWithoutAccount,
+                onStartDeviceLink = onStartDeviceLink,
+                onCancelDeviceLink = onCancelDeviceLink,
                 onEmailBoundsChange = onEmailBoundsChange,
                 onPasswordBoundsChange = onPasswordBoundsChange,
             )
@@ -486,6 +522,8 @@ private fun AuthLargeLayout(
     passwordVisible: Boolean,
     isLoading: Boolean,
     authError: String?,
+    deviceLinkAuthState: DeviceLinkAuthState,
+    deviceLinkEnabled: Boolean,
     formPaneWidth: Dp,
     brandHorizontalPadding: Dp,
     formHorizontalPadding: Dp,
@@ -497,6 +535,8 @@ private fun AuthLargeLayout(
     onSubmit: () -> Unit,
     onToggleAuthMode: () -> Unit,
     onContinueWithoutAccount: () -> Unit,
+    onStartDeviceLink: () -> Unit,
+    onCancelDeviceLink: () -> Unit,
     onEmailBoundsChange: (Rect) -> Unit,
     onPasswordBoundsChange: (Rect) -> Unit,
 ) {
@@ -584,6 +624,8 @@ private fun AuthLargeLayout(
                     passwordVisible = passwordVisible,
                     isLoading = isLoading,
                     authError = authError,
+                    deviceLinkAuthState = deviceLinkAuthState,
+                    deviceLinkEnabled = deviceLinkEnabled,
                     metrics = formMetrics,
                     scale = scale,
                     onEmailChange = onEmailChange,
@@ -592,6 +634,8 @@ private fun AuthLargeLayout(
                     onSubmit = onSubmit,
                     onToggleAuthMode = onToggleAuthMode,
                     onContinueWithoutAccount = onContinueWithoutAccount,
+                    onStartDeviceLink = onStartDeviceLink,
+                    onCancelDeviceLink = onCancelDeviceLink,
                     onEmailBoundsChange = onEmailBoundsChange,
                     onPasswordBoundsChange = onPasswordBoundsChange,
                 )
@@ -669,6 +713,8 @@ private fun AuthForm(
     passwordVisible: Boolean,
     isLoading: Boolean,
     authError: String?,
+    deviceLinkAuthState: DeviceLinkAuthState,
+    deviceLinkEnabled: Boolean,
     metrics: AuthFormMetrics,
     scale: Float = 1f,
     onEmailChange: (String) -> Unit,
@@ -677,6 +723,8 @@ private fun AuthForm(
     onSubmit: () -> Unit,
     onToggleAuthMode: () -> Unit,
     onContinueWithoutAccount: () -> Unit,
+    onStartDeviceLink: () -> Unit,
+    onCancelDeviceLink: () -> Unit,
     onEmailBoundsChange: (Rect) -> Unit,
     onPasswordBoundsChange: (Rect) -> Unit,
 ) {
@@ -769,6 +817,19 @@ private fun AuthForm(
         AuthDivider(scale = scale)
 
         Spacer(modifier = Modifier.height(metrics.secondaryTop))
+
+        if (!isSignUp && deviceLinkEnabled) {
+            DeviceLinkAuthSection(
+                state = deviceLinkAuthState,
+                enabled = !isLoading,
+                height = metrics.secondaryHeight,
+                scale = scale,
+                onStart = onStartDeviceLink,
+                onCancel = onCancelDeviceLink,
+            )
+
+            Spacer(modifier = Modifier.height(14.dp * scale))
+        }
 
         AuthSecondaryButton(
             text = stringResource(Res.string.compose_auth_continue_without_account),
@@ -922,7 +983,7 @@ private fun AuthTextField(
 }
 
 @Composable
-private fun AuthPrimaryButton(
+internal fun AuthPrimaryButton(
     text: String,
     isLoading: Boolean,
     enabled: Boolean,
@@ -1050,7 +1111,7 @@ private fun AuthDivider(scale: Float) {
 }
 
 @Composable
-private fun AuthSecondaryButton(
+internal fun AuthSecondaryButton(
     text: String,
     enabled: Boolean,
     height: Dp,

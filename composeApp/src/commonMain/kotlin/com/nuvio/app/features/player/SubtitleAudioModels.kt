@@ -41,12 +41,6 @@ internal enum class SubtitleTab {
     Style,
 }
 
-enum class AddonSubtitleStartupMode {
-    FAST_STARTUP,
-    PREFERRED_ONLY,
-    ALL_SUBTITLES,
-}
-
 const val SUBTITLE_DELAY_MIN_MS = -60_000
 const val SUBTITLE_DELAY_MAX_MS = 60_000
 const val SUBTITLE_DELAY_STEP_MS = 100
@@ -75,13 +69,13 @@ data class SubtitleStyleState(
 
 data class SubtitleSyncCue(
     val startTimeMs: Long,
-    val text: String,
     /**
-     * When the line leaves the screen. Auto-sync only ever needed the start, so this
-     * arrived with phrase search: a clip cannot be derived from a start alone. The
-     * parser fills it in, inferring it from the next cue when the source omits it.
+     * When the line leaves the screen. Phrase search needs it: a clip cannot be
+     * derived from a start alone. The parser falls back to a fixed length when
+     * the source omits it.
      */
-    val endTimeMs: Long = startTimeMs,
+    val endTimeMs: Long = startTimeMs + 5_000L,
+    val text: String,
 )
 
 data class SubtitleAutoSyncUiState(
