@@ -18,7 +18,7 @@
 
 ## ⚠️ Alpha — personal project, expect breakage
 
-StreamCut is in alpha and built for its author. Releases are unsigned, macOS-only so far,
+StreamCut is in alpha and built for its author. Releases are unsigned (macOS and Windows),
 and breaking changes land without notice — stored clips, settings and compatibility can all
 change between builds. Don't rely on it for anything you can't redo.
 
@@ -78,27 +78,35 @@ With unexported ranges, the first `Esc` only warns; press it again to leave the 
 
 Download the latest build from [Releases](https://github.com/julianbou/streamcut/releases/latest).
 
-Currently published: **macOS Apple Silicon DMG only**. The DMG is ad-hoc signed and *not*
-notarized, so Gatekeeper will block it on first launch. Either approve it under
-System Settings → Privacy & Security → "Open Anyway", or strip the quarantine flag:
+Published builds:
 
-```bash
-xattr -dr com.apple.quarantine /Applications/StreamCut.app
-```
+- **macOS, Apple Silicon** (`.dmg`). Ad-hoc signed and *not* notarized, so Gatekeeper blocks
+  it on first launch. Approve it under System Settings → Privacy & Security → "Open Anyway",
+  or strip the quarantine flag:
 
-Windows and Linux packaging tasks are inherited from upstream and should still work, but no
-build for either has been produced or tested here. Build from source if you need one.
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/StreamCut.app
+  ```
 
-The desktop in-app updater is disabled on purpose — it pointed at upstream's releases.
+- **Windows x64** (`.msi`). Not signed, so SmartScreen shows "Windows protected your PC":
+  click **More info**, then **Run anyway**. The installer bundles ffmpeg, so clipping works
+  without installing anything else.
+
+Linux packaging is inherited from upstream and untested here; build from source if you need it.
+
+Installed builds check this repository's releases and offer updates in the app.
+
+Your data stays on your computer unless you sign in to sync; see the
+[privacy policy](PRIVACY.md).
 
 ## Requirements
 
 - **JDK 17** to build.
-- **ffmpeg and ffprobe** on `PATH` for clip export. The build must include **libass**
-  (subtitle burn-in) and **libzimg** (`zscale`, for HDR tonemapping). Homebrew's
-  `ffmpeg` has neither; jellyfin-ffmpeg does. StreamCut probes each candidate binary for
-  those filters and picks the first that has both; `NUVIO_FFMPEG_PATH` overrides the search.
-  No ffmpeg is bundled yet.
+- **ffmpeg and ffprobe** for clip export. The Windows installer bundles them. On macOS
+  and Linux they must be installed: the build must include **libass** (subtitle burn-in)
+  and **libzimg** (`zscale`, for HDR tonemapping). Homebrew's `ffmpeg` has neither;
+  jellyfin-ffmpeg does. StreamCut probes each candidate binary for those filters and picks
+  the first that has both; `NUVIO_FFMPEG_PATH` overrides the search.
 
 ## Development
 
@@ -164,9 +172,21 @@ The DMG lands in `composeApp/build/compose/release-dmgs/`. Other hosts:
 ./scripts/build-macos-release-dmgs.sh --package-only
 ```
 
+The Windows MSI is built on GitHub Actions: run the **Windows build** workflow
+(`.github/workflows/windows-build.yml`) and download the MSI from the run's artifacts. It
+fetches a pinned ffmpeg build and bundles it; a local Windows build bundles one only when
+`-Pnuvio.windows.ffmpeg.dir` points at a folder with `ffmpeg.exe` and `ffprobe.exe`.
+
 `.github/workflows/desktop-release.yml` is upstream's and **cannot run in this repo** — it
 requires Apple signing certificates, notarytool credentials, a Sentry DSN and a base64
-`local.properties` with third-party API keys. Releases are built locally.
+`local.properties` with third-party API keys. macOS releases are built locally.
+
+### Syncing with upstream Nuvio
+
+Upstream releases are merged, never cherry-picked, with `scripts/upstream/sync-upstream.sh`
+(`status`, `start <tag>`, `verify`). It resets the files StreamCut owns, re-deletes what
+StreamCut removed, re-applies the branding, and checks that no fork decision was undone.
+The `sync-upstream` Claude skill in `.claude/skills/` drives the whole process.
 
 ## Project structure
 
@@ -185,6 +205,8 @@ requires Apple signing certificates, notarytool credentials, a Sentry DSN and a 
 - `branding/make_brand.py` — regenerates every icon, launch mark and wordmark from
   `branding/logo-source.jpg`.
 - `composeApp/Configuration/DesktopVersion.properties` — release version and build code.
+- `composeApp/Configuration/UpstreamVersion.properties` — the Nuvio Desktop release last
+  merged, shown in About.
 - Fork identity (app name, vendor, bundle id, URL scheme) lives in the `fork.*` properties in
   `gradle.properties`.
 
@@ -222,7 +244,8 @@ addon and DMCA policy.
 
 - Kotlin Multiplatform / Compose Multiplatform
 - mpv via a native player bridge
-- ffmpeg / ffprobe for extraction, tonemapping and subtitle burn-in
+- ffmpeg / ffprobe for extraction, tonemapping and subtitle burn-in (bundled on Windows from
+  [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds), GPL)
 - Supabase (optional, for auth and sync)
 - Compose Desktop packaging (jpackage)
 
