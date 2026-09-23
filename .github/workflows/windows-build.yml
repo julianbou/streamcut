@@ -1,0 +1,126 @@
+# Builds an unsigned Windows MSI on a GitHub-hosted runner.
+#
+# desktop-release.yml is upstream's pipeline and needs signing, Sentry and
+# Trakt secrets this repo does not have. This one needs only the two
+# Supabase values, and builds without them too (sign-in and sync are then
+# dead in the packaged app).
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci/windows-build
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  msi:
+    name: Windows x64 MSI
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      WEBVIEW2_VERSION: 1.0.4078.44
+      NUVIO_SUPABASE_URL: ${{ secrets.NUVIO_SUPABASE_URL }}
+      NUVIO_SUPABASE_ANON_KEY: ${{ secrets.NUVIO_SUPABASE_ANON_KEY }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          lfs: false
+
+      - name: Fetch Windows runtime from LFS
+        shell: bash
+        run: |
+          git lfs pull --include="composeApp/src/desktopMain/native/windows/runtime/**,composeApp/src/desktopMain/resources/torrserver/windows-amd64/TorrServer.exe" --exclude=""
+          for path in \
+            composeApp/src/desktopMain/native/windows/runtime/libmpv-2.dll \
+            composeApp/src/desktopMain/resources/torrserver/windows-amd64/TorrServer.exe
+          do
+            size="$(wc -c < "${path}")"
+            if (( size < 1000000 )); then
+              echo "${path} was not materialized from Git LFS (${size} bytes)." >&2
+              exit 1
+            fi
+          done
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Create local.properties
+        shell: bash
+        run: |
+          # Gradle requires the file to exist; values come from the env above.
+          : > local.properties
+          if [[ -z "${NUVIO_SUPABASE_URL}" || -z "${NUVIO_SUPABASE_ANON_KEY}" ]]; then
+            echo "::warning::Supabase secrets are not set; the MSI will build but cannot sign in or sync."
+          fi
+
+      - name: Install WebView2 SDK
+        shell: pwsh
+        run: |
+          nuget install Microsoft.Web.WebView2 `
+            -Version $env:WEBVIEW2_VERSION `
+            -OutputDirectory "$env:RUNNER_TEMP\nuget" `
+            -DirectDownload `
+            -NonInteractive `
+            -NoCache
+          $webView2Root = Join-Path $env:RUNNER_TEMP "nuget\Microsoft.Web.WebView2.$env:WEBVIEW2_VERSION"
+          if (-not (Test-Path (Join-Path $webView2Root "build\native\x64\WebView2Loader.dll.lib"))) {
+            throw "WebView2Loader.dll.lib was not found under $webView2Root"
+          }
+          "WEBVIEW2_ROOT=$webView2Root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          & .\gradlew.bat `
+            :composeApp:packageReleaseMsi `
+            "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" `
+            "-Pcompose.desktop.packaging.checkJdkVendor=false" `
+            --no-configuration-cache `
+            --no-daemon `
+            --stacktrace
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check MSI contents
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem "composeApp\build\compose\release-msis\*.msi" | Select-Object -First 1
+          if ($null -eq $msi) { throw "No MSI was produced." }
+          $extractDir = Join-Path $env:RUNNER_TEMP "msi-extract"
+          $p = Start-Process msiexec.exe -ArgumentList @("/a", "`"$($msi.FullName)`"", "/qn", "TARGETDIR=`"$extractDir`"") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "MSI extraction failed with exit code $($p.ExitCode)." }
+          $appJar = Get-ChildItem $extractDir -Recurse -Filter "composeApp-desktop-*.jar" | Select-Object -First 1
+          if ($null -eq $appJar) { throw "The MSI does not contain the application JAR." }
+          $entries = & jar tf $appJar.FullName
+          foreach ($entry in @(
+            "native/windows/player_bridge.dll",
+            "native/windows/libmpv-2.dll",
+            "native/windows/WebView2Loader.dll",
+            "torrserver/windows-amd64/TorrServer.exe"
+          )) {
+            if ($entries -notcontains $entry) { throw "The MSI is missing $entry" }
+          }
+          $msi | Format-List Name, Length
+          "SHA256: $((Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v7
+        with:
+          name: streamcut-windows-x64
+          path: composeApp/build/compose/release-msis/*.msi
+          if-no-files-found: error
+          retention-days: 14
