@@ -3,7 +3,7 @@
 # desktop-release.yml is upstream's pipeline and needs signing, Sentry and
 # Trakt secrets this repo does not have. This one needs only the two
 # Supabase values, and builds without them too (sign-in and sync are then
-# dead in the packaged app).
+# dead in the packaged app). It also bundles ffmpeg, which Windows lacks.
 name: Windows build
 
 on:
@@ -26,6 +26,12 @@ jobs:
     timeout-minutes: 60
     env:
       WEBVIEW2_VERSION: 1.0.4078.44
+      # BtbN's GPL shared build: carries libass (subtitle burn-in), libzimg
+      # (HDR tone mapping) and libx264. Autobuild releases are pruned after a
+      # while; when this 404s, pick a newer "autobuild-*" tag and its digest
+      # from https://github.com/BtbN/FFmpeg-Builds/releases.
+      FFMPEG_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-22-13-18/ffmpeg-n8.1.3-win64-gpl-shared-8.1.zip
+      FFMPEG_SHA256: 5652c185366a1300c731df2ab76a3d2c1bb15b143c5d251b65fdf4335850e6c2
       NUVIO_SUPABASE_URL: ${{ secrets.NUVIO_SUPABASE_URL }}
       NUVIO_SUPABASE_ANON_KEY: ${{ secrets.NUVIO_SUPABASE_ANON_KEY }}
 
@@ -68,6 +74,22 @@ jobs:
             echo "::warning::Supabase secrets are not set; the MSI will build but cannot sign in or sync."
           fi
 
+      - name: Fetch ffmpeg
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "ffmpeg.zip"
+          Invoke-WebRequest -Uri $env:FFMPEG_URL -OutFile $zip
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:FFMPEG_SHA256) { throw "ffmpeg checksum mismatch: $actual" }
+          $extract = Join-Path $env:RUNNER_TEMP "ffmpeg"
+          Expand-Archive $zip -DestinationPath $extract
+          $bin = (Get-ChildItem $extract -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1).DirectoryName
+          $filters = & (Join-Path $bin "ffmpeg.exe") -hide_banner -filters
+          foreach ($filter in @("zscale", "subtitles")) {
+            if (-not ($filters | Select-String -Pattern "\b$filter\b" -Quiet)) { throw "ffmpeg lacks the $filter filter." }
+          }
+          "FFMPEG_BIN=$bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Install WebView2 SDK
         shell: pwsh
         run: |
@@ -89,6 +111,7 @@ jobs:
           & .\gradlew.bat `
             :composeApp:packageReleaseMsi `
             "-Pnuvio.webview2.dir=$env:WEBVIEW2_ROOT" `
+            "-Pnuvio.windows.ffmpeg.dir=$env:FFMPEG_BIN" `
             "-Pcompose.desktop.packaging.checkJdkVendor=false" `
             --no-configuration-cache `
             --no-daemon `
@@ -113,6 +136,10 @@ jobs:
             "torrserver/windows-amd64/TorrServer.exe"
           )) {
             if ($entries -notcontains $entry) { throw "The MSI is missing $entry" }
+          }
+          foreach ($exe in @("ffmpeg.exe", "ffprobe.exe")) {
+            $found = Get-ChildItem $extractDir -Recurse -Filter $exe | Where-Object { $_.FullName -match "[\\/]ffmpeg[\\/]$exe$" }
+            if ($null -eq $found) { throw "The MSI is missing the bundled $exe" }
           }
           $msi | Format-List Name, Length
           "SHA256: $((Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLowerInvariant())"

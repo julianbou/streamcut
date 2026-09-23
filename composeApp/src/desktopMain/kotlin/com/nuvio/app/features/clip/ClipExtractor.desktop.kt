@@ -766,8 +766,10 @@ internal actual object ClipExtractor {
     }
 
     /** ffprobe next to the resolved ffmpeg, falling back to PATH. */
-    private fun ffprobePath(ffmpeg: String): String =
-        File(ffmpeg).parentFile?.resolve("ffprobe")?.takeIf { it.canExecute() }?.absolutePath ?: "ffprobe"
+    private fun ffprobePath(ffmpeg: String): String {
+        val name = if (ffmpeg.endsWith(".exe", ignoreCase = true)) "ffprobe.exe" else "ffprobe"
+        return File(ffmpeg).parentFile?.resolve(name)?.takeIf { it.canExecute() }?.absolutePath ?: "ffprobe"
+    }
 
     /**
      * The audio stream to map. A selection past the end of the probed list is
@@ -1119,7 +1121,7 @@ internal actual object ClipExtractor {
             cachedFfmpegPath = explicit
             return explicit
         }
-        val installed = FFMPEG_CANDIDATES.filter { File(it).canExecute() }
+        val installed = (listOfNotNull(bundledFfmpegPath()) + FFMPEG_CANDIDATES).filter { File(it).canExecute() }
         val resolved = installed.firstOrNull { path -> REQUIRED_FILTERS.all { hasFilter(path, it) } }
             ?: installed.firstOrNull()
             // Fall back to PATH resolution; if it is missing, the process start throws.
@@ -1129,6 +1131,20 @@ internal actual object ClipExtractor {
         }
         cachedFfmpegPath = resolved
         return resolved
+    }
+
+    /**
+     * The ffmpeg shipped inside the app, if this build carries one. The
+     * Windows MSI does (see `prepareWindowsFfmpegAppResources`), because a
+     * Windows machine has nowhere conventional to find one. It still goes
+     * through the filter check below like any other candidate.
+     */
+    private fun bundledFfmpegPath(): String? {
+        val resourcesDir = System.getProperty("compose.application.resources.dir")
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        val name = if (System.getProperty("os.name").orEmpty().lowercase().contains("win")) "ffmpeg.exe" else "ffmpeg"
+        return File(resourcesDir, "ffmpeg/$name").takeIf(File::isFile)?.absolutePath
     }
 
     /**

@@ -808,6 +808,11 @@ val windowsLibmpvDll = windowsLibmpvDllOverride
         File("C:/msys64/ucrt64/bin/libmpv-2.dll"),
         File("C:/msys64/mingw64/bin/libmpv-2.dll"),
     ).firstOrNull(File::exists)
+// A directory holding ffmpeg.exe, ffprobe.exe and their DLLs (a BtbN
+// "win64-gpl-shared" build's bin/). The MSI ships them as app resources so
+// clipping works without the user installing ffmpeg; CI supplies it.
+val windowsFfmpegDir = providers.gradleProperty("nuvio.windows.ffmpeg.dir").orNull?.let(::File)
+val windowsAppResourcesRoot = layout.buildDirectory.dir("generated/windows-app-resources")
 val windowsCppRuntimeDllNames = listOf(
     "vcruntime140.dll",
     "vcruntime140_1.dll",
@@ -1008,6 +1013,21 @@ val prepareMacosPlayerAppResources = tasks.register<Sync>("prepareMacosPlayerApp
     into(macosPlayerAppResourcesRoot.map { it.dir("macos/native/macos") })
 }
 
+val prepareWindowsFfmpegAppResources = tasks.register<Sync>("prepareWindowsFfmpegAppResources") {
+    enabled = isWindowsHost && windowsFfmpegDir != null
+    if (windowsFfmpegDir != null) {
+        from(windowsFfmpegDir) {
+            include("ffmpeg.exe", "ffprobe.exe", "*.dll")
+        }
+    }
+    into(windowsAppResourcesRoot.map { it.dir("windows/ffmpeg") })
+    doLast {
+        check(destinationDir.resolve("ffmpeg.exe").isFile) {
+            "nuvio.windows.ffmpeg.dir has no ffmpeg.exe: $windowsFfmpegDir"
+        }
+    }
+}
+
 tasks.withType<Jar>().configureEach {
     if (isWindowsHost && name == "desktopJar") {
         dependsOn(buildWindowsPlayerBridge, prepareWindowsPlayerRuntime, generateWindowsPlayerRuntimeIndex)
@@ -1023,6 +1043,9 @@ tasks.withType<Jar>().configureEach {
 tasks.matching { it.name == "prepareAppResources" }.configureEach {
     if (isMacHost) {
         dependsOn(prepareMacosPlayerAppResources)
+    }
+    if (isWindowsHost && windowsFfmpegDir != null) {
+        dependsOn(prepareWindowsFfmpegAppResources)
     }
 }
 
@@ -1292,6 +1315,13 @@ compose.desktop {
             vendor = forkVendorValue
             if (isMacHost) {
                 appResourcesRootDir.set(macosPlayerAppResourcesRoot)
+            }
+            if (isWindowsHost) {
+                if (windowsFfmpegDir != null) {
+                    appResourcesRootDir.set(windowsAppResourcesRoot)
+                } else {
+                    logger.warn("nuvio.windows.ffmpeg.dir is not set; the Windows package will not bundle ffmpeg and clipping needs one on PATH.")
+                }
             }
             modules(
                 "java.instrument",
