@@ -1,0 +1,12 @@
+# String keys that may keep the word "Nuvio" after an upstream merge.
+# Everything else in composeResources/values*/strings.xml is rebranded to
+# StreamCut by rebrand-strings.py. One key per line; text after # is the reason.
+
+action_support_nuvio                         # donation link to upstream Nuvio's project
+community_section_description                # upstream's community (Discord/Reddit) rows
+compose_about_based_on_version_format        # "Based on Nuvio Desktop <version>" credit
+profile_background_member_note               # points at Nuvio's web panel; feature is deleted here
+settings_debrid_device_auth_instructions     # debrid sites show the registered app name, which is Nuvio's
+settings_licenses_attributions_nuvio_title   # licence attribution for the Nuvio project
+settings_simkl_pin_instructions              # Simkl shows the registered app name, which is Nuvio's
+settings_trakt_device_instructions           # Trakt shows the registered app name, which is Nuvio's

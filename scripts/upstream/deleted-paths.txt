@@ -1,0 +1,8 @@
+# Paths StreamCut deleted on purpose. After an upstream merge, sync-upstream.sh
+# removes them again, including files upstream newly added inside them.
+# Git pathspecs, one per line.
+
+# Multi-user profiles, deleted 2026-09-04 (storage keys keep the _1 scope).
+composeApp/src/commonMain/kotlin/com/nuvio/app/features/profiles
+composeApp/src/commonTest/kotlin/com/nuvio/app/features/profiles
+composeApp/src/commonMain/kotlin/com/nuvio/app/features/membership/ProfileBackgroundRepository.kt

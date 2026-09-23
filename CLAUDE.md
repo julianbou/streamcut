@@ -51,3 +51,11 @@ archivos directamente y no asumas que "no existe" porque no aparece:
 CodeGraph se auto-sincroniza con un file watcher. Si el grafo devuelve
 resultados que no coinciden con el código en disco, corré `codegraph sync`
 (o `codegraph index --force` para reconstruir de cero).
+
+## Sincronizar con Nuvio (upstream)
+
+Para traer una versión nueva de Nuvio Desktop usá la skill `sync-upstream`
+(`.claude/skills/sync-upstream/SKILL.md`) y sus scripts en `scripts/upstream/`.
+Los tags de upstream viven en `refs/upstream-tags/*`, nunca en `refs/tags`: no
+hagas `git push --tags`. Si tomás una decisión que un merge podría deshacer,
+agregala a las listas de `scripts/upstream/` o a `check-fork-invariants.sh`.
