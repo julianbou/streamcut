@@ -59,6 +59,8 @@ internal class NativePlayerController(
     private var pendingSubtitleDelayMs: Int? = null
     private var pendingSubtitleStyle: SubtitleStyleState? = null
     private var pendingUseLibass: Boolean = false
+    /** Percent of the window the clip chrome covers from the bottom; subtitles sit above it. */
+    private var subtitleLiftPercent: Int = 0
     private var lastSentControlsStructureKey: NativeControlsStructureKey? = null
     private var onAction: (PlayerControlsAction) -> Boolean = { false }
     private var onEvent: (String, Double) -> Boolean = { _, _ -> false }
@@ -290,6 +292,15 @@ internal class NativePlayerController(
                 onDesktopFullscreenChanged()
             }
             "volumeChange" -> setFallbackVolume(value.toFloat())
+            "subtitleLift" -> {
+                val lift = value.toInt().coerceIn(0, 60)
+                if (lift != subtitleLiftPercent) {
+                    subtitleLiftPercent = lift
+                    val current = handle.takeIf { it != 0L }
+                    val style = pendingSubtitleStyle
+                    if (current != null && style != null) applySubtitleStyle(current, style, pendingUseLibass)
+                }
+            }
             "volumeChangeTemporary" -> setTemporaryVolume(value.toFloat())
             else -> {
                 val eventHandled = onEvent(type, value)
@@ -592,7 +603,8 @@ internal class NativePlayerController(
             outlineSize = if (style.outlineEnabled) style.outlineWidth.toFloat() else 0f,
             bold = style.bold,
             fontSize = style.toMpvSubtitleFontSize(),
-            subPos = style.toMpvSubtitlePosition(),
+            // The user's own placement wins when it is already higher than the chrome.
+            subPos = style.toMpvSubtitlePosition().coerceAtMost(100 - subtitleLiftPercent),
             useLibass = useLibass,
             stripSdh = style.stripSdh,
         )

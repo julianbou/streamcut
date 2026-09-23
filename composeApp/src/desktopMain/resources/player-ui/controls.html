@@ -250,14 +250,16 @@
                 <input class="clip-io-time" id="clipLenReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Clip length -- type one to move OUT">
               </div>
             </div>
+            <div class="clip-group clip-group-draft" role="group" aria-label="Selection">
+              <button class="clip-action" id="clipPreviewButton" type="button" title="Loop the selection from IN to OUT (R)">Preview</button>
+              <button class="clip-action" id="clipAddRangeButton" type="button" title="Set this selection aside and start another (A)">&#43; Add range</button>
+            </div>
             <div class="clip-group clip-group-ranges" id="clipRangeGroup" role="group" aria-label="Ranges set aside">
-              <button class="clip-action" id="clipAddRangeButton" type="button" title="Keep this range and start another (A)">&#43; Add range</button>
               <div class="clip-range-chips" id="clipRangeChips"></div>
             </div>
             <div class="clip-row-spacer"></div>
             <div class="clip-group clip-group-export" role="group" aria-label="Export">
               <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
-              <button class="clip-action" id="clipPreviewButton" type="button" title="Loop the range (R)">Preview</button>
               <button class="clip-action primary" id="clipExportButton" type="button" title="Export (X)">Export clip</button>
             </div>
           </div>

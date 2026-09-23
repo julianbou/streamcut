@@ -491,7 +491,37 @@ const clipUndoRemove = () => {
 /** `/Users/name/Movies/StreamCut` reads as `~/Movies/StreamCut`. */
 const clipShortPath = path => String(path || "").replace(/^\/(Users|home)\/[^/]+(?=\/|$)/, "~");
 
+/**
+ * mpv draws subtitles on the video layer under this page, so with the clip
+ * chrome up a line of dialogue landed on the clip row and timeline and neither
+ * could be read. While the chrome shows, tell the native side how much of the
+ * window it covers (percent from the bottom) so the subtitle sits above it; 0
+ * puts it back. Only the clipper build lifts -- the viewing chrome is unchanged.
+ */
+let clipSubtitleLiftSent = -1;
+let clipSubtitleLiftFrame = 0;
+const clipSyncSubtitleLift = () => {
+  if (clipSubtitleLiftFrame) return;
+  clipSubtitleLiftFrame = requestAnimationFrame(() => {
+    clipSubtitleLiftFrame = 0;
+    let lift = 0;
+    const chromeUp = isClipperMode() && state.controlsVisible && !root.classList.contains("chrome-hidden");
+    if (chromeUp && !clipRow.hidden && window.innerHeight > 0) {
+      const top = clipRow.getBoundingClientRect().top;
+      // A little air over the row, so the line never touches the buttons.
+      lift = Math.round((window.innerHeight - top) / window.innerHeight * 100) + 2;
+      lift = Math.max(0, Math.min(60, lift));
+    }
+    if (lift === clipSubtitleLiftSent) return;
+    clipSubtitleLiftSent = lift;
+    send("subtitleLift", lift);
+  });
+};
+window.addEventListener("resize", clipSyncSubtitleLift);
+if (typeof ResizeObserver === "function") new ResizeObserver(clipSyncSubtitleLift).observe(clipRow);
+
 const renderClipUi = () => {
+  clipSyncSubtitleLift();
   document.body.classList.toggle("clipper-mode", isClipperMode());
   // Declared later in the file; safe because every render happens after load.
   clipStripRender();

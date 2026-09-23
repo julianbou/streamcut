@@ -884,8 +884,76 @@ body.clipper-mode .action-pill .action[data-command="resize"] { display: none !i
 body.clipper-mode .top-gradient {
   background: linear-gradient(to bottom, rgba(20, 16, 25, .78), rgba(20, 16, 25, 0));
 }
+/* The clip chrome is four rows deep, so the scrim has to reach higher and land
+   denser than the viewing build's: at .8 over a 220px ramp the clip row sat on
+   bare picture, and a bright frame (or a subtitle) washed its text out. Eased
+   stops, never a linear tail -- the ramp must not show where it starts. */
 body.clipper-mode .bottom-gradient {
-  background: linear-gradient(to bottom, rgba(20, 16, 25, 0), rgba(20, 16, 25, .8));
+  height: max(420px, 48vh);
+  background: linear-gradient(
+    to bottom,
+    rgba(20, 16, 25, 0) 0%,
+    rgba(20, 16, 25, .16) 22%,
+    rgba(20, 16, 25, .5) 45%,
+    rgba(20, 16, 25, .8) 66%,
+    rgba(20, 16, 25, .92) 100%
+  );
+}
+/* Controls float over whatever frame is on screen, so each carries its own
+   stock backing instead of a white wash that disappears on a bright shot. */
+body.clipper-mode .clip-action,
+body.clipper-mode .clip-nudge {
+  background: rgba(20, 16, 25, .74);
+  border-color: rgba(242, 236, 228, .16);
+  color: rgba(242, 236, 228, .9);
+}
+body.clipper-mode .clip-action:hover:not(:disabled),
+body.clipper-mode .clip-nudge:hover:not(:disabled) {
+  background: rgba(45, 37, 54, .9);
+  color: #f2ece4;
+}
+body.clipper-mode .clip-mark {
+  background: rgba(45, 37, 54, .88);
+  border-color: rgba(242, 236, 228, .3);
+  color: #f2ece4;
+}
+body.clipper-mode .clip-action.primary {
+  background: var(--theme-accent);
+  border-color: transparent;
+  color: #000;
+}
+body.clipper-mode .clip-action.toggled-on {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
+}
+/* Disabled keeps its backing and dims the label only; fading the whole button
+   let the picture show through and read as broken rather than unavailable. */
+body.clipper-mode .clip-action:disabled,
+body.clipper-mode .clip-nudge:disabled {
+  opacity: 1;
+  color: rgba(242, 236, 228, .38);
+  border-color: rgba(242, 236, 228, .08);
+}
+body.clipper-mode .clip-range-chip {
+  background:
+    linear-gradient(color-mix(in srgb, var(--clip-set-aside) 18%, transparent), color-mix(in srgb, var(--clip-set-aside) 18%, transparent)),
+    rgba(20, 16, 25, .82);
+  border-color: color-mix(in srgb, var(--clip-set-aside) 60%, transparent);
+}
+body.clipper-mode .clip-range-chip-jump {
+  color: #fff3c4;
+}
+body.clipper-mode .clip-io-label,
+body.clipper-mode .clip-zoom-edge {
+  color: rgba(242, 236, 228, .72);
+}
+body.clipper-mode .clip-io-time {
+  color: #f2ece4;
+}
+/* Preview and Add range both act on the selection being marked, so they sit
+   with the marks as one pair, apart from the ranges already set aside. */
+.clip-group-draft {
+  gap: 6px;
 }
 body.clipper-mode .clip-keys-card,
 body.clipper-mode .clip-strip,
