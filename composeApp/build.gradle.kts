@@ -19,6 +19,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.net.URI
+import java.security.MessageDigest
 import java.util.Properties
 import javax.inject.Inject
 
@@ -433,6 +435,121 @@ abstract class PrepareMacosTorrServerResourcesTask @Inject constructor(
                     }
                 }
         }
+    }
+}
+
+/**
+ * ffmpeg and ffprobe for the DMG, so clipping works on a Mac with no ffmpeg
+ * installed. macOS has none, and Homebrew's lacks libass and libzimg (no
+ * subtitle burn-in, grey HDR), so the app ships a jellyfin-ffmpeg portable
+ * build: static apart from system frameworks, with both filters.
+ *
+ * The archive is cached outside the build dir because release builds run
+ * with --rerun-tasks, and pinned by checksum. [localDir] swaps in a local
+ * folder holding `ffmpeg` and `ffprobe` instead.
+ */
+abstract class PrepareMacosFfmpegTask @Inject constructor(
+    private val execOperations: ExecOperations,
+) : DefaultTask() {
+    @get:Input
+    abstract val archiveUrl: Property<String>
+
+    @get:Input
+    abstract val archiveSha256: Property<String>
+
+    @get:Input
+    abstract val cacheDirPath: Property<String>
+
+    @get:Optional
+    @get:InputDirectory
+    abstract val localDir: DirectoryProperty
+
+    @get:Input
+    abstract val signingIdentity: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun prepare() {
+        val outputRoot = outputDir.get().asFile
+        outputRoot.deleteRecursively()
+        outputRoot.mkdirs()
+
+        val sourceDir = localDir.orNull?.asFile ?: extractArchive()
+        for (name in listOf("ffmpeg", "ffprobe")) {
+            val source = sourceDir.resolve(name)
+            check(source.isFile) { "No $name in ${sourceDir.absolutePath}" }
+            val target = outputRoot.resolve(name)
+            source.copyTo(target, overwrite = true)
+            target.setExecutable(true)
+        }
+
+        val filters = run("${outputRoot.resolve("ffmpeg")}", "-hide_banner", "-filters")
+        for (filter in listOf("subtitles", "zscale", "tonemap")) {
+            check(Regex("\\s$filter\\s").containsMatchIn(filters)) {
+                "The bundled ffmpeg lacks the $filter filter."
+            }
+        }
+
+        val identity = signingIdentity.get().trim()
+        if (identity.isNotEmpty()) {
+            outputRoot.listFiles().orEmpty().forEach { binary ->
+                execOperations.exec {
+                    commandLine(
+                        "codesign", "--force", "--options", "runtime", "--timestamp",
+                        "--sign", identity, binary.absolutePath,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun extractArchive(): File {
+        val url = archiveUrl.get()
+        val cacheDir = File(cacheDirPath.get()).apply { mkdirs() }
+        val archive = cacheDir.resolve(url.substringAfterLast('/'))
+        if (!archive.isFile || sha256(archive) != archiveSha256.get()) {
+            logger.lifecycle("Downloading $url")
+            val partial = File(archive.path + ".part")
+            URI(url).toURL().openStream().use { input ->
+                partial.outputStream().use { input.copyTo(it) }
+            }
+            val actual = sha256(partial)
+            if (actual != archiveSha256.get()) {
+                partial.delete()
+                error("ffmpeg checksum mismatch for $url: $actual")
+            }
+            partial.renameTo(archive)
+        }
+        val extracted = temporaryDir.resolve("ffmpeg").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        execOperations.exec {
+            commandLine("tar", "-xf", archive.absolutePath, "-C", extracted.absolutePath)
+        }
+        return extracted.walkTopDown().first { it.isFile && it.name == "ffmpeg" }.parentFile
+    }
+
+    private fun run(vararg command: String): String {
+        val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().readText()
+        process.waitFor()
+        return output
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }
 
@@ -1058,14 +1175,48 @@ val prepareMacosPlayerRuntime = tasks.register<Sync>("prepareMacosPlayerRuntime"
     into(macosPlayerRuntimeOutput)
 }
 
+// jellyfin-ffmpeg portable builds, pinned. Bump both URL and checksum
+// together; the task refuses an archive whose hash does not match.
+val macosFfmpegArchives = mapOf(
+    "arm64" to (
+        "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.2-5/jellyfin-ffmpeg_8.1.2-5_portable_macarm64-gpl.tar.xz" to
+            "b2ac80bb184e9a2f3f7c236876b2f56a5639596a95b42f41ced34fab66ad720d"
+        ),
+    "x86_64" to (
+        "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.2-5/jellyfin-ffmpeg_8.1.2-5_portable_mac64-gpl.tar.xz" to
+            "021cd321ea169722cd2e4aca35884305449666a0d231d3378af7f87d6a5626e5"
+        ),
+)
+val macosFfmpegLocalDir = providers.gradleProperty("nuvio.macos.ffmpeg.dir").orNull
+    ?.takeIf { it.isNotBlank() }
+    ?.let(::File)
+
+val prepareMacosFfmpeg = tasks.register<PrepareMacosFfmpegTask>("prepareMacosFfmpeg") {
+    enabled = isMacHost
+    val (url, sha256) = macosFfmpegArchives.getValue(macosPlayerBridgeArch)
+    archiveUrl.set(url)
+    archiveSha256.set(sha256)
+    cacheDirPath.set(File(System.getProperty("user.home"), ".nuvio/ffmpeg").absolutePath)
+    macosFfmpegLocalDir?.let { localDir.set(it) }
+    signingIdentity.set(macosSigningIdentity.orEmpty())
+    outputDir.set(layout.buildDirectory.dir("generated/macos-ffmpeg/$macosPlayerBridgeArch"))
+}
+
 val prepareMacosPlayerAppResources = tasks.register<Sync>("prepareMacosPlayerAppResources") {
     enabled = isMacHost
     dependsOn(buildMacosPlayerBridge, prepareMacosPlayerRuntime)
-    from(macosPlayerBridgeOutput)
+    from(macosPlayerBridgeOutput) {
+        into("native/macos")
+    }
     from(macosPlayerRuntimeOutput) {
         include("*.dylib")
+        into("native/macos")
     }
-    into(macosPlayerAppResourcesRoot.map { it.dir("macos/native/macos") })
+    // Lands at Contents/app/resources/ffmpeg/, where ClipExtractor looks first.
+    from(prepareMacosFfmpeg) {
+        into("ffmpeg")
+    }
+    into(macosPlayerAppResourcesRoot.map { it.dir("macos") })
 }
 
 val prepareWindowsFfmpegAppResources = tasks.register<Sync>("prepareWindowsFfmpegAppResources") {
@@ -1558,7 +1709,8 @@ fun failOnExternalNativeDependencies(appImage: File) {
     val nativeFiles = appImage.walkTopDown().filter { file ->
         file.isFile && (
             file.extension in setOf("dylib", "jnilib", "so") ||
-                file.parentFile.name == "MacOS"
+                file.parentFile.name == "MacOS" ||
+                file.parentFile.name == "ffmpeg"
             )
     }
     val offenders = nativeFiles.flatMap { file ->
@@ -1653,6 +1805,23 @@ fun publishWindowsMsiArtifact(msi: File) {
     logger.lifecycle("Published Windows MSI artifact: ${publishedMsi.absolutePath}")
 }
 
+/**
+ * jpackage copies app resources without their execute bit, so the bundled
+ * ffmpeg lands as a plain file and ClipExtractor, which only considers
+ * executable candidates, would skip it. File modes are not part of the code
+ * signature, so restoring them after jpackage signed the image is safe.
+ */
+fun restoreBundledFfmpegExecutableBit(appImage: File) {
+    if (!isMacHost || !appImage.exists()) return
+    val binaries = appImage.walkTopDown()
+        .filter { it.isFile && it.parentFile.name == "ffmpeg" && it.name in setOf("ffmpeg", "ffprobe") }
+        .toList()
+    check(binaries.size == 2) { "Expected ffmpeg and ffprobe in the app image, found $binaries" }
+    binaries.forEach { binary ->
+        check(binary.setExecutable(true, false)) { "Could not mark ${binary.absolutePath} executable" }
+    }
+}
+
 // The app image is assembled here, so this is the last point before the
 // duplicates would be copied into it -- packageReleaseDmg runs too late.
 tasks.matching {
@@ -1665,8 +1834,17 @@ tasks.matching {
 
 // Checked once the image exists and before a DMG is made from it. Release
 // only: a dev distributable never leaves this machine.
+tasks.matching { it.name == "createDistributable" }.configureEach {
+    doLast {
+        restoreBundledFfmpegExecutableBit(layout.buildDirectory.dir("compose/binaries/main/app").get().asFile)
+    }
+}
+
 tasks.matching { it.name == "createReleaseDistributable" }.configureEach {
     doLast {
+        restoreBundledFfmpegExecutableBit(
+            layout.buildDirectory.dir("compose/binaries/main-release/app").get().asFile,
+        )
         failOnExternalNativeDependencies(
             layout.buildDirectory.dir("compose/binaries/main-release/app").get().asFile,
         )

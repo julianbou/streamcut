@@ -69,6 +69,8 @@ check "clipper build defaults to the top bar" \
 check "clip keys run before upstream's single-key shortcuts" \
   composeApp/src/desktopMain/resources/player-ui/controls.js '!activeModal && window\.clipUi\?\.handleKey'
 check "Windows build bundles ffmpeg" .github/workflows/windows-build.yml 'nuvio\.windows\.ffmpeg\.dir'
+check "macOS app bundles ffmpeg" composeApp/build.gradle.kts 'from\(prepareMacosFfmpeg\)' \
+  "prepareMacosPlayerAppResources in composeApp/build.gradle.kts must copy prepareMacosFfmpeg into ffmpeg/: macOS has no usable ffmpeg"
 
 if git check-ignore -q scripts/upstream/new-file-probe.sh; then
   fail "new files under scripts/ are not ignored" ".gitignore: upstream's scripts/* needs StreamCut's !scripts/upstream/ and !scripts/*.sh exceptions"

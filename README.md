@@ -88,6 +88,8 @@ Published builds:
   xattr -dr com.apple.quarantine /Applications/StreamCut.app
   ```
 
+  ffmpeg is bundled, so clipping works without installing anything else.
+
 - **Windows x64** (`.msi`). Not signed, so SmartScreen shows "Windows protected your PC":
   click **More info**, then **Run anyway**. The installer bundles ffmpeg, so clipping works
   without installing anything else.
@@ -102,11 +104,13 @@ Your data stays on your computer unless you sign in to sync; see the
 ## Requirements
 
 - **JDK 17** to build.
-- **ffmpeg and ffprobe** for clip export. The Windows installer bundles them. On macOS
-  and Linux they must be installed: the build must include **libass** (subtitle burn-in)
-  and **libzimg** (`zscale`, for HDR tonemapping). Homebrew's `ffmpeg` has neither;
-  jellyfin-ffmpeg does. StreamCut probes each candidate binary for those filters and picks
-  the first that has both; `NUVIO_FFMPEG_PATH` overrides the search.
+- **ffmpeg and ffprobe** for clip export. The Windows installer and the macOS DMG bundle
+  them (a pinned jellyfin-ffmpeg build on Mac, fetched and checksummed by
+  `prepareMacosFfmpeg`; `-Pnuvio.macos.ffmpeg.dir` swaps in a local folder). On Linux they
+  must be installed: the build must include **libass** (subtitle burn-in) and **libzimg**
+  (`zscale`, for HDR tonemapping). Homebrew's `ffmpeg` has neither; jellyfin-ffmpeg does.
+  StreamCut probes each candidate binary for those filters and picks the first that has
+  both; `NUVIO_FFMPEG_PATH` overrides the search.
 
 ## Development
 

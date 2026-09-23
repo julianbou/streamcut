@@ -1135,16 +1135,55 @@ internal actual object ClipExtractor {
 
     /**
      * The ffmpeg shipped inside the app, if this build carries one. The
-     * Windows MSI does (see `prepareWindowsFfmpegAppResources`), because a
-     * Windows machine has nowhere conventional to find one. It still goes
-     * through the filter check below like any other candidate.
+     * Windows MSI (`prepareWindowsFfmpegAppResources`) and the macOS DMG
+     * (`prepareMacosFfmpeg`) both do, because neither system comes with a
+     * usable one. It still goes through the filter check below like any other
+     * candidate.
      */
     private fun bundledFfmpegPath(): String? {
         val resourcesDir = System.getProperty("compose.application.resources.dir")
             ?.takeIf(String::isNotBlank)
             ?: return null
-        val name = if (System.getProperty("os.name").orEmpty().lowercase().contains("win")) "ffmpeg.exe" else "ffmpeg"
-        return File(resourcesDir, "ffmpeg/$name").takeIf(File::isFile)?.absolutePath
+        val osName = System.getProperty("os.name").orEmpty().lowercase()
+        val name = if (osName.contains("win")) "ffmpeg.exe" else "ffmpeg"
+        val bundled = File(resourcesDir, "ffmpeg/$name").takeIf(File::isFile) ?: return null
+        if (!osName.contains("mac")) return bundled.absolutePath
+        return runCatching { stageOutOfQuarantine(bundled.parentFile) }
+            .onFailure { log.w(it) { "Could not stage the bundled ffmpeg; using it in place" } }
+            .getOrNull()
+            ?.absolutePath
+            ?: bundled.absolutePath
+    }
+
+    /**
+     * Copies the bundled ffmpeg and ffprobe into the app's data folder and
+     * returns the ffmpeg copy.
+     *
+     * A downloaded DMG stamps com.apple.quarantine on every file in the app,
+     * and Gatekeeper kills a quarantined, un-notarized executable the moment
+     * it is exec'd (exit 137) -- approving the app with "Open Anyway" covers
+     * the app, not the binaries inside it. Files this process writes carry no
+     * quarantine, which is also how TorrServer gets to run. The copy is
+     * refreshed whenever the bundled file's size or date differs, so an app
+     * update brings its ffmpeg along.
+     */
+    private fun stageOutOfQuarantine(bundledDir: File): File {
+        val stagedDir = DesktopStorage.rootDir.resolve("ffmpeg").toFile().apply { mkdirs() }
+        for (name in listOf("ffmpeg", "ffprobe")) {
+            val source = File(bundledDir, name).takeIf(File::isFile) ?: continue
+            val target = File(stagedDir, name)
+            if (target.length() == source.length() && target.lastModified() == source.lastModified() && target.canExecute()) {
+                continue
+            }
+            val temp = File(stagedDir, "$name.tmp")
+            source.inputStream().use { input -> temp.outputStream().use { input.copyTo(it) } }
+            temp.setExecutable(true)
+            temp.setLastModified(source.lastModified())
+            check(temp.renameTo(target) || (target.delete() && temp.renameTo(target))) {
+                "Could not move $temp into place"
+            }
+        }
+        return File(stagedDir, "ffmpeg")
     }
 
     /**

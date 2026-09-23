@@ -126,7 +126,7 @@
     <string name="settings_licenses_mpv_body">Used for playback on desktop builds.</string>
     <string name="settings_licenses_mpv_license">Licensed under the GNU GPL v2.0 or later; parts under the LGPL v2.1 or later.</string>
     <string name="settings_licenses_ffmpeg_title">FFmpeg</string>
-    <string name="settings_licenses_ffmpeg_body">Used to cut and export clips. The Windows installer ships an unmodified FFmpeg build from BtbN/FFmpeg-Builds; its source is available at ffmpeg.org.</string>
+    <string name="settings_licenses_ffmpeg_body">Used to cut and export clips. The Windows installer ships an unmodified FFmpeg build from BtbN/FFmpeg-Builds, and the macOS app an unmodified jellyfin-ffmpeg portable build (github.com/jellyfin/jellyfin-ffmpeg); FFmpeg source is available at ffmpeg.org.</string>
     <string name="settings_licenses_ffmpeg_license">This FFmpeg build is licensed under the GNU General Public License.</string>
     <string name="settings_licenses_torrserver_title">TorrServer</string>
     <string name="settings_licenses_torrserver_body">Used for peer-to-peer streaming on desktop builds.</string>
