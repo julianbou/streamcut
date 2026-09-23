@@ -1,6 +1,9 @@
 package com.nuvio.app
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.awt.SwingWindow
+import androidx.compose.ui.configureSwingGlobalsForCompose
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -10,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import org.jetbrains.compose.resources.painterResource
-import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
@@ -19,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.branding.ForkBranding
 import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.diagnostics.SentryInitializer
+import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.features.discordrpc.DiscordPresenceManager
 import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.plugins.configureDesktopQuickJsLibrary
@@ -27,10 +30,13 @@ import com.nuvio.app.features.player.desktop.DesktopAppFullscreenController
 import com.nuvio.app.features.player.desktop.DesktopHostOs
 import com.nuvio.app.features.player.desktop.DesktopWindowGeometry
 import com.nuvio.app.features.player.desktop.DesktopWindowModeStorage
+import com.nuvio.app.features.player.desktop.NativePlayerBridge
 import com.nuvio.app.features.player.desktop.applyNativeDesktopWindowChrome
+import com.nuvio.app.features.player.desktop.configureMacosWindowBeforePeer
 import com.nuvio.app.features.player.desktop.installDesktopAppFullscreenShortcuts
 import com.nuvio.app.features.player.desktop.preloadNativePlayerBridgeAsync
 import com.nuvio.app.features.player.desktop.registerDesktopAppFullscreenToggle
+import com.nuvio.app.features.player.desktop.trackMaximizedBoundsForCurrentScreen
 import com.nuvio.app.features.settings.AppIconRepository
 import com.nuvio.app.features.settings.applyDesktopRendererPreference
 import com.nuvio.app.features.settings.transparentPreviewResource
@@ -42,11 +48,18 @@ import javax.swing.JComponent
 private val NuvioDesktopNativeBackground = AwtColor(0x0D, 0x0D, 0x0D)
 private const val MacosDarkAquaAppearance = "NSAppearanceNameDarkAqua"
 
+@OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
+    // On Linux, initialize GTK BEFORE AWT/Compose/Skia to prevent GdkDisplayManager
+    // type registration conflict (Skiko partially loads GDK without full GTK init).
+    if (System.getProperty("os.name", "").lowercase().contains("linux")) {
+        runCatching { NativePlayerBridge.initGtkEarly() }
+    }
     applyDesktopRendererPreference()
     SentryInitializer.start()
     configureDesktopQuickJsLibrary()
     configureDesktopChrome()
+    configureLinuxSwingGlobalsBeforeAwt()
     installDesktopOpenUriHandler()
     handleDesktopLaunchArgs(args)
     preloadNativePlayerBridgeAsync()
@@ -104,7 +117,7 @@ fun main(args: Array<String>) {
         )
         val fullscreenController = remember { DesktopAppFullscreenController() }
 
-        Window(
+        SwingWindow(
             onCloseRequest = {
                 P2pStreamingEngine.shutdown()
                 DiscordPresenceManager.shutdown()
@@ -118,6 +131,7 @@ fun main(args: Array<String>) {
             },
             state = windowState,
             icon = painterResource(appIconState.selected.transparentPreviewResource),
+            init = ::configureMacosWindowBeforePeer,
         ) {
             SideEffect {
                 window.background = NuvioDesktopNativeBackground
@@ -137,6 +151,7 @@ fun main(args: Array<String>) {
 
             LaunchedEffect(window) {
                 applyNativeDesktopWindowChrome(window)
+                installLinuxExtendedMouseButtons()
                 // Windows fullscreen is emulated natively and isn't reflected by
                 // WindowPlacement, so it must be re-applied once the window peer exists.
                 fullscreenController.applyRestoredFullscreenState(window, windowState, wasFullscreenOnLastExit)
@@ -189,9 +204,11 @@ fun main(args: Array<String>) {
                     },
                 )
                 val uninstallFullscreenShortcuts = installDesktopAppFullscreenShortcuts(window)
+                val untrackMaximizedBounds = window.trackMaximizedBoundsForCurrentScreen()
                 onDispose {
                     fullscreenController.dispose(window)
                     uninstallFullscreenShortcuts()
+                    untrackMaximizedBounds()
                     unregisterFullscreenToggle()
                 }
             }
@@ -199,13 +216,17 @@ fun main(args: Array<String>) {
             if (smokePlayerUrl == null) {
                 App()
             } else {
-                PlatformPlayerSurface(
-                    sourceUrl = smokePlayerUrl,
-                    modifier = Modifier.fillMaxSize(),
-                    onControllerReady = {},
-                    onSnapshot = {},
-                    onError = {},
-                )
+                // The player surface reads LocalNuvioPlatformDensity, which only
+                // NuvioTheme provides — the bare smoke harness must supply it too.
+                NuvioTheme {
+                    PlatformPlayerSurface(
+                        sourceUrl = smokePlayerUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        onControllerReady = {},
+                        onSnapshot = {},
+                        onError = {},
+                    )
+                }
             }
         }
     }
@@ -215,6 +236,23 @@ private fun configureDesktopChrome() {
     if (System.getProperty("os.name").contains("mac", ignoreCase = true)) {
         System.setProperty("apple.awt.application.appearance", MacosDarkAquaAppearance)
     }
+}
+
+// application {} applies Compose's Swing globals, which on Linux include Skiko's
+// display-scale detection (it sets sun.java2d.uiScale). AWT reads that property
+// once, when its graphics environment starts, and installDesktopOpenUriHandler()
+// starts it before application {} runs, which left the UI at 1x on HiDPI Linux
+// desktops (#514). Apply the globals before anything touches AWT.
+@OptIn(ExperimentalComposeUiApi::class)
+private fun configureLinuxSwingGlobalsBeforeAwt() {
+    if (DesktopHostOs.current != DesktopHostOs.LINUX) return
+    if (System.getProperty("compose.application.configure.swing.globals") != "true") return
+    // Skiko's detection overwrites sun.java2d.uiScale, so keep an explicitly
+    // set scale (the documented #514 workaround) working by skipping it.
+    configureSwingGlobalsForCompose(
+        useAutoDpiOnLinux = System.getProperty("sun.java2d.uiScale") == null &&
+            System.getProperty("skiko.linux.autodpi", "true") == "true",
+    )
 }
 
 private fun installDesktopOpenUriHandler() {

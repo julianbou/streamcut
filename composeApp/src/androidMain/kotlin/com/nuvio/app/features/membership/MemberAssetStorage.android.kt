@@ -7,6 +7,7 @@ import java.io.File
 internal actual object MemberAssetStorage {
     private const val preferencesName = "nuvio_member_access"
     private const val accessPayloadKey = "access_payload"
+    private const val backgroundCatalogPayloadKey = "background_catalog_payload"
     private var preferences: SharedPreferences? = null
     private var legacyBrandingFile: File? = null
 
@@ -23,7 +24,7 @@ internal actual object MemberAssetStorage {
     }
 
     actual fun clearAccess() {
-        preferences?.edit()?.clear()?.apply()
+        preferences?.edit()?.remove(accessPayloadKey)?.apply()
         legacyBrandingFile?.delete()
     }
 }

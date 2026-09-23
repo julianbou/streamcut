@@ -42,6 +42,8 @@
 #define NX_KEYTYPE_REWIND 20
 #endif
 
+static constexpr double kMaxVolumePercent = 200.0;
+
 @class PlayerMetalView;
 @class MpvWebPlayer;
 @class NuvioPlayerOpenGLLayer;
@@ -94,6 +96,8 @@
 - (void)shutdown;
 - (void)updateControlsJson:(NSString *)controlsJson;
 - (void)requestFocus;
+- (void)beginWindowDrag;
+- (void)reparentSurfaceToHostView:(NSView *)hostView;
 - (void)setPaused:(BOOL)paused;
 - (BOOL)isPaused;
 - (void)seekToMilliseconds:(long long)positionMs;
@@ -1191,6 +1195,43 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     [_webView.window makeFirstResponder:_webView];
 }
 
+- (void)beginWindowDrag {
+    // AppKit requires the original mouse event for performWindowDragWithEvent:;
+    // the native view remains movable through the window manager on macOS.
+}
+
+- (void)reparentSurfaceToHostView:(NSView *)newHostView {
+    if (!newHostView || !newHostView.window) return;
+    NSView *oldHostView = _hostView;
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                      name:NSViewFrameDidChangeNotification
+                                                    object:oldHostView];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                      name:NSViewBoundsDidChangeNotification
+                                                    object:oldHostView];
+    [_videoView removeFromSuperview];
+    [_webView removeFromSuperview];
+    _hostView = newHostView;
+    _hostView.wantsLayer = YES;
+    _hostView.layer.backgroundColor = NSColor.blackColor.CGColor;
+    [_hostView setPostsFrameChangedNotifications:YES];
+    [_hostView setPostsBoundsChangedNotifications:YES];
+    [_hostView addSubview:_videoView];
+    [_hostView addSubview:_webView positioned:NSWindowAbove relativeTo:_videoView];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(hostViewFrameDidChange:)
+                                                 name:NSViewFrameDidChangeNotification
+                                               object:_hostView];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(hostViewBoundsDidChange:)
+                                                 name:NSViewBoundsDidChangeNotification
+                                               object:_hostView];
+    _didFocusControlsWebView = NO;
+    [self layoutNativeSubviews];
+    [_videoView updateMetalLayerLayout];
+    [self requestFocus];
+}
+
 - (void)layoutControlsWebViewToBounds:(NSRect)bounds immediate:(BOOL)immediate {
     if (!_webView) {
         return;
@@ -1427,6 +1468,7 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     setMpvOptionString(_mpv, "input-default-bindings", "yes");
     setMpvOptionString(_mpv, "input-vo-keyboard", "no");
     setMpvOptionString(_mpv, "keep-open", "yes");
+    setMpvOptionString(_mpv, "volume-max", "200");
     setMpvOptionString(_mpv, "vo", "libmpv");
     setMpvOptionString(_mpv, "ao", "avfoundation,coreaudio,");
     setMpvOptionString(_mpv, "audio-channels", "auto");
@@ -1517,6 +1559,7 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
 
             double duration = [self doubleProperty:"duration" fallback:0.0];
             double position = [self doubleProperty:"time-pos" fallback:0.0];
+            double volumeLevel = [self volume];
             double cacheAhead = [self cacheAheadSecondsForPosition:position];
             BOOL paused = [self rawIsPaused];
             BOOL ended = [self rawIsEnded];
@@ -1541,9 +1584,10 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
                 }
                 [self applyHdrForPolledGamma:gamma primaries:primaries reason:@"sync" force:NO];
                 NSString *script = [NSString stringWithFormat:
-                    @"window.playerUpdate({duration:%0.3f,position:%0.3f,paused:%@,loading:%@,audioTracks:%@,subtitleTracks:%@})",
+                    @"window.playerUpdate({duration:%0.3f,position:%0.3f,volumeLevel:%0.3f,paused:%@,loading:%@,audioTracks:%@,subtitleTracks:%@})",
                     duration,
                     position,
+                    volumeLevel,
                     paused ? @"true" : @"false",
                     loading ? @"true" : @"false",
                     audioTracks,
@@ -1843,18 +1887,19 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
 - (void)adjustVolume:(double)delta {
     if (!_mpv) return;
     double current = [self doubleProperty:"volume" fallback:100.0];
-    double next = fmax(0.0, fmin(100.0, current + delta));
+    double next = fmax(0.0, fmin(kMaxVolumePercent, current + delta));
     mpv_set_property(_mpv, "volume", MPV_FORMAT_DOUBLE, &next);
 }
 
 - (void)setVolume:(double)level {
     if (!_mpv) return;
-    double next = fmax(0.0, fmin(100.0, level * 100.0));
+    double next = fmax(0.0, fmin(kMaxVolumePercent, level * 100.0));
     mpv_set_property(_mpv, "volume", MPV_FORMAT_DOUBLE, &next);
 }
 
 - (double)volume {
-    return [self doubleProperty:"volume" fallback:100.0] / 100.0;
+    double level = [self doubleProperty:"volume" fallback:100.0];
+    return fmax(0.0, fmin(kMaxVolumePercent, level)) / 100.0;
 }
 
 - (void)setResizeMode:(int)mode {
@@ -2641,6 +2686,31 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_requestFocus(
     MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
     runOnMainAsync(^{
         [player requestFocus];
+    });
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_beginWindowDrag(
+    JNIEnv *, jobject, jlong handle
+) {
+    if (handle == 0) return;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setWindowResizable(
+    JNIEnv *, jobject, jlong, jboolean
+) {
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_reparentSurfaceNative(
+    JNIEnv *, jobject, jlong handle, jlong hostViewPtr
+) {
+    if (handle == 0 || hostViewPtr == 0) return;
+    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
+    NSView *hostView = (__bridge NSView *)(void *)(intptr_t)hostViewPtr;
+    runOnMainSync(^{
+        [player reparentSurfaceToHostView:hostView];
     });
 }
 

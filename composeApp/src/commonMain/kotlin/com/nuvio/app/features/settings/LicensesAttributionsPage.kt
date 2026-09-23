@@ -49,13 +49,15 @@ private const val TorboxUrl = "https://torbox.app"
 private const val MdbListUrl = "https://mdblist.com"
 private const val IntroDbUrl = "https://introdb.app/"
 private const val NuvioRepositoryUrl = "https://github.com/NuvioMedia/NuvioMobile"
+private const val DesktopRepositoryUrl = "https://github.com/NuvioMedia/NuvioDesktop"
+private const val MpvUrl = "https://github.com/mpv-player/mpv"
 private const val MpvKitUrl = "https://github.com/mpvkit/MPVKit"
 private const val StreamCutRepositoryUrl = "https://github.com/julianbou/streamcut"
 private const val NuvioDesktopRepositoryUrl = "https://github.com/NuvioMedia/NuvioDesktop"
-private const val MpvUrl = "https://mpv.io"
 private const val FfmpegUrl = "https://ffmpeg.org/download.html"
 private const val TorrServerUrl = "https://github.com/YouROK/TorrServer"
 private const val ApacheLicenseUrl = "https://www.apache.org/licenses/LICENSE-2.0"
+private const val HazeLicenseUrl = "https://github.com/chrisbanes/haze/blob/1.7.2/LICENSE"
 
 private data class AttributionItem(
     val titleRes: StringResource,
@@ -65,7 +67,7 @@ private data class AttributionItem(
     val link: String,
 )
 
-private data class LicenseItem(
+internal data class LicenseItem(
     val titleRes: StringResource,
     val bodyRes: StringResource,
     val licenseRes: StringResource,
@@ -133,6 +135,21 @@ private fun LicensesAttributionsBody(
             isTablet = isTablet,
         ) {
             LicenseRows(items = platformLicenseItems(), isTablet = isTablet)
+        }
+
+        PlainSettingsStack(
+            title = stringResource(Res.string.settings_licenses_attributions_section_ui),
+            isTablet = isTablet,
+        ) {
+            LicenseRow(
+                item = LicenseItem(
+                    titleRes = Res.string.settings_licenses_attributions_haze_title,
+                    bodyRes = Res.string.settings_licenses_attributions_haze_body,
+                    licenseRes = Res.string.settings_licenses_attributions_haze_license,
+                    link = HazeLicenseUrl,
+                ),
+                isTablet = isTablet,
+            )
         }
     }
 }
@@ -438,17 +455,29 @@ private fun platformLicenseItems(): List<LicenseItem> =
     } else {
         listOf(platformLicenseItem())
     }
+internal fun appLicenseItem(): LicenseItem =
+    LicenseItem(
+        titleRes = if (isDesktop) Res.string.app_brand_name else Res.string.settings_licenses_attributions_nuvio_title,
+        bodyRes = Res.string.settings_licenses_attributions_nuvio_body,
+        licenseRes = Res.string.settings_licenses_attributions_nuvio_license,
+        link = if (isDesktop) DesktopRepositoryUrl else NuvioRepositoryUrl,
+    )
 
-private fun platformLicenseItem(): LicenseItem =
-    if (isIos) {
-        LicenseItem(
+internal fun platformLicenseItem(): LicenseItem =
+    when {
+        isDesktop -> LicenseItem(
+            titleRes = Res.string.settings_licenses_attributions_mpv_title,
+            bodyRes = Res.string.settings_licenses_attributions_mpv_body,
+            licenseRes = Res.string.settings_licenses_attributions_mpv_license,
+            link = MpvUrl,
+        )
+        isIos -> LicenseItem(
             titleRes = Res.string.settings_licenses_attributions_mpvkit_title,
             bodyRes = Res.string.settings_licenses_attributions_mpvkit_body,
             licenseRes = Res.string.settings_licenses_attributions_mpvkit_license,
             link = MpvKitUrl,
         )
-    } else {
-        LicenseItem(
+        else -> LicenseItem(
             titleRes = Res.string.settings_licenses_attributions_exoplayer_title,
             bodyRes = Res.string.settings_licenses_attributions_exoplayer_body,
             licenseRes = Res.string.settings_licenses_attributions_exoplayer_license,

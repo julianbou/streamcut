@@ -61,6 +61,7 @@ data class DetailSecondaryAction(
 fun DetailActionButtons(
     modifier: Modifier = Modifier,
     playLabel: String = stringResource(Res.string.action_play),
+    playEnabled: Boolean = true,
     secondaryActions: List<DetailSecondaryAction> = emptyList(),
     actionsMenuLabel: String = stringResource(Res.string.details_actions_menu_label),
     isTablet: Boolean = false,
@@ -99,13 +100,18 @@ fun DetailActionButtons(
                     .height(buttonHeight),
                 shape = playShape,
                 // Riso: the one action on this page -- Clip -- is pink ink.
-                color = if (risoWorldActive) Riso.Pink else MaterialTheme.colorScheme.onBackground,
-                contentColor = MaterialTheme.colorScheme.background,
+                color = when {
+                    !playEnabled -> MaterialTheme.colorScheme.surfaceVariant
+                    risoWorldActive -> Riso.Pink
+                    else -> MaterialTheme.colorScheme.onBackground
+                },
+                contentColor = if (playEnabled) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .combinedClickable(
+                            enabled = playEnabled,
                             onClick = {
                                 onPlayClick()
                             },

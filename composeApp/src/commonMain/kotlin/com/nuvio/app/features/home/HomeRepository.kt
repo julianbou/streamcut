@@ -5,7 +5,12 @@ import com.nuvio.app.features.addons.ManagedAddon
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.enabledAddons
 import com.nuvio.app.features.catalog.CatalogTarget
+import com.nuvio.app.features.catalog.CatalogPage
 import com.nuvio.app.features.catalog.fetchCatalogPage
+import com.nuvio.app.features.catalog.mergeCatalogItems
+import com.nuvio.app.core.poster.CustomPosterUrlRepository
+import com.nuvio.app.core.poster.reapplyCustomPosterUrls
+import com.nuvio.app.core.poster.withCustomPosterUrls
 import com.nuvio.app.features.collection.Collection
 import com.nuvio.app.features.collection.CollectionRepository
 import com.nuvio.app.features.collection.CollectionSource
@@ -14,6 +19,7 @@ import com.nuvio.app.features.collection.catalogRouteKey
 import com.nuvio.app.features.collection.findCollectionCatalog
 import com.nuvio.app.features.trakt.TraktPublicListSourceResolver
 import com.nuvio.app.features.watchprogress.CurrentDateProvider
+import com.nuvio.app.isDesktop
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -189,8 +195,12 @@ object HomeRepository {
         val snapshot = HomeCatalogSettingsRepository.snapshot()
         val preferences = snapshot.preferences
         val todayIsoDate = if (snapshot.hideUnreleasedContent) CurrentDateProvider.todayIsoDate() else null
+        CustomPosterUrlRepository.ensureLoaded()
+        val posterPattern = CustomPosterUrlRepository.pattern.value
         fun HomeCatalogSection.withReleaseFilter(): HomeCatalogSection =
             if (todayIsoDate == null) this else filterReleasedItems(todayIsoDate)
+        fun HomeCatalogSection.withPosterOverlay(): HomeCatalogSection =
+            copy(items = items.reapplyCustomPosterUrls(posterPattern))
 
         val sections = currentDefinitions
             .sortedBy { definition -> preferences[definition.key]?.order ?: Int.MAX_VALUE }
@@ -198,7 +208,10 @@ object HomeRepository {
                 val preference = preferences[definition.key]
                 if (preference?.enabled == false) return@mapNotNull null
 
-                val section = cachedSections[definition.cacheKey]?.withReleaseFilter() ?: return@mapNotNull null
+                val section = cachedSections[definition.cacheKey]
+                    ?.withPosterOverlay()
+                    ?.withReleaseFilter()
+                    ?: return@mapNotNull null
                 if (section.items.isEmpty()) return@mapNotNull null
                 val customTitle = preference?.customTitle.orEmpty()
                 section.copy(
@@ -211,7 +224,7 @@ object HomeRepository {
             currentDefinitions
                 .filter { definition -> preferences[definition.key]?.heroSourceEnabled != false }
                 .mapNotNull { definition -> cachedSections[definition.cacheKey] }
-                .map { section -> section.withReleaseFilter() }
+                .map { section -> section.withPosterOverlay().withReleaseFilter() }
                 .flatMap { section -> section.items }
                 .distinctBy { item -> "${item.type}:${item.id}" }
                 .shuffled(heroRandom)
@@ -226,23 +239,30 @@ object HomeRepository {
             emptyList()
         }
 
-        _uiState.value = HomeUiState(
+        val nextState = HomeUiState(
             isLoading = isLoading,
             heroItems = heroItems,
             sections = sections,
             errorMessage = if (sections.isEmpty()) lastErrorMessage else null,
         )
+        if (_uiState.value != nextState) _uiState.value = nextState
     }
 
     private suspend fun HomeCatalogDefinition.toSection(forceRefresh: Boolean): HomeCatalogSection {
-        val page = fetchCatalogPage(
-            manifestUrl = manifestUrl,
-            type = type,
-            catalogId = catalogId,
-            maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
-            forceRefresh = forceRefresh,
-        )
-        val items = page.items
+        CustomPosterUrlRepository.ensureLoaded()
+        val pattern = CustomPosterUrlRepository.pattern.value
+        val page = if (isDesktop) {
+            fetchDesktopHomePreview(forceRefresh)
+        } else {
+            fetchCatalogPage(
+                manifestUrl = manifestUrl,
+                type = type,
+                catalogId = catalogId,
+                maxItems = HOME_CATALOG_PREVIEW_FETCH_LIMIT,
+                forceRefresh = forceRefresh,
+            )
+        }
+        val items = page.items.withCustomPosterUrls(pattern)
         if (items.isEmpty()) {
             return HomeCatalogSection(
                 key = key,
@@ -275,6 +295,35 @@ object HomeRepository {
             items = items,
             availableItemCount = page.rawItemCount,
             hasMore = supportsPagination && page.nextSkip != null,
+        )
+    }
+
+    private suspend fun HomeCatalogDefinition.fetchDesktopHomePreview(forceRefresh: Boolean): CatalogPage {
+        var items = emptyList<MetaPreview>()
+        var rawItemCount = 0
+        var nextSkip: Int? = null
+        var pagesFetched = 0
+        do {
+            val page = fetchCatalogPage(
+                manifestUrl = manifestUrl,
+                type = type,
+                catalogId = catalogId,
+                skip = nextSkip,
+                maxItems = DESKTOP_HOME_CATALOG_PREVIEW_FETCH_LIMIT - items.size,
+                forceRefresh = forceRefresh,
+            )
+            items = mergeCatalogItems(items, page.items)
+            rawItemCount += page.rawItemCount
+            nextSkip = page.nextSkip
+            pagesFetched++
+        } while (
+            supportsPagination && nextSkip != null && items.size < DESKTOP_HOME_CATALOG_PREVIEW_FETCH_LIMIT &&
+            pagesFetched < DESKTOP_HOME_CATALOG_PREVIEW_MAX_PAGES
+        )
+        return CatalogPage(
+            items = items.take(DESKTOP_HOME_CATALOG_PREVIEW_FETCH_LIMIT),
+            rawItemCount = rawItemCount,
+            nextSkip = nextSkip,
         )
     }
 
@@ -444,6 +493,8 @@ private const val HOME_COLLECTION_HERO_SOURCE_LIMIT = 6
 private const val HOME_COLLECTION_HERO_SOURCE_ITEM_LIMIT = 8
 private const val HOME_CATALOG_FETCH_BATCH_SIZE = 4
 private const val HOME_CATALOG_PREVIEW_FETCH_LIMIT = 18
+private const val DESKTOP_HOME_CATALOG_PREVIEW_FETCH_LIMIT = 64
+private const val DESKTOP_HOME_CATALOG_PREVIEW_MAX_PAGES = 4
 private const val HOME_CATALOG_PUBLISH_INTERVAL = 2
 
 private fun prioritizeDefinitions(

@@ -1,5 +1,6 @@
 package com.nuvio.app
 
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.uikit.OnFocusBehavior
 import androidx.compose.ui.window.ComposeUIViewController
 import com.nuvio.app.navigation.AppRoute
@@ -22,8 +23,8 @@ fun MainViewController(
     onGoBack: () -> Unit,
     onReplace: (AppRoute) -> Unit,
     onActivate: (String) -> Unit,
-    onAppReady: (Boolean) -> Unit,
     onTabTitles: (String, String, String, String) -> Unit,
+    appGateController: AppGateController,
 ): UIViewController {
     val initialTab = AppScreenTab.fromName(initialTabName)
     return nuvioComposeViewController {
@@ -33,13 +34,13 @@ fun MainViewController(
             useNativeTabBar = useNativeTabBar,
             useTabletFloatingTabBar = useTabletFloatingTabBar,
             ownsAppRuntime = initialTab == AppScreenTab.Home,
-            bypassAppGate = initialTab != AppScreenTab.Home,
+            bypassAppGate = true,
             onNavigate = onNavigate,
             onGoBack = onGoBack,
             onReplace = onReplace,
             onActivate = { tab -> onActivate(tab.name) },
-            onAppReady = onAppReady,
             onTabTitles = onTabTitles,
+            appGateController = appGateController,
         )
     }
 }
@@ -51,6 +52,7 @@ fun ScreenViewController(
     onGoBack: () -> Unit,
     onReplace: (AppRoute) -> Unit,
     onActivate: (String) -> Unit,
+    appGateController: AppGateController,
 ): UIViewController = nuvioComposeViewController {
     App(
         initialRoute = route,
@@ -61,7 +63,34 @@ fun ScreenViewController(
         onGoBack = onGoBack,
         onReplace = onReplace,
         onActivate = { tab -> onActivate(tab.name) },
+        appGateController = appGateController,
     )
+}
+
+@Suppress("unused")
+@OptIn(ExperimentalComposeUiApi::class)
+fun AppGateViewController(
+    appGateController: AppGateController,
+    onActivate: (String) -> Unit,
+    onAppReady: (Boolean) -> Unit,
+    onMainContentMountChanged: (Boolean) -> Unit,
+    onMainContentVisibleChanged: (Boolean) -> Unit,
+): UIViewController = ComposeUIViewController(
+    configure = {
+        onFocusBehavior = OnFocusBehavior.DoNothing
+        opaque = false
+    },
+    content = {
+        AppGateOverlay(
+            onActivate = { tab -> onActivate(tab.name) },
+            onAppReady = onAppReady,
+            onMainContentMountChanged = onMainContentMountChanged,
+            onMainContentVisibleChanged = onMainContentVisibleChanged,
+            appGateController = appGateController,
+        )
+    },
+).apply {
+    view.backgroundColor = UIColor.clearColor
 }
 
 private fun nuvioComposeViewController(

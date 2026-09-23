@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.addons.AddonsUiState
+import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaDetailsUiState
 import com.nuvio.app.features.details.MetaScreenSettingsUiState
 import com.nuvio.app.features.details.MetaVideo
@@ -21,6 +22,46 @@ import com.nuvio.app.features.watched.WatchedUiState
 import com.nuvio.app.features.watchprogress.WatchProgressUiState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+
+internal data class PlayerSurfaceSource(
+    val sourceUrl: String,
+    val sourceAudioUrl: String?,
+    val sourceHeaders: Map<String, String>,
+    val sourceResponseHeaders: Map<String, String>,
+    val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle>,
+    val streamType: String?,
+    val initialPositionMs: Long?,
+    val initialPositionRequestKey: String?,
+)
+
+internal fun shouldRenderPlayerSurface(
+    hasCurrentSource: Boolean,
+    hasLifecycleController: Boolean,
+    releaseInFlight: Boolean,
+    desktop: Boolean,
+): Boolean = hasCurrentSource || (desktop && hasLifecycleController && releaseInFlight)
+
+internal class PlayerReleaseSurfaceRetention {
+    private var nextAttemptId = 0L
+    private var activeAttemptId: Long? = null
+
+    var inFlight by mutableStateOf(false)
+        private set
+
+    fun begin(): Long {
+        val attemptId = ++nextAttemptId
+        activeAttemptId = attemptId
+        inFlight = true
+        return attemptId
+    }
+
+    fun finish(attemptId: Long): Boolean {
+        if (activeAttemptId != attemptId) return false
+        activeAttemptId = null
+        inFlight = false
+        return true
+    }
+}
 
 internal class PlayerScreenRuntime(
     args: PlayerScreenArgs,
@@ -57,7 +98,7 @@ internal class PlayerScreenRuntime(
     val torrentTrackers: List<String> get() = args.torrentTrackers
     val initialPositionMs: Long get() = args.initialPositionMs
     val initialProgressFraction: Float? get() = args.initialProgressFraction
-    val externalSubtitles: List<com.nuvio.app.features.streams.StreamSubtitle> get() = args.externalSubtitles
+    var externalSubtitles by mutableStateOf(args.externalSubtitles)
     val isSeries: Boolean get() = parentMetaType == "series"
 
     lateinit var scope: CoroutineScope
@@ -93,8 +134,9 @@ internal class PlayerScreenRuntime(
 
     var gestureController: PlayerGestureController? = null
 
-    var controlsVisible by mutableStateOf(true)
+    var controlsVisible by mutableStateOf(false)
     var controlsActivityTick by mutableStateOf(0)
+    var showRemainingTime by mutableStateOf(false)
     var playerControlsLocked by mutableStateOf(false)
     var activeSourceUrl by mutableStateOf(sourceUrl)
     var activeSourceAudioUrl by mutableStateOf(sourceAudioUrl)
@@ -120,6 +162,7 @@ internal class PlayerScreenRuntime(
     var activeEpisodeNumber by mutableStateOf(episodeNumber)
     var activeEpisodeTitle by mutableStateOf(episodeTitle)
     var activeEpisodeThumbnail by mutableStateOf(episodeThumbnail)
+    var activePauseDescription by mutableStateOf(pauseDescription)
     var activeVideoId by mutableStateOf(videoId)
     var activeInitialPositionMs by mutableStateOf(initialPositionMs)
     var activeInitialProgressFraction by mutableStateOf(initialProgressFraction)
@@ -128,6 +171,8 @@ internal class PlayerScreenRuntime(
     var layoutSize by mutableStateOf(IntSize.Zero)
     var playbackSnapshot by mutableStateOf(PlayerPlaybackSnapshot())
     var playerController by mutableStateOf<PlayerEngineController?>(null)
+    var playerLifecycleController by mutableStateOf<PlayerEngineController?>(null)
+    val playerReleaseSurfaceRetention = PlayerReleaseSurfaceRetention()
     var playerControllerSourceUrl by mutableStateOf<String?>(null)
     var errorMessage by mutableStateOf<String?>(null)
     var isScrubbingTimeline by mutableStateOf(false)
@@ -176,9 +221,15 @@ internal class PlayerScreenRuntime(
     var clipBurnSubtitles by mutableStateOf(true)
     var playerControlsPendingP2pSwitch by mutableStateOf<PendingPlayerP2pSwitch?>(null)
     var playerControlsCloseModalsToken by mutableStateOf(0L)
+    var playerControlsSubmitIntroSuccessToken by mutableStateOf(0L)
+    var playerNotificationMessage by mutableStateOf("")
+    var playerNotificationToken by mutableStateOf(0L)
     var episodeStreamsPanelState by mutableStateOf(EpisodeStreamsPanelState())
     var playerMetaVideos by mutableStateOf<List<MetaVideo>>(emptyList())
+    var playerMeta by mutableStateOf<MetaDetails?>(null)
     var skipIntervals by mutableStateOf<List<SkipInterval>>(emptyList())
+    val autoSkippedIntervals = mutableSetOf<SkipInterval>()
+    var lastManualSkipSeekPositions by mutableStateOf<Pair<Long, Long>?>(null)
     var activeSkipInterval by mutableStateOf<SkipInterval?>(null)
     var skipIntervalDismissed by mutableStateOf(false)
     val autoSkippedIntervalKeys = mutableSetOf<String>()
@@ -188,6 +239,7 @@ internal class PlayerScreenRuntime(
     var playbackStartedForParentalGuide by mutableStateOf(false)
     var nextEpisodeInfo by mutableStateOf<NextEpisodeInfo?>(null)
     var showNextEpisodeCard by mutableStateOf(false)
+    var nextEpisodeCardDismissed by mutableStateOf(false)
     var nextEpisodeAutoPlaySearching by mutableStateOf(false)
     var nextEpisodeAutoPlaySourceName by mutableStateOf<String?>(null)
     var nextEpisodeAutoPlayCountdown by mutableStateOf<Int?>(null)
@@ -206,8 +258,12 @@ internal class PlayerScreenRuntime(
     var selectedAddonSubtitleId by mutableStateOf<String?>(null)
     var useCustomSubtitles by mutableStateOf(false)
     var preferredAudioSelectionApplied by mutableStateOf(false)
+    var appliedAudioPreferences: AppliedAudioPreferences? = null
     var preferredSubtitleSelectionApplied by mutableStateOf(false)
     var activeSubtitleTab by mutableStateOf(SubtitleTab.BuiltIn)
+    var isUserExplicitAudioSelection by mutableStateOf(false)
+    var isUserExplicitSubtitleSelection by mutableStateOf(false)
+    var hasScannedTextTracksOnce by mutableStateOf(false)
     var autoFetchedAddonSubtitlesForKey by mutableStateOf<String?>(null)
     var trackPreferenceRestoreApplied by mutableStateOf(false)
     var subtitleDelayMs by mutableStateOf(0)

@@ -64,7 +64,17 @@ else
 fi
 check "player loads the clip controls" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-controls\.js'
 check "player loads the subtitle search" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-search\.js'
+check "clipper build defaults to the top bar" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DesktopNavigationLayout.kt 'viewingChromeEnabled\) Sidebar else TopBar'
+check "clip keys run before upstream's single-key shortcuts" \
+  composeApp/src/desktopMain/resources/player-ui/controls.js '!activeModal && window\.clipUi\?\.handleKey'
 check "Windows build bundles ffmpeg" .github/workflows/windows-build.yml 'nuvio\.windows\.ffmpeg\.dir'
+
+if git check-ignore -q scripts/upstream/new-file-probe.sh; then
+  fail "new files under scripts/ are not ignored" ".gitignore: upstream's scripts/* needs StreamCut's !scripts/upstream/ and !scripts/*.sh exceptions"
+else
+  pass "new files under scripts/ are not ignored"
+fi
 
 echo "Branding"
 if git rev-parse --verify --quiet "$REF^{commit}" >/dev/null; then

@@ -17,6 +17,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -34,6 +35,12 @@ import org.jetbrains.compose.resources.Font
 import com.nuvio.app.core.build.AppFeaturePolicy
 
 val LocalAppTheme = staticCompositionLocalOf { AppTheme.WHITE }
+val LocalThemePalette = staticCompositionLocalOf { ThemeColors.White }
+
+val MaterialTheme.themePalette: ThemeColorPalette
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalThemePalette.current
 
 internal val LocalNuvioPlatformDensity = staticCompositionLocalOf<Density> {
     error("Platform density is unavailable outside NuvioTheme")
@@ -220,12 +227,15 @@ fun NuvioTheme(
     appTheme: AppTheme = AppTheme.WHITE,
     amoled: Boolean = false,
     desktopUiScale: Float = NuvioDesktopMinUiScale,
+    customThemeColors: CustomThemeColors = CustomThemeColors.Default,
     content: @Composable () -> Unit,
 ) {
     // The clipper build wears the riso world whatever theme is stored: the
     // picker is hidden there, and the stored value is kept for upstream builds.
     val riso = !AppFeaturePolicy.viewingChromeEnabled
-    val palette = if (riso) ThemeColors.Riso else ThemeColors.getColorPalette(appTheme)
+    val palette = remember(appTheme, customThemeColors, riso) {
+        if (riso) ThemeColors.Riso else ThemeColors.getColorPalette(appTheme, customThemeColors)
+    }
     val colorScheme = buildColorScheme(palette, amoled = amoled && !riso)
         .let { if (riso) it.withRisoInks() else it }
     val tokens = defaultNuvioThemeTokens(palette, amoled = amoled && !riso, colorScheme = colorScheme)
@@ -249,6 +259,7 @@ fun NuvioTheme(
         LocalNuvioTypeScale provides typeScale,
         LocalRippleConfiguration provides NuvioRippleConfiguration,
         LocalAppTheme provides appTheme,
+        LocalThemePalette provides palette,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
@@ -258,9 +269,11 @@ fun NuvioTheme(
                 // One paper grain over the whole print, drawn once here rather
                 // than per screen. The desktop video is a native view above
                 // Compose, so this can never land on the picture.
-                Box(Modifier.fillMaxSize().risoGrain()) { content() }
+                Box(Modifier.fillMaxSize().risoGrain()) {
+                    SkeletonAnimationProvider(content = content)
+                }
             } else {
-                content()
+                SkeletonAnimationProvider(content = content)
             }
         }
     }

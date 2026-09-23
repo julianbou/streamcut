@@ -19,14 +19,17 @@ Tooling lives in `scripts/upstream/`:
 | `sync-upstream.sh verify` | Conflict markers, rebrand, fork invariants, JS parse, desktop compile + tests |
 | `ours-paths.txt` | Files StreamCut owns outright; always reset to ours |
 | `deleted-paths.txt` | Paths StreamCut deleted on purpose; always re-deleted |
+| `resolve-strings.py` | Resolves every `values*/strings.xml` conflict: keeps both sides' entries, and for a key both changed keeps the side that changed it from the base |
 | `rebrand-strings.py` | Nuvio → StreamCut in string resources, except `branding-allowlist.txt` |
 | `check-fork-invariants.sh` | Fails when a merge undid a fork decision (updater, data dir, MSI code, gating, branding...) |
 
 ## Steps
 
-1. **Check the tree.** Other Claude sessions may be editing this repo: run `git status`
-   and ListAgents. Do not start with uncommitted work in the tree, and never stash
-   someone else's changes. `start` refuses unless main is clean and equal to origin/main.
+1. **Work in a worktree.** Other Claude sessions may be editing the main checkout
+   (check with ListAgents), and a merge leaves it half-broken for an hour. Run the sync
+   in its own worktree: `git worktree add --detach ../streamcut-sync origin/main`,
+   copy `local.properties` into it, and run every script from there -- they act on the
+   checkout they are run from. `start` refuses unless HEAD equals origin/main.
 2. **Status.** `scripts/upstream/sync-upstream.sh status`. Tell the user in two or three
    lines what is coming (version, commit count, main areas). If it says up to date, stop.
 3. **Triage before merging.** Read the upstream commit list
@@ -68,11 +71,16 @@ away upstream's side loses fixes silently; only owned paths get that treatment.
 
 - **Owned and deleted paths** (`ours-paths.txt`, `deleted-paths.txt`): already handled
   by `start`. If upstream moved a file StreamCut owns, add the new path to the list.
-- **String resources** (`composeResources/values*/strings.xml`): keep **both** sides'
-  entries. Same key changed on both sides: take upstream's text, the rebrand script
+- **String resources** (`composeResources/values*/strings.xml`): run
+  `scripts/upstream/resolve-strings.py`; it keeps **both** sides' entries. A hunk it
+  cannot parse (comments, plurals, a whole-file rewrite) is left for you: take upstream's
+  file and re-add StreamCut's keys that are missing from it. Same key changed on both sides: take upstream's text, the rebrand script
   puts the name back. Never edit `clip_strings.xml` to resolve an upstream conflict;
   it is StreamCut's own file and upstream does not have it.
-- **Profiles** (deleted 2026-09-04): upstream code that calls `ProfileRepository`,
+- **Profiles** (deleted 2026-09-04): after resolving, sweep the whole tree:
+  `ProfileRepository.activeProfileId` becomes `ProfileScopedKey.ScopeId`, and any other
+  `features.profiles` import is a call to remove (profile switchers, avatars, profile
+  backgrounds, `NativeProfileSwitcherController`, `onSwitchProfile`). Upstream code that calls `ProfileRepository`,
   avatars or the profile picker is removed or rewritten against the fixed scope.
   Storage keys keep the `_1` suffix (`ProfileScopedKey.ScopeId = 1`): never drop it,
   it would strand every install's library and settings.
@@ -85,7 +93,10 @@ away upstream's side loses fixes silently; only owned paths get that treatment.
   `iosAppStore`, plus the common `expect`). Desktop's value follows the triage.
 - **Player chrome** (`desktopMain/resources/player-ui/`): take upstream's fixes in
   `controls.{html,js,css}` but keep StreamCut's hooks into `clip-controls.js` and
-  `clip-search.js`. Clip code stays in those files; never move it into `controls.js`.
+  `clip-search.js`. The `window.clipUi?.handleKey` call in `controls.js`'s keydown
+  handler must run **before** upstream's single-key shortcuts: upstream keeps adding
+  letters that StreamCut uses (0.1.25 took I/O for subtitle opacity and / for speed).
+  After a sync, check in the harness that I, O, `/` and `,` `.` still reach the clip UI. Clip code stays in those files; never move it into `controls.js`.
   Frame counts are never shown (stepping is `,`/`.` only). Test the chrome standalone
   with the harness: `python3 -m http.server 8731` in that directory, open
   `controls.html`, push state with `window.playerControls({...})`.
@@ -102,6 +113,19 @@ away upstream's side loses fixes silently; only owned paths get that treatment.
 - **Binary files** not in the owned list (fonts, dylibs, DLLs): take upstream's.
   They arrive as LFS pointers (`GIT_LFS_SKIP_SMUDGE=1`); run `git lfs pull` before a
   local build that needs them.
+
+- **The app shell** (`App.kt`, split upstream on 2026-08-23 into `AppGate.kt`,
+  `MainAppContent.kt`, `MainTabsDestination.kt`, `AppShellComponents.kt` and friends):
+  StreamCut's decisions there are no profile gate (sign-in straight to Main, offline
+  entry via `AuthRepository.hasEverSignedIn` and `signInRequested`), `BrandLaunchScreen`
+  as the launch overlay, `ClipUndoBar` mounted over the main content, the Search tab
+  hidden and Library shown as "Clips" (`ClipsLibraryScreen`) when viewing chrome is
+  off, riso selection ink in the sidebar, and the top bar as the desktop default
+  (`DesktopNavigationLayout.Default`).
+- **Tests that fail on this machine regardless of the merge**: date and label tests
+  that expect English (the Mac runs in Spanish) and `WatchedItemsStoreTest`. Compare
+  against main before blaming the merge. `NativePlayerControllerTeardownTest` needs the
+  LFS runtime: `git lfs pull` in the worktree first.
 
 ## Keeping the rules current
 
