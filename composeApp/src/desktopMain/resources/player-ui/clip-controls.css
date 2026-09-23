@@ -56,6 +56,18 @@
   touch-action: none;
   z-index: 3;
 }
+/* The bar stays thin; the grab area is 24px (WCAG 2.5.8), so a near-miss
+   takes the handle instead of seeking the track and moving the playhead. */
+.clip-handle::before,
+.clip-zoom-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 24px;
+  transform: translateX(-50%);
+}
 .clip-handle-bar {
   width: 4px;
   border-radius: 2px;
@@ -138,8 +150,9 @@
   cursor: pointer;
 }
 .clip-range-chip-jump {
+  min-height: 24px;
   padding: 3px 4px 3px 9px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -150,7 +163,8 @@
 .clip-range-chip-remove {
   display: grid;
   place-items: center;
-  width: 22px;
+  width: 24px;
+  min-height: 24px;
   padding: 0 4px 0 2px;
   color: rgba(255, 255, 255, .6);
 }
@@ -160,7 +174,7 @@
 }
 .clip-range-chip-remove:hover {
   color: #fff;
-  background: rgba(220, 60, 60, .4);
+  background: color-mix(in srgb, var(--riso-red) 45%, transparent);
 }
 
 /* Clip control row, above the timeline. Two lines: the working controls, then
@@ -205,7 +219,7 @@
   gap: 4px;
 }
 .clip-io-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, .66);
@@ -248,6 +262,19 @@
 .clip-row-spacer {
   flex: 1;
 }
+/* When a narrow window wraps the row, Export still ends it on the right
+   instead of falling to the start of a second line. */
+.clip-group-export {
+  margin-left: auto;
+}
+@media (max-width: 900px) {
+  .clip-row-main {
+    column-gap: 12px;
+  }
+  .clip-group-marks {
+    gap: 10px;
+  }
+}
 .clip-inline-status {
   font-size: 12px;
   color: rgba(255, 255, 255, .72);
@@ -259,9 +286,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.clip-inline-status[data-kind="done"] { color: #8fa2ff; }
-.clip-inline-status[data-kind="error"] { color: #ff7a86; }
-.clip-inline-status[data-kind="warn"] { color: #ffd479; font-weight: 600; }
+/* Status never borrows an ink: sun means set aside and blue means where you
+   were. Done and warn read by weight on paper; only failure prints red. */
+.clip-inline-status[data-kind="done"] { color: var(--riso-paper); }
+.clip-inline-status[data-kind="error"] { color: var(--riso-red); }
+.clip-inline-status[data-kind="warn"] { color: var(--riso-paper); font-weight: 700; }
 .clip-inline-status:empty { display: none; }
 
 .clip-action {
@@ -304,7 +333,7 @@
 .clip-action.compact {
   min-height: 22px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .clip-dismiss-icon {
   display: block;
@@ -360,7 +389,7 @@
   border: 1px solid rgba(255, 255, 255, .12);
   background: rgba(255, 255, 255, .08);
   color: rgba(255, 255, 255, .72);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
   font-weight: 600;
   white-space: nowrap;
@@ -402,7 +431,7 @@
   padding: 0 2px;
 }
 .clip-zoom-edge {
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, .66);
   white-space: nowrap;
@@ -412,7 +441,7 @@
   text-align: right;
 }
 .clip-zoom-scale {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .04em;
   color: var(--theme-accent);
@@ -499,7 +528,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .04em;
   text-transform: uppercase;
@@ -508,7 +537,7 @@
 /* Shortened to ~/... in JS and truncated at the end. The old rtl trick kept
    the tail visible but moved the leading slash to the far end of the path. */
 .clip-library-path {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
@@ -548,18 +577,18 @@
   white-space: nowrap;
 }
 .clip-library-item-meta {
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, .45);
+  color: rgba(255, 255, 255, .62);
   white-space: nowrap;
 }
 .clip-library-item .clip-action {
   min-height: 22px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .clip-action.danger:hover:not(:disabled) {
-  background: rgba(220, 60, 60, .28);
+  background: color-mix(in srgb, var(--riso-red) 32%, transparent);
   color: #fff;
 }
 
@@ -582,7 +611,7 @@
   white-space: nowrap;
 }
 .clip-job-duration {
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, .45);
   white-space: nowrap;
@@ -590,15 +619,15 @@
 .clip-job-status {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(255, 255, 255, .72);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.clip-job-status[data-kind="done"] { color: #8fa2ff; }
-.clip-job-status[data-kind="error"] { color: #ff7a86; }
-.clip-job-status[data-kind="queued"] { color: rgba(255, 255, 255, .45); }
+.clip-job-status[data-kind="done"] { color: var(--riso-paper); }
+.clip-job-status[data-kind="error"] { color: var(--riso-red); }
+.clip-job-status[data-kind="queued"] { color: rgba(var(--riso-paper-rgb), .62); }
 .clip-job-item .clip-progress-track {
   width: 72px;
   flex: none;
@@ -606,7 +635,7 @@
 .clip-job-item .clip-action {
   min-height: 22px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* --- clipper mode: viewing chrome off -------------------------------------
@@ -735,7 +764,7 @@ body.clipper-mode .action-pill .action[data-command="resize"] { display: none !i
 }
 
 .clip-strip-time {
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, 0.6);
 }
@@ -786,7 +815,7 @@ body.clipper-mode .action-pill .action[data-command="resize"] { display: none !i
 }
 
 .clip-hover-time {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: rgba(255, 255, 255, 0.9);
@@ -866,7 +895,7 @@ body.clipper-mode .action-pill .action[data-command="resize"] { display: none !i
   border-bottom-width: 2px;
   background: rgba(255, 255, 255, .07);
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   text-align: center;
   color: #fff;
@@ -878,11 +907,18 @@ body.clipper-mode .action-pill .action[data-command="resize"] { display: none !i
    for the few lines a programme would set big. Grain goes on panels only -- the
    video itself is never tinted or grained. */
 :root {
+  /* The app palette as channels, so every scrim and wash is one token plus an
+     alpha instead of a retyped literal. Mirrors Riso in RisoMaterial.kt. */
+  --riso-stock-rgb: 20, 16, 25;
+  --riso-raised-rgb: 45, 37, 54;
+  --riso-paper-rgb: 242, 236, 228;
+  --riso-paper: #f2ece4;
+  --riso-red: #f15060;
   --riso-stock: #141019;
   --riso-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .11 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 body.clipper-mode .top-gradient {
-  background: linear-gradient(to bottom, rgba(20, 16, 25, .78), rgba(20, 16, 25, 0));
+  background: linear-gradient(to bottom, rgba(var(--riso-stock-rgb), .78), rgba(var(--riso-stock-rgb), 0));
 }
 /* The clip chrome is four rows deep, so the scrim has to reach higher and land
    denser than the viewing build's: at .8 over a 220px ramp the clip row sat on
@@ -892,30 +928,30 @@ body.clipper-mode .bottom-gradient {
   height: max(420px, 48vh);
   background: linear-gradient(
     to bottom,
-    rgba(20, 16, 25, 0) 0%,
-    rgba(20, 16, 25, .16) 22%,
-    rgba(20, 16, 25, .5) 45%,
-    rgba(20, 16, 25, .8) 66%,
-    rgba(20, 16, 25, .92) 100%
+    rgba(var(--riso-stock-rgb), 0) 0%,
+    rgba(var(--riso-stock-rgb), .16) 22%,
+    rgba(var(--riso-stock-rgb), .5) 45%,
+    rgba(var(--riso-stock-rgb), .8) 66%,
+    rgba(var(--riso-stock-rgb), .92) 100%
   );
 }
 /* Controls float over whatever frame is on screen, so each carries its own
    stock backing instead of a white wash that disappears on a bright shot. */
 body.clipper-mode .clip-action,
 body.clipper-mode .clip-nudge {
-  background: rgba(20, 16, 25, .74);
-  border-color: rgba(242, 236, 228, .16);
-  color: rgba(242, 236, 228, .9);
+  background: rgba(var(--riso-stock-rgb), .74);
+  border-color: rgba(var(--riso-paper-rgb), .16);
+  color: rgba(var(--riso-paper-rgb), .9);
 }
 body.clipper-mode .clip-action:hover:not(:disabled),
 body.clipper-mode .clip-nudge:hover:not(:disabled) {
-  background: rgba(45, 37, 54, .9);
-  color: #f2ece4;
+  background: rgba(var(--riso-raised-rgb), .9);
+  color: var(--riso-paper);
 }
 body.clipper-mode .clip-mark {
-  background: rgba(45, 37, 54, .88);
-  border-color: rgba(242, 236, 228, .3);
-  color: #f2ece4;
+  background: rgba(var(--riso-raised-rgb), .88);
+  border-color: rgba(var(--riso-paper-rgb), .3);
+  color: var(--riso-paper);
 }
 body.clipper-mode .clip-action.primary {
   background: var(--theme-accent);
@@ -931,13 +967,13 @@ body.clipper-mode .clip-action.toggled-on {
 body.clipper-mode .clip-action:disabled,
 body.clipper-mode .clip-nudge:disabled {
   opacity: 1;
-  color: rgba(242, 236, 228, .38);
-  border-color: rgba(242, 236, 228, .08);
+  color: rgba(var(--riso-paper-rgb), .38);
+  border-color: rgba(var(--riso-paper-rgb), .08);
 }
 body.clipper-mode .clip-range-chip {
   background:
     linear-gradient(color-mix(in srgb, var(--clip-set-aside) 18%, transparent), color-mix(in srgb, var(--clip-set-aside) 18%, transparent)),
-    rgba(20, 16, 25, .82);
+    rgba(var(--riso-stock-rgb), .82);
   border-color: color-mix(in srgb, var(--clip-set-aside) 60%, transparent);
 }
 body.clipper-mode .clip-range-chip-jump {
@@ -945,10 +981,10 @@ body.clipper-mode .clip-range-chip-jump {
 }
 body.clipper-mode .clip-io-label,
 body.clipper-mode .clip-zoom-edge {
-  color: rgba(242, 236, 228, .72);
+  color: rgba(var(--riso-paper-rgb), .72);
 }
 body.clipper-mode .clip-io-time {
-  color: #f2ece4;
+  color: var(--riso-paper);
 }
 /* Preview and Add range both act on the selection being marked, so they sit
    with the marks as one pair, apart from the ranges already set aside. */
@@ -968,7 +1004,7 @@ body.clipper-mode .clip-library-panel {
   background-color: rgba(26, 20, 32, .96);
 }
 body.clipper-mode .clip-strip {
-  background-color: rgba(20, 16, 25, .97);
+  background-color: rgba(var(--riso-stock-rgb), .97);
 }
 body.clipper-mode .clip-keys-title,
 body.clipper-mode .clip-strip-title {
@@ -984,7 +1020,7 @@ body.clipper-mode .title {
 }
 /* A readout is not an action: dim paper, not pink. */
 body.clipper-mode .clip-zoom-scale {
-  color: rgba(242, 236, 228, .66);
+  color: rgba(var(--riso-paper-rgb), .66);
 }
 /* Loading as ink: the riso bloom (pink and blue overprinting) instead of a ring. */
 body.clipper-mode .center-spinner,
@@ -999,4 +1035,24 @@ body.clipper-mode .opening-spinner {
 }
 @keyframes riso-loading-turn {
   to { transform: rotate(360deg); }
+}
+@keyframes riso-loading-breathe {
+  from { opacity: .45; }
+  to { opacity: 1; }
+}
+/* Reduced motion, opt-out rather than an allowlist: every transition in the
+   clipper chrome settles at once, loops stop, and loading keeps its signal as
+   a slow fade of the ink instead of a turn. */
+@media (prefers-reduced-motion: reduce) {
+  body.clipper-mode *,
+  body.clipper-mode *::before,
+  body.clipper-mode *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  body.clipper-mode .center-spinner,
+  body.clipper-mode .opening-spinner {
+    animation: riso-loading-breathe 1.2s ease-in-out infinite alternate !important;
+  }
 }
