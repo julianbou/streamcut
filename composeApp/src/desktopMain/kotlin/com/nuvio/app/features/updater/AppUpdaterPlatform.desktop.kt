@@ -35,16 +35,17 @@ actual object AppUpdaterPlatform {
     private val store = DesktopStorage.store(desktopUpdaterPreferencesName)
     actual val isDebugBuild: Boolean = false
 
-    // Updates are disabled for this fork: the release source below points at
-    // upstream NuvioMedia/NuvioDesktop, whose builds would replace the clipper.
-    actual val isSupported: Boolean = false
+    actual val isSupported: Boolean = true
 
+    // StreamCut's own releases. Never point this at upstream
+    // NuvioMedia/NuvioDesktop: its builds would replace the clipper.
+    // Prereleases are included because every StreamCut release so far is one.
     actual val releaseSource: AppUpdateReleaseSource = AppUpdateReleaseSource(
-        owner = "NuvioMedia",
-        repo = "NuvioDesktop",
+        owner = "julianbou",
+        repo = "streamcut",
         channelBranch = null,
         includePrereleases = true,
-        userAgent = "NuvioDesktop",
+        userAgent = "StreamCut",
     )
 
     actual val assetSelector: AppUpdateAssetSelector
