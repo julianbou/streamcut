@@ -970,6 +970,15 @@ body.clipper-mode .clip-nudge:disabled {
   color: rgba(var(--riso-paper-rgb), .38);
   border-color: rgba(var(--riso-paper-rgb), .08);
 }
+/* Export with nothing to export drops its pink fill: dim paper on solid pink
+   read as neither live nor off. It keeps a pink hairline so it is still
+   findable as the button that will light up. */
+body.clipper-mode .clip-action.primary:disabled {
+  background: rgba(var(--riso-stock-rgb), .74);
+  border-color: color-mix(in srgb, var(--theme-accent) 40%, transparent);
+  color: rgba(var(--riso-paper-rgb), .45);
+  filter: none;
+}
 body.clipper-mode .clip-range-chip {
   background:
     linear-gradient(color-mix(in srgb, var(--clip-set-aside) 18%, transparent), color-mix(in srgb, var(--clip-set-aside) 18%, transparent)),
