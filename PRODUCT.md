@@ -6,7 +6,7 @@
 
 web
 
-Recorded as `web` because the design language is desktop pointer-and-keyboard, not native mobile. StreamCut actually ships as a desktop app: Kotlin/Compose Multiplatform shell with an HTML/CSS/JS player chrome (`player-ui/`) over native mpv. macOS (Apple Silicon) first; Windows and Linux packaging is inherited but unbuilt and untested.
+Recorded as `web` because the design language is desktop pointer-and-keyboard, not native mobile. StreamCut actually ships as a desktop app: Kotlin/Compose Multiplatform shell with an HTML/CSS/JS player chrome (`player-ui/`) over native mpv. Released for macOS (Apple Silicon, `.dmg`) and Windows x64 (`.msi`, ffmpeg bundled); Linux packaging is inherited but unbuilt and untested.
 
 ## Users
 
