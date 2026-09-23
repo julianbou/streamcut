@@ -1,0 +1,29 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "brag-output-2026-09-22-004401/composition/index.html"
+        ],
+        "createdAt": "2026-09-22T03:57:40.230Z",
+        "reason": "Claude: the radial blooms are the documented riso ink material (DESIGN.md Elevation & Depth, RisoMaterial.kt risoBlooms), recreated for the brag video"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "riso display",
+        "createdAt": "2026-09-23T11:36:07.500Z",
+        "reason": "DESIGN.md: local @font-face alias for Big Shoulders Display, the declared display face"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "nuvio jetbrains sans",
+        "createdAt": "2026-09-23T11:36:07.518Z",
+        "reason": "DESIGN.md: local @font-face alias for JetBrains Sans, the declared body face"
+      }
+    ]
+  }
+}

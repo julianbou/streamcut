@@ -51,3 +51,6 @@ brag-output/
 .impeccable/review/
 .impeccable/questions/
 .impeccable/critique/
+
+# /brag launch-video renders (local output, regenerated per run)
+brag-output-*/
