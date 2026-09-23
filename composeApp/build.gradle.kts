@@ -513,6 +513,12 @@ val releaseAppVersionCode = readXcconfigValue(appVersionConfigFile, "CURRENT_PRO
     ?.toIntOrNull()
     ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
 val desktopVersionConfigFile = rootProject.file("composeApp/Configuration/DesktopVersion.properties")
+val upstreamVersionProps = Properties().apply {
+    val file = project.file("Configuration/UpstreamVersion.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
 val desktopVersionProps = Properties().apply {
     if (desktopVersionConfigFile.exists()) {
         desktopVersionConfigFile.inputStream().use { load(it) }
@@ -636,11 +642,10 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     appVersionCode.set(releaseAppVersionCode)
     desktopAppVersionName.set(desktopReleaseVersionName)
     desktopAppVersionCode.set(desktopReleaseVersionCode)
-    // The Nuvio Desktop release this fork is built from, read straight from the
-    // file upstream bumps. Not desktopReleaseVersionName: that one honours
-    // nuvio.desktop.versionName, so giving the fork its own version would
-    // otherwise rewrite the "Based on Nuvio Desktop" credit as well.
-    upstreamDesktopVersionName.set(desktopVersionProps.getProperty("VERSION_NAME")?.trim().orEmpty())
+    // The Nuvio Desktop release this fork last merged. Not DesktopVersion.properties:
+    // StreamCut bumps that file for its own releases, which put StreamCut's version
+    // into the "Based on Nuvio Desktop" credit.
+    upstreamDesktopVersionName.set(upstreamVersionProps.getProperty("UPSTREAM_VERSION_NAME")?.trim().orEmpty())
     supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL"))
     supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
