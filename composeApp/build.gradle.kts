@@ -538,7 +538,9 @@ val desktopReleaseVersionCode = (
     ?.toIntOrNull()
     ?: 1
 val desktopReleasePackageVersion = jpackageCompatibleVersion(desktopReleaseVersionName)
-val windowsMsiUpgradeUuid = "395990ee-9b8a-3548-922c-e7a23a495b8d"
+// StreamCut's own. Upstream Nuvio's was 395990ee-9b8a-3548-922c-e7a23a495b8d; sharing it made
+// Windows treat the two as one product, so installing either removed the other.
+val windowsMsiUpgradeUuid = "7ef267da-e573-47dc-a62a-ae42908dd0e2"
 val iosDistribution = (
     providers.gradleProperty("nuvio.ios.distribution").orNull
         ?: System.getenv("NUVIO_IOS_DISTRIBUTION")
