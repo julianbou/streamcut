@@ -458,7 +458,7 @@
     <string name="compose_settings_root_general_section">ALGEMEEN</string>
     <string name="compose_settings_root_integrations_description">Beheer beschikbare integraties</string>
     <string name="compose_settings_root_notifications_description">Beheer meldingen voor nieuwe afleveringen en verstuur een testmelding.</string>
-    <string name="compose_settings_root_privacy_policy_description">Lees hoe Nuvio met je gegevens omgaat</string>
+    <string name="compose_settings_root_privacy_policy_description">Lees hoe StreamCut met je gegevens omgaat</string>
     <string name="compose_settings_root_streams_description">Weergave van streamresultaten en badge-URL-regels.</string>
     <string name="compose_settings_root_switch_profile_description">Wissel naar een ander profiel.</string>
     <string name="compose_settings_root_switch_profile_title">Profiel wisselen</string>

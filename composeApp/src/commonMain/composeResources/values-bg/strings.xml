@@ -457,7 +457,7 @@
     <string name="settings_advanced_remember_last_profile">Запомни последния профил</string>
     <string name="settings_advanced_remember_last_profile_description">Запомни последно избрания профил при стартиране</string>
     <string name="settings_advanced_clear_cw_cache">Изчисти кеша на „Продължи гледането"</string>
-    <string name="compose_settings_root_privacy_policy_description">Научете как Nuvio използва вашите данни</string>
+    <string name="compose_settings_root_privacy_policy_description">Научете как StreamCut използва вашите данни</string>
     <string name="settings_advanced_clear_cw_cache_subtitle">Премахни кешираните миниатюри, заглавия и данни за обогатяване за „Продължи гледането"</string>
     <string name="settings_advanced_clear_cw_cache_done">Кешът е изчистен</string>
     <string name="settings_licenses_attributions_section_app">ЛИЦЕНЗ НА ПРИЛОЖЕНИЕТО</string>

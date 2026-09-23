@@ -471,7 +471,7 @@
     <string name="compose_settings_root_general_section">عام</string>
     <string name="compose_settings_root_integrations_description">إدارة التكاملات المتاحة</string>
     <string name="compose_settings_root_notifications_description">إدارة تنبيهات صدور الحلقات وإرسال إشعار تجريبي.</string>
-    <string name="compose_settings_root_privacy_policy_description">تعرّف على كيفية تعامل Nuvio مع بياناتك</string>
+    <string name="compose_settings_root_privacy_policy_description">تعرّف على كيفية تعامل StreamCut مع بياناتك</string>
     <string name="compose_settings_root_streams_description">طريقة عرض نتائج البث وقواعد روابط الشارات.</string>
     <string name="compose_settings_root_switch_profile_description">التبديل إلى ملف شخصي مختلف.</string>
     <string name="compose_settings_root_switch_profile_title">تبديل الملف الشخصي</string>

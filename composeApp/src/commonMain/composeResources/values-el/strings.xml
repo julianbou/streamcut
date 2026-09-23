@@ -245,7 +245,7 @@
     <string name="compose_settings_root_general_section">ΓΕΝΙΚΑ</string>
     <string name="compose_settings_root_integrations_description">Σύνδεση υπηρεσιών TMDB και MDBList.</string>
     <string name="compose_settings_root_notifications_description">Διαχείριση ειδοποιήσεων κυκλοφορίας επεισοδίων και αποστολή δοκιμαστικής ειδοποίησης.</string>
-    <string name="compose_settings_root_privacy_policy_description">Μάθετε πώς διαχειρίζεται το Nuvio τα δεδομένα σας</string>
+    <string name="compose_settings_root_privacy_policy_description">Μάθετε πώς διαχειρίζεται το StreamCut τα δεδομένα σας</string>
     <string name="compose_settings_root_switch_profile_description">Μετάβαση σε διαφορετικό προφίλ.</string>
     <string name="compose_settings_root_switch_profile_title">Εναλλαγή προφίλ</string>
     <string name="compose_settings_root_trakt_description">Συνδέστε το Trakt, συγχρονίστε λίστες παρακολούθησης και αποθηκεύστε τίτλους απευθείας στο Trakt.</string>

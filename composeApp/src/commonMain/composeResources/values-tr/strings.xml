@@ -458,7 +458,7 @@
     <string name="compose_settings_root_general_section">GENEL</string>
     <string name="compose_settings_root_integrations_description">TMDB ve MDBList servislerini bağla.</string>
     <string name="compose_settings_root_notifications_description">Bölüm yayın bildirimlerini yönet ve test bildirimi gönder.</string>
-    <string name="compose_settings_root_privacy_policy_description">Nuvio'nun verilerinizi nasıl işlediğini öğrenin</string>
+    <string name="compose_settings_root_privacy_policy_description">StreamCut'nun verilerinizi nasıl işlediğini öğrenin</string>
     <string name="compose_settings_root_streams_description">Yayın sonucu ekranı ve rozet URL kuralları.</string>
     <string name="compose_settings_root_switch_profile_description">Farklı bir profile geç.</string>
     <string name="compose_settings_root_switch_profile_title">Profil değiştir</string>

@@ -1929,7 +1929,7 @@
     <string name="streams_loading_skip_segments">Načítavajú sa segmenty preskočenia…</string>
     <string name="compose_player_languages">Jazyky</string>
     <string name="compose_settings_page_privacy_policy">Zásady ochrany osobných údajov</string>
-    <string name="compose_settings_root_privacy_policy_description">Zistite, ako Nuvio spracováva vaše údaje</string>
+    <string name="compose_settings_root_privacy_policy_description">Zistite, ako StreamCut spracováva vaše údaje</string>
     <string name="settings_advanced_section_diagnostics">DIAGNOSTIKA</string>
     <string name="settings_advanced_sentry_reports">Hlásenia o pádoch (Sentry)</string>
     <string name="settings_advanced_sentry_reports_subtitle">Odosielať hlásenia o pádoch a zamrznutiach (ANR) s bezpečným kontextom. Predvolene zapnuté.</string>
