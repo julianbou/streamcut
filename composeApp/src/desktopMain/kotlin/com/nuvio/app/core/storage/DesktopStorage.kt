@@ -11,15 +11,24 @@ import java.util.Properties
 import kotlin.io.path.exists
 
 internal object DesktopStorage {
+    // Deliberately not ForkBranding.APP_NAME: renaming the app must not
+    // strand everyone's settings in a directory under the old name.
+    private const val APP_DIR_NAME = "StreamCut"
+    private const val LEGACY_APP_DIR_NAME = "Nuvio"
+
     private val json = Json { ignoreUnknownKeys = true }
     private val stores = mutableMapOf<String, Store>()
 
     val rootDir: Path by lazy {
-        resolveAppDataDir().also { Files.createDirectories(it) }
+        val dir = resolveAppDataDir(APP_DIR_NAME)
+        if (!dir.exists()) {
+            runCatching { adoptLegacySettings(from = resolveAppDataDir(LEGACY_APP_DIR_NAME), to = dir) }
+        }
+        dir.also { Files.createDirectories(it) }
     }
 
     val cacheDir: Path by lazy {
-        resolveCacheDir().also { Files.createDirectories(it) }
+        resolveCacheDir(APP_DIR_NAME).also { Files.createDirectories(it) }
     }
 
     fun store(name: String): Store = synchronized(stores) {
@@ -40,34 +49,63 @@ internal object DesktopStorage {
         }
     }
 
-    private fun resolveAppDataDir(): Path {
+    /**
+     * Until 0.3.1-alpha StreamCut kept its data in Nuvio's directory, so a
+     * machine with both apps had one shared addon store and sign-in flag, and
+     * signing out of either wiped the other. The first launch with the new
+     * directory copies the settings stores (the top-level `.properties`
+     * files) across and leaves the legacy directory alone, because upstream
+     * Nuvio may still be using it. Clip files are not moved: the clip library
+     * records absolute paths, so existing clips keep working where they are.
+     *
+     * The copy goes through a temporary sibling that is renamed into place,
+     * so an interrupted copy is retried next launch rather than half-adopted.
+     */
+    internal fun adoptLegacySettings(from: Path, to: Path) {
+        if (!Files.isDirectory(from)) return
+        val staging = to.resolveSibling("${to.fileName}.migrating")
+        if (staging.exists()) {
+            Files.walk(staging).use { stream ->
+                stream.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
+            }
+        }
+        Files.createDirectories(staging)
+        Files.list(from).use { stream ->
+            stream
+                .filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".properties") }
+                .forEach { Files.copy(it, staging.resolve(it.fileName)) }
+        }
+        Files.move(staging, to)
+    }
+
+    private fun resolveAppDataDir(name: String): Path {
         val osName = System.getProperty("os.name").orEmpty().lowercase(Locale.ROOT)
         val userHome = Paths.get(System.getProperty("user.home").orEmpty())
         return when {
-            osName.contains("mac") -> userHome.resolve("Library/Application Support/Nuvio")
+            osName.contains("mac") -> userHome.resolve("Library/Application Support/$name")
             osName.contains("win") -> {
                 val appData = System.getenv("APPDATA")?.takeIf { it.isNotBlank() }
-                (appData?.let(Paths::get) ?: userHome.resolve("AppData/Roaming")).resolve("Nuvio")
+                (appData?.let(Paths::get) ?: userHome.resolve("AppData/Roaming")).resolve(name)
             }
             else -> {
                 val xdgConfig = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }
-                (xdgConfig?.let(Paths::get) ?: userHome.resolve(".config")).resolve("nuvio")
+                (xdgConfig?.let(Paths::get) ?: userHome.resolve(".config")).resolve(name.lowercase(Locale.ROOT))
             }
         }
     }
 
-    private fun resolveCacheDir(): Path {
+    private fun resolveCacheDir(name: String): Path {
         val osName = System.getProperty("os.name").orEmpty().lowercase(Locale.ROOT)
         val userHome = Paths.get(System.getProperty("user.home").orEmpty())
         return when {
-            osName.contains("mac") -> userHome.resolve("Library/Caches/Nuvio")
+            osName.contains("mac") -> userHome.resolve("Library/Caches/$name")
             osName.contains("win") -> {
                 val localAppData = System.getenv("LOCALAPPDATA")?.takeIf { it.isNotBlank() }
-                (localAppData?.let(Paths::get) ?: userHome.resolve("AppData/Local")).resolve("Nuvio/Cache")
+                (localAppData?.let(Paths::get) ?: userHome.resolve("AppData/Local")).resolve("$name/Cache")
             }
             else -> {
                 val xdgCache = System.getenv("XDG_CACHE_HOME")?.takeIf { it.isNotBlank() }
-                (xdgCache?.let(Paths::get) ?: userHome.resolve(".cache")).resolve("nuvio")
+                (xdgCache?.let(Paths::get) ?: userHome.resolve(".cache")).resolve(name.lowercase(Locale.ROOT))
             }
         }
     }
