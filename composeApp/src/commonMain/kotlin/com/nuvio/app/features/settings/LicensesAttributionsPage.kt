@@ -34,6 +34,7 @@ import com.nuvio.app.core.ui.NuvioScreenHeader
 import com.nuvio.app.features.cloud.PremiumizeCloudLibraryPosterUrl
 import com.nuvio.app.features.cloud.TorboxCloudLibraryPosterUrl
 import com.nuvio.app.features.cloud.cloudLibraryDisplayArtworkUrl
+import com.nuvio.app.isDesktop
 import com.nuvio.app.isIos
 import nuvio.composeapp.generated.resources.*
 import org.jetbrains.compose.resources.StringResource
@@ -49,6 +50,11 @@ private const val MdbListUrl = "https://mdblist.com"
 private const val IntroDbUrl = "https://introdb.app/"
 private const val NuvioRepositoryUrl = "https://github.com/NuvioMedia/NuvioMobile"
 private const val MpvKitUrl = "https://github.com/mpvkit/MPVKit"
+private const val StreamCutRepositoryUrl = "https://github.com/julianbou/streamcut"
+private const val NuvioDesktopRepositoryUrl = "https://github.com/NuvioMedia/NuvioDesktop"
+private const val MpvUrl = "https://mpv.io"
+private const val FfmpegUrl = "https://ffmpeg.org/download.html"
+private const val TorrServerUrl = "https://github.com/YouROK/TorrServer"
 private const val ApacheLicenseUrl = "https://www.apache.org/licenses/LICENSE-2.0"
 
 private data class AttributionItem(
@@ -103,10 +109,7 @@ private fun LicensesAttributionsBody(
             title = stringResource(Res.string.settings_licenses_attributions_section_app),
             isTablet = isTablet,
         ) {
-            LicenseRow(
-                item = appLicenseItem(),
-                isTablet = isTablet,
-            )
+            LicenseRows(items = appLicenseItems(), isTablet = isTablet)
         }
 
         PlainSettingsStack(
@@ -129,10 +132,7 @@ private fun LicensesAttributionsBody(
             title = stringResource(Res.string.settings_licenses_attributions_section_playback),
             isTablet = isTablet,
         ) {
-            LicenseRow(
-                item = platformLicenseItem(),
-                isTablet = isTablet,
-            )
+            LicenseRows(items = platformLicenseItems(), isTablet = isTablet)
         }
     }
 }
@@ -196,6 +196,19 @@ private fun AttributionRow(
         },
         onOpen = { uriHandler.openUri(item.link) },
     )
+}
+
+@Composable
+private fun LicenseRows(
+    items: List<LicenseItem>,
+    isTablet: Boolean,
+) {
+    items.forEachIndexed { index, item ->
+        LicenseRow(item = item, isTablet = isTablet)
+        if (index != items.lastIndex) {
+            PlainStackDivider()
+        }
+    }
 }
 
 @Composable
@@ -371,13 +384,60 @@ private fun attributionItems(): List<AttributionItem> = listOf(
     ),
 )
 
-private fun appLicenseItem(): LicenseItem =
-    LicenseItem(
-        titleRes = Res.string.settings_licenses_attributions_nuvio_title,
-        bodyRes = Res.string.settings_licenses_attributions_nuvio_body,
-        licenseRes = Res.string.settings_licenses_attributions_nuvio_license,
-        link = NuvioRepositoryUrl,
-    )
+// Desktop lists what the desktop build actually ships; mobile keeps
+// upstream's entries.
+private fun appLicenseItems(): List<LicenseItem> =
+    if (isDesktop) {
+        listOf(
+            LicenseItem(
+                titleRes = Res.string.settings_licenses_streamcut_title,
+                bodyRes = Res.string.settings_licenses_streamcut_body,
+                licenseRes = Res.string.settings_licenses_streamcut_license,
+                link = StreamCutRepositoryUrl,
+            ),
+            LicenseItem(
+                titleRes = Res.string.settings_licenses_upstream_title,
+                bodyRes = Res.string.settings_licenses_upstream_body,
+                licenseRes = Res.string.settings_licenses_upstream_license,
+                link = NuvioDesktopRepositoryUrl,
+            ),
+        )
+    } else {
+        listOf(
+            LicenseItem(
+                titleRes = Res.string.settings_licenses_attributions_nuvio_title,
+                bodyRes = Res.string.settings_licenses_attributions_nuvio_body,
+                licenseRes = Res.string.settings_licenses_attributions_nuvio_license,
+                link = NuvioRepositoryUrl,
+            ),
+        )
+    }
+
+private fun platformLicenseItems(): List<LicenseItem> =
+    if (isDesktop) {
+        listOf(
+            LicenseItem(
+                titleRes = Res.string.settings_licenses_mpv_title,
+                bodyRes = Res.string.settings_licenses_mpv_body,
+                licenseRes = Res.string.settings_licenses_mpv_license,
+                link = MpvUrl,
+            ),
+            LicenseItem(
+                titleRes = Res.string.settings_licenses_ffmpeg_title,
+                bodyRes = Res.string.settings_licenses_ffmpeg_body,
+                licenseRes = Res.string.settings_licenses_ffmpeg_license,
+                link = FfmpegUrl,
+            ),
+            LicenseItem(
+                titleRes = Res.string.settings_licenses_torrserver_title,
+                bodyRes = Res.string.settings_licenses_torrserver_body,
+                licenseRes = Res.string.settings_licenses_torrserver_license,
+                link = TorrServerUrl,
+            ),
+        )
+    } else {
+        listOf(platformLicenseItem())
+    }
 
 private fun platformLicenseItem(): LicenseItem =
     if (isIos) {

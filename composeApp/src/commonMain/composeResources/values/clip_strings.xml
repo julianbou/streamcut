@@ -116,4 +116,19 @@
     <string name="clip_settings_tools_encoder">Hardware encoder</string>
     <string name="clip_settings_tools_encoder_none">None found; exports use libx264 (slower, same quality).</string>
     <string name="clip_settings_tools_available">Available</string>
+    <string name="settings_licenses_streamcut_title">StreamCut</string>
+    <string name="settings_licenses_streamcut_body">Source code, releases and license terms are in the project repository.</string>
+    <string name="settings_licenses_streamcut_license">Licensed under the GNU General Public License v3.0.</string>
+    <string name="settings_licenses_upstream_title">Nuvio Desktop</string>
+    <string name="settings_licenses_upstream_body">StreamCut is a fork of Nuvio Desktop by NuvioMedia.</string>
+    <string name="settings_licenses_upstream_license">Licensed under the GNU General Public License v3.0.</string>
+    <string name="settings_licenses_mpv_title">mpv (libmpv)</string>
+    <string name="settings_licenses_mpv_body">Used for playback on desktop builds.</string>
+    <string name="settings_licenses_mpv_license">Licensed under the GNU GPL v2.0 or later; parts under the LGPL v2.1 or later.</string>
+    <string name="settings_licenses_ffmpeg_title">FFmpeg</string>
+    <string name="settings_licenses_ffmpeg_body">Used to cut and export clips. The Windows installer ships an unmodified FFmpeg build from BtbN/FFmpeg-Builds; its source is available at ffmpeg.org.</string>
+    <string name="settings_licenses_ffmpeg_license">This FFmpeg build is licensed under the GNU General Public License.</string>
+    <string name="settings_licenses_torrserver_title">TorrServer</string>
+    <string name="settings_licenses_torrserver_body">Used for peer-to-peer streaming on desktop builds.</string>
+    <string name="settings_licenses_torrserver_license">Licensed under the GNU General Public License v3.0.</string>
 </resources>
