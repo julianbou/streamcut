@@ -106,6 +106,7 @@ static constexpr double kMaxVolumePercent = 200.0;
 - (double)speed;
 - (void)setVolume:(double)level;
 - (double)volume;
+- (void)applyRequestedVolume;
 - (void)setResizeMode:(int)mode;
 - (long long)durationMs;
 - (long long)positionMs;
@@ -1055,6 +1056,7 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     std::atomic<double> _cachedPositionSeconds;
     std::atomic<double> _cachedCacheAheadSeconds;
     std::atomic<double> _cachedSpeed;
+    std::atomic<double> _requestedVolumePercent;
     std::atomic_bool _cachedPaused;
     std::atomic_bool _cachedLoading;
     std::atomic_bool _cachedEnded;
@@ -1089,6 +1091,7 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     _cachedPositionSeconds.store(initialPositionMs > 0 ? (double)initialPositionMs / 1000.0 : 0.0);
     _cachedCacheAheadSeconds.store(0.0);
     _cachedSpeed.store(1.0);
+    _requestedVolumePercent.store(100.0);
     _cachedPaused.store(!playWhenReady);
     _cachedLoading.store(true);
     _cachedEnded.store(false);
@@ -1559,6 +1562,7 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
 
             double duration = [self doubleProperty:"duration" fallback:0.0];
             double position = [self doubleProperty:"time-pos" fallback:0.0];
+            [self applyRequestedVolume];
             double volumeLevel = [self volume];
             double cacheAhead = [self cacheAheadSecondsForPosition:position];
             BOOL paused = [self rawIsPaused];
@@ -1886,20 +1890,42 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
 
 - (void)adjustVolume:(double)delta {
     if (!_mpv) return;
-    double current = [self doubleProperty:"volume" fallback:100.0];
-    double next = fmax(0.0, fmin(kMaxVolumePercent, current + delta));
-    mpv_set_property(_mpv, "volume", MPV_FORMAT_DOUBLE, &next);
+    double next = fmax(0.0, fmin(kMaxVolumePercent, _requestedVolumePercent.load() + delta));
+    _requestedVolumePercent.store(next);
+    [self applyRequestedVolume];
 }
 
 - (void)setVolume:(double)level {
     if (!_mpv) return;
     double next = fmax(0.0, fmin(kMaxVolumePercent, level * 100.0));
-    mpv_set_property(_mpv, "volume", MPV_FORMAT_DOUBLE, &next);
+    _requestedVolumePercent.store(next);
+    [self applyRequestedVolume];
 }
 
 - (double)volume {
-    double level = [self doubleProperty:"volume" fallback:100.0];
-    return fmax(0.0, fmin(kMaxVolumePercent, level)) / 100.0;
+    return fmax(0.0, fmin(kMaxVolumePercent, _requestedVolumePercent.load())) / 100.0;
+}
+
+// mpv's `volume` is applied before the audio output's queue, and the
+// avfoundation AO keeps ~2 s queued, so slider moves were heard seconds late.
+// `ao-volume` sets the renderer's own volume and takes effect immediately, but
+// it tops out at 100 and only exists while an AO is open. So 0-100 goes to
+// `ao-volume` and only the boost above 100 stays on software `volume`; with no
+// AO yet, software `volume` carries the whole level. Called again on every
+// controls sync so a freshly created AO (new file, track switch) gets the level.
+- (void)applyRequestedVolume {
+    if (!_mpv) return;
+    double requested = _requestedVolumePercent.load();
+    double hardware = fmin(100.0, requested);
+    double currentHardware = 0.0;
+    BOOL hasAoVolume = mpv_get_property(_mpv, "ao-volume", MPV_FORMAT_DOUBLE, &currentHardware) >= 0;
+    if (hasAoVolume && fabs(currentHardware - hardware) > 0.5) {
+        hasAoVolume = mpv_set_property(_mpv, "ao-volume", MPV_FORMAT_DOUBLE, &hardware) >= 0;
+    }
+    double software = hasAoVolume ? fmax(100.0, requested) : requested;
+    if (fabs([self doubleProperty:"volume" fallback:-1.0] - software) > 0.01) {
+        mpv_set_property(_mpv, "volume", MPV_FORMAT_DOUBLE, &software);
+    }
 }
 
 - (void)setResizeMode:(int)mode {
