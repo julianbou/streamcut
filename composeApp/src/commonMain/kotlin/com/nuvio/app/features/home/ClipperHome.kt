@@ -25,10 +25,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,6 +76,7 @@ import com.nuvio.app.features.player.formatPlaybackTime
 import com.nuvio.app.features.search.SearchEmptyStateReason
 import com.nuvio.app.features.search.SearchUiState
 import com.nuvio.app.features.watchprogress.ContinueWatchingItem
+import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.continueWatchingItemKey
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.clip_home_browse_hide
@@ -82,6 +85,7 @@ import nuvio.composeapp.generated.resources.clip_home_browse_title
 import nuvio.composeapp.generated.resources.clip_home_no_addons
 import nuvio.composeapp.generated.resources.clip_home_no_results
 import nuvio.composeapp.generated.resources.clip_home_recent_empty
+import nuvio.composeapp.generated.resources.clip_home_recent_remove
 import nuvio.composeapp.generated.resources.clip_home_recent_title
 import nuvio.composeapp.generated.resources.clip_home_search_failed
 import nuvio.composeapp.generated.resources.clip_home_search_hint
@@ -327,6 +331,13 @@ private fun ClipperRecentSection(
                     positionFraction = fraction.takeIf { item.resumePositionMs > 0 },
                     hoverInk = Riso.Blue,
                     onClick = onClick?.let { { it(item) } },
+                    removeLabel = stringResource(Res.string.clip_home_recent_remove, item.title),
+                    // Upstream's own "Remove from Continue Watching": the saved
+                    // position goes, here and on the synced account, so the film
+                    // leaves this row until it is opened in the player again.
+                    // Next-up items never reach this row (openedInPlayer), so
+                    // there is no dismissed-next-up key to record.
+                    onRemove = { WatchProgressRepository.removeProgress(contentId = item.parentMetaId) },
                 )
             }
         }
@@ -424,10 +435,15 @@ private fun RisoListing(
     positionFraction: Float?,
     hoverInk: androidx.compose.ui.graphics.Color,
     onClick: (() -> Unit)?,
+    removeLabel: String? = null,
+    onRemove: (() -> Unit)? = null,
 ) {
     val interaction = remember(key) { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val focused by interaction.collectIsFocusedAsState()
+    val removeInteraction = remember(key) { MutableInteractionSource() }
+    val removeHovered by removeInteraction.collectIsHoveredAsState()
+    val removeFocused by removeInteraction.collectIsFocusedAsState()
     // Keyboard focus prints the same ink as hover: one affordance, two inputs.
     val glow by animateFloatAsState(
         targetValue = if (hovered || focused) 1f else 0f,
@@ -444,6 +460,22 @@ private fun RisoListing(
                         .pointerHoverIcon(PointerIcon.Hand)
                         .focusable(interactionSource = interaction)
                         .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
+            .then(
+                // Keyboard path to the ✕, which only shows on hover or focus.
+                if (onRemove != null) {
+                    Modifier.onPreviewKeyEvent { event ->
+                        val isRemoveKey = event.key == Key.Delete || event.key == Key.Backspace
+                        if (focused && isRemoveKey && event.type == KeyEventType.KeyDown) {
+                            onRemove()
+                            true
+                        } else {
+                            false
+                        }
+                    }
                 } else {
                     Modifier
                 },
@@ -479,6 +511,45 @@ private fun RisoListing(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize(),
                 )
+            }
+            if (onRemove != null) {
+                // Shown only while the listing is pointed at or focused: a row
+                // of posters each wearing an ✕ reads as a list to clear, not a
+                // shelf to pick from. Red ink on hover, since removing is
+                // destructive; stock at rest so it sits on any poster.
+                // Qualified: inside the listing's Column the ColumnScope overload
+                // would otherwise win and refuse this Box's receiver.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = hovered || focused || removeHovered || removeFocused,
+                    enter = fadeIn(tween(140)),
+                    exit = fadeOut(tween(140)),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(7.dp),
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (removeHovered || removeFocused) Riso.Red else Riso.Stock.copy(alpha = 0.82f),
+                            )
+                            .hoverable(removeInteraction)
+                            .pointerHoverIcon(PointerIcon.Hand)
+                            .clickable(
+                                interactionSource = removeInteraction,
+                                indication = null,
+                                onClickLabel = removeLabel,
+                                onClick = onRemove,
+                            ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = removeLabel,
+                            tint = Riso.Paper,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
             }
         }
         Spacer(Modifier.height(10.dp))

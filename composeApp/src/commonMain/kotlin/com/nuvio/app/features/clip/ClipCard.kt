@@ -172,18 +172,36 @@ internal fun ClipCard(
             }
         }
 
-        Column(modifier = Modifier.padding(top = 6.dp)) {
+        // Three lines, each one fact: the film, the file it became, and where in
+        // the film it was cut. The file name matters since Save as -- a clip
+        // named for an edit ("lift reveal 03") is found by that name, not by
+        // its title.
+        Column(
+            modifier = Modifier.padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            val film = entry.content.label
+            if (film.isNotBlank()) {
+                Text(
+                    text = film,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Riso.Paper,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
-                text = entry.content.label.ifBlank { entry.fileName },
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = Riso.Paper,
+                text = entry.fileName,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = if (film.isBlank()) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (film.isBlank()) Riso.Paper else Riso.Paper.copy(alpha = 0.82f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = clipSubtitle(entry),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
                 color = Riso.PaperDim,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -227,7 +245,7 @@ private fun ClipHoverAction(label: String, onClick: () -> Unit, color: Color = R
  * every clip exported before stills and sizes existed has none of them.
  */
 internal fun clipSubtitle(entry: ClipEntry): String = listOf(
-    "${formatClipClockLabel(entry.startMs)} - ${formatClipClockLabel(entry.endMs)}",
+    "${formatClipClockLabel(entry.startMs)} \u2013 ${formatClipClockLabel(entry.endMs)}",
     entry.resolutionLabel,
     entry.fileSizeLabel,
 ).filter { it.isNotBlank() }.joinToString(" · ")

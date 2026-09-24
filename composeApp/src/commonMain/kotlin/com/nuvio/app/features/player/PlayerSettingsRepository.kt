@@ -51,7 +51,7 @@ data class PlayerSettingsUiState(
     val preferredSubtitleLanguage: String = SubtitleLanguageOption.NONE,
     val secondaryPreferredSubtitleLanguage: String? = null,
     val subtitleStyle: SubtitleStyleState = SubtitleStyleState.DEFAULT,
-    val streamReuseLastLinkEnabled: Boolean = false,
+    val streamReuseLastLinkEnabled: Boolean = DefaultStreamReuseLastLink,
     val streamReuseLastLinkCacheHours: Int = 24,
     val androidPlaybackEngine: AndroidPlaybackEngine = AndroidPlaybackEngine.Auto,
     val androidLibmpvVideoOutput: AndroidLibmpvVideoOutput = AndroidLibmpvVideoOutput.GpuNext,
@@ -122,7 +122,7 @@ object PlayerSettingsRepository {
     private var preferredSubtitleLanguage = SubtitleLanguageOption.NONE
     private var secondaryPreferredSubtitleLanguage: String? = null
     private var subtitleStyle = SubtitleStyleState.DEFAULT
-    private var streamReuseLastLinkEnabled = false
+    private var streamReuseLastLinkEnabled = DefaultStreamReuseLastLink
     private var streamReuseLastLinkCacheHours = 24
     private var androidPlaybackEngine = AndroidPlaybackEngine.Auto
     private var androidLibmpvVideoOutput = AndroidLibmpvVideoOutput.GpuNext
@@ -198,7 +198,7 @@ object PlayerSettingsRepository {
         preferredSubtitleLanguage = SubtitleLanguageOption.NONE
         secondaryPreferredSubtitleLanguage = null
         subtitleStyle = SubtitleStyleState.DEFAULT
-        streamReuseLastLinkEnabled = false
+        streamReuseLastLinkEnabled = DefaultStreamReuseLastLink
         streamReuseLastLinkCacheHours = 24
         androidPlaybackEngine = AndroidPlaybackEngine.Auto
         androidLibmpvVideoOutput = AndroidLibmpvVideoOutput.GpuNext
@@ -307,7 +307,7 @@ object PlayerSettingsRepository {
             showOnlyPreferredLanguages = PlayerSettingsStorage.loadSubtitleShowOnlyPreferredLanguages()
                 ?: SubtitleStyleState.DEFAULT.showOnlyPreferredLanguages,
         )
-        streamReuseLastLinkEnabled = PlayerSettingsStorage.loadStreamReuseLastLinkEnabled() ?: false
+        streamReuseLastLinkEnabled = PlayerSettingsStorage.loadStreamReuseLastLinkEnabled() ?: DefaultStreamReuseLastLink
         streamReuseLastLinkCacheHours = PlayerSettingsStorage.loadStreamReuseLastLinkCacheHours() ?: 24
         androidPlaybackEngine = PlayerSettingsStorage.loadAndroidPlaybackEngine()
             ?.let { runCatching { AndroidPlaybackEngine.valueOf(it) }.getOrNull() }
@@ -1066,3 +1066,12 @@ object PlayerSettingsRepository {
         }
     }
 }
+
+/**
+ * StreamCut reopens a film on the source it last played by default: a clip is
+ * cut from one film over several sittings, and picking the same source from the
+ * list every time is the whole of what that list is for here. Upstream keeps it
+ * off. A choice the user has saved either way still wins.
+ */
+private val DefaultStreamReuseLastLink: Boolean
+    get() = !AppFeaturePolicy.viewingChromeEnabled

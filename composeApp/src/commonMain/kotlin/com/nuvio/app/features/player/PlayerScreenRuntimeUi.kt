@@ -10,7 +10,11 @@ import com.nuvio.app.features.clip.ClipContentRef
 import com.nuvio.app.features.clip.ClipExtractor
 import com.nuvio.app.features.clip.ClipJob
 import com.nuvio.app.features.clip.ClipLibrary
+import com.nuvio.app.features.clip.ClipFilenameTemplate
+import com.nuvio.app.features.clip.ClipFolderPicker
 import com.nuvio.app.features.clip.ClipRepository
+import com.nuvio.app.features.clip.ClipSaveFolders
+import com.nuvio.app.features.clip.ClipSaveTarget
 import com.nuvio.app.features.clip.ClipStatus
 import com.nuvio.app.features.clip.ClipStrip
 import com.nuvio.app.features.clip.ClipSubtitleSelection
@@ -281,6 +285,11 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
         clipLibraryEntries.filter { it.contentKey == clipContent.key }
     }
     val clipOutputDirLabel = remember(clipLibraryEntries) { ClipRepository.outputDirPath() }
+    val clipSaveRecent by ClipSaveFolders.recent.collectAsState()
+    val clipSavePickToken by ClipSaveFolders.pickToken.collectAsState()
+    val clipSaveFolderPaths = remember(clipSaveRecent, clipOutputDirLabel) {
+        ClipSaveFolders.choices(clipOutputDirLabel)
+    }
     // Frame stepping needs the source's frame rate. The native player exposes no
     // such property, so it is read off the container instead: one probe per
     // source, off the main thread, and zero until it lands -- the chrome falls
@@ -496,6 +505,16 @@ internal fun PlayerScreenRuntime.RenderPlayerRuntimeUi() {
                 durationLabel = formatClipDurationLabel(entry.durationMs),
             )
         },
+        clipSaveBaseName = ClipFilenameTemplate.sanitize(clipContent.label),
+        clipSaveFolders = clipSaveFolderPaths.mapIndexed { index, path ->
+            PlayerClipSaveFolderItem(
+                path = path,
+                isClipsFolder = ClipSaveFolders.isClipsFolder(path, clipOutputDirLabel),
+                isLastUsed = index == 0 && clipSaveRecent.isNotEmpty(),
+            )
+        },
+        clipSavePickToken = clipSavePickToken,
+        clipSaveCanChoose = ClipFolderPicker.canPick,
         showVideoSettings = isIos,
         showSources = activeVideoId != null,
         showEpisodes = isSeries,
@@ -1011,7 +1030,13 @@ private fun ClipStatus.controlsStatusKind(): String = when (this) {
 private fun ClipJob.controlsStatusMessage(outputDir: String): String = when (status) {
     ClipStatus.Queued -> "Waiting"
     ClipStatus.Running -> "Exporting ${(progress * 100).toInt()}%"
-    ClipStatus.Completed -> "Saved to ${outputDir.clipFolderDisplayName()}"
+    // A Save as names the folder the file actually landed in, which is not the
+    // one chosen when that folder could no longer be written.
+    ClipStatus.Completed -> if (destinationDir != null && outputFileUri != null) {
+        "Saved to ${ClipRepository.filePathOf(outputFileUri).substringBeforeLast('/').substringBeforeLast('\\').clipFolderDisplayName()}"
+    } else {
+        "Saved to ${outputDir.clipFolderDisplayName()}"
+    }
     ClipStatus.Failed -> errorMessage ?: "Clip failed"
     ClipStatus.Cancelled -> "Clip cancelled"
 }
@@ -1252,6 +1277,47 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
                     subtitle = if (clipBurnSubtitles) activeClipSubtitle(subtitleDelayMs) else null,
                 )
             }
+        }
+        // Save as names the batch's folder once, by its index in the list it
+        // was sent; then, per clip, the In/Out pair as for a plain export and
+        // the file name spelt out one code point per event -- the bridge has
+        // no string channel.
+        "clipSaveFolder" -> {
+            val index = value.takeIf { it.isFinite() && it >= 0.0 }?.toInt()
+            clipSaveFolderPath = index?.let { ClipSaveFolders.choices(ClipRepository.outputDirPath()).getOrNull(it) }
+            clipSaveFolderPath?.let(ClipSaveFolders::remember)
+        }
+        "clipSaveNameReset" -> clipSaveName.setLength(0)
+        "clipSaveNameChar" -> {
+            val codePoint = value.takeIf { it.isFinite() }?.toInt() ?: return true
+            if (codePoint in 0x20..0x10FFFF && clipSaveName.length < 400) {
+                clipSaveName.appendCodePointCompat(codePoint)
+            }
+        }
+        "clipSaveExport" -> {
+            val start = clipStartMs
+            val end = clipEndMs
+            val folder = clipSaveFolderPath
+            val name = clipSaveName.toString()
+            clipSaveName.setLength(0)
+            if (start != null && end != null && end > start && folder != null) {
+                ClipRepository.startClip(
+                    sourceUrl = clipSourceUrl(),
+                    sourceHeaders = activeSourceHeaders,
+                    content = buildClipContentRef(),
+                    startMs = start,
+                    endMs = end,
+                    retainsP2pStream = activeTorrentInfoHash != null,
+                    audioTrackIndex = activeClipAudioTrackIndex(),
+                    subtitle = if (clipBurnSubtitles) activeClipSubtitle(subtitleDelayMs) else null,
+                    saveTo = ClipSaveTarget(directory = folder, fileStem = name),
+                )
+            }
+        }
+        "clipSaveChooseFolder" -> {
+            val index = value.takeIf { it.isFinite() && it >= 0.0 }?.toInt() ?: 0
+            val choices = ClipSaveFolders.choices(ClipRepository.outputDirPath())
+            ClipSaveFolders.choose(initialPath = choices.getOrNull(index) ?: choices.firstOrNull())
         }
         // The index is the address, the same way the clip library rows work:
         // Kotlin resolves it against the per-title, newest-first job list it
@@ -2243,4 +2309,16 @@ private fun PlayerScreenRuntime.RenderPlayerModals(displayedPositionMs: Long) {
             showSubmitIntroModal = false
         },
     )
+}
+
+
+/** [StringBuilder.appendCodePoint] is JVM-only; this is the common-code spelling. */
+private fun StringBuilder.appendCodePointCompat(codePoint: Int) {
+    if (codePoint < 0x10000) {
+        append(codePoint.toChar())
+    } else {
+        val offset = codePoint - 0x10000
+        append((0xD800 + (offset shr 10)).toChar())
+        append((0xDC00 + (offset and 0x3FF)).toChar())
+    }
 }

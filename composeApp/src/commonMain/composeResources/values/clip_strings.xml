@@ -82,6 +82,7 @@
     <string name="clip_home_recent_title">Recently opened</string>
     <string name="clip_home_recent_empty">Films you open in the player show up here, ready to pick up where you stopped.</string>
     <string name="clip_home_stopped_at">Stopped at %1$s</string>
+    <string name="clip_home_recent_remove">Remove %1$s from Recently opened</string>
     <string name="clip_home_searching">Searching your addons</string>
     <string name="clip_home_no_results">Nothing matches "%1$s". Try the original title, or fewer words.</string>
     <string name="clip_home_no_addons">Search needs at least one addon with a search catalog. Add one in Settings.</string>

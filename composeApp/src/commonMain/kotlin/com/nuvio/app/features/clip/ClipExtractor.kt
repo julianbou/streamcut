@@ -34,6 +34,8 @@ internal data class ClipExtractRequest(
     val aspect: ClipAspect = ClipAspect.Source,
     val targetSizeMb: Int = 0,
     val folderSegments: List<String> = emptyList(),
+    /** Set by Save as: this folder and name instead of the clips folder and template. */
+    val saveTo: ClipSaveTarget? = null,
 )
 
 internal interface ClipTaskHandle {

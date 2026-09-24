@@ -121,6 +121,8 @@ data class ClipJob(
     val progress: Float = 0f,
     val outputFileUri: String? = null,
     val errorMessage: String? = null,
+    /** The folder Save as chose, or null for the clips folder. */
+    val destinationDir: String? = null,
 ) {
     val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0L)
     val contentKey: String get() = content.key

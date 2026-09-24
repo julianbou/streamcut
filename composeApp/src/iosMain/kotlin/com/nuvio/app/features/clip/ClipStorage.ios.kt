@@ -10,4 +10,6 @@ internal actual object ClipStorage {
     actual fun saveFilenameTemplate(template: String?) = Unit
     actual fun loadGroupByTitle(): Boolean = false
     actual fun saveGroupByTitle(enabled: Boolean) = Unit
+    actual fun loadSaveFolders(): String? = null
+    actual fun saveSaveFolders(payload: String?) = Unit
 }

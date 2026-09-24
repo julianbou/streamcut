@@ -23,4 +23,8 @@ internal expect object ClipStorage {
     /** Whether clips are filed into per-title folders. See [ClipFolderLayout]. */
     fun loadGroupByTitle(): Boolean
     fun saveGroupByTitle(enabled: Boolean)
+
+    /** Folders recently chosen in Save as, newest first, one per line. See [ClipSaveFolders]. */
+    fun loadSaveFolders(): String?
+    fun saveSaveFolders(payload: String?)
 }

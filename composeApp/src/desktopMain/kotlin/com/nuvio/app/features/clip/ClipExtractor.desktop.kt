@@ -1075,7 +1075,7 @@ internal actual object ClipExtractor {
         // The stamp is taken once so {date} and {time} cannot disagree across a
         // midnight boundary within one filename.
         val stamp = ClipClock.localStamp(ClipClock.nowEpochMs())
-        val stem = ClipFilenameTemplate.render(
+        val templateStem = ClipFilenameTemplate.render(
             template = ClipFilenameSettings.template(),
             title = request.title,
             startMs = request.startMs,
@@ -1083,7 +1083,17 @@ internal actual object ClipExtractor {
             dateLabel = stamp.date,
             timeLabel = stamp.time,
         )
-        val directory = clipOutputDir(clipsDir, request.folderSegments)
+        // Save as names the file and the folder outright. A folder that cannot
+        // be written any more (an unplugged drive) falls back to the clips
+        // folder, the same as a custom clips folder does, and the finished
+        // notice names where the clip really went.
+        val saveTo = request.saveTo
+        val saveDir = saveTo?.directory?.let(::File)?.takeIf { it.isUsableClipDir() }
+        val stem = saveTo?.fileStem
+            ?.let(ClipFilenameTemplate::sanitize)
+            ?.takeIf { it.isNotBlank() && saveDir != null }
+            ?: templateStem
+        val directory = saveDir ?: clipOutputDir(clipsDir, request.folderSegments)
         var candidate = File(directory, "$stem.mp4")
         var index = 1
         while (candidate.exists()) {

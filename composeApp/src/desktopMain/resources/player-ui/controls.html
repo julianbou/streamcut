@@ -6,6 +6,7 @@
   <link rel="stylesheet" href="controls.css">
   <link rel="stylesheet" href="clip-controls.css">
   <link rel="stylesheet" href="clip-search.css">
+  <link rel="stylesheet" href="clip-save.css">
 </head>
 <body>
   <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
@@ -257,12 +258,12 @@
               <div class="clip-point">
                 <label class="clip-io-label" for="clipInReadout">IN</label>
                 <input class="clip-io-time" id="clipInReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
-                <button class="clip-nudge clip-mark" type="button" data-clip-mark="in" title="Mark IN at the frame on screen (I)">Mark In</button>
+                <button class="clip-nudge clip-mark" type="button" data-clip-mark="in" data-key="I" title="Mark IN at the frame on screen (I)">Mark In</button>
               </div>
               <div class="clip-point">
                 <label class="clip-io-label" for="clipOutReadout">OUT</label>
                 <input class="clip-io-time" id="clipOutReadout" type="text" spellcheck="false" autocomplete="off" placeholder="--:--" title="Type a timecode: 44:09.5, 1:30:00, or 90 for 90 seconds">
-                <button class="clip-nudge clip-mark" type="button" data-clip-mark="out" title="Mark OUT at the frame on screen (O)">Mark Out</button>
+                <button class="clip-nudge clip-mark" type="button" data-clip-mark="out" data-key="O" title="Mark OUT at the frame on screen (O)">Mark Out</button>
               </div>
               <div class="clip-point">
                 <label class="clip-io-label" for="clipLenReadout">LEN</label>
@@ -270,8 +271,8 @@
               </div>
             </div>
             <div class="clip-group clip-group-draft" role="group" aria-label="Selection">
-              <button class="clip-action" id="clipPreviewButton" type="button" title="Loop the selection from IN to OUT (R)">Preview</button>
-              <button class="clip-action" id="clipAddRangeButton" type="button" title="Set this selection aside and start another (A)">&#43; Add range</button>
+              <button class="clip-action" id="clipPreviewButton" type="button" data-key="R" title="Loop the selection from IN to OUT (R)">Preview</button>
+              <button class="clip-action" id="clipAddRangeButton" type="button" data-key="A" title="Set this selection aside and start another (A)">&#43; Add range</button>
             </div>
             <div class="clip-group clip-group-ranges" id="clipRangeGroup" role="group" aria-label="Ranges set aside">
               <div class="clip-range-chips" id="clipRangeChips"></div>
@@ -279,7 +280,7 @@
             <div class="clip-row-spacer"></div>
             <div class="clip-group clip-group-export" role="group" aria-label="Export">
               <button class="clip-action" id="clipSubsButton" type="button" hidden>Subtitles</button>
-              <button class="clip-action primary" id="clipExportButton" type="button" title="Export (X)">Export clip</button>
+              <button class="clip-action primary" id="clipExportButton" type="button" data-key="X" title="Export (X)">Export clip</button>
             </div>
           </div>
           <div class="clip-row-status">
@@ -553,5 +554,6 @@
   <script src="controls.js"></script>
   <script src="clip-controls.js"></script>
   <script src="clip-search.js"></script>
+  <script src="clip-save.js"></script>
 </body>
 </html>

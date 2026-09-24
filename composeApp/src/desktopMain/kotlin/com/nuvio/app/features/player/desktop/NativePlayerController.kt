@@ -11,6 +11,7 @@ import com.nuvio.app.features.player.PlayerControlSourceItem
 import com.nuvio.app.features.player.PlayerControlSubtitleCueItem
 import com.nuvio.app.features.player.PlayerClipJobItem
 import com.nuvio.app.features.player.PlayerClipLibraryItem
+import com.nuvio.app.features.player.PlayerClipSaveFolderItem
 import com.nuvio.app.features.player.PlayerControlSubtitleLanguageItem
 import com.nuvio.app.features.player.PlayerControlSubtitleOptionItem
 import com.nuvio.app.features.player.AudioTrack
@@ -1583,6 +1584,14 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonArrayField("clipLibrary", clipLibrary) { appendClipLibraryItemJson(it) }
         append(',')
+        appendJsonField("clipSaveBaseName", clipSaveBaseName)
+        append(',')
+        appendJsonArrayField("clipSaveFolders", clipSaveFolders) { appendClipSaveFolderItemJson(it) }
+        append(',')
+        appendJsonField("clipSavePickToken", clipSavePickToken)
+        append(',')
+        appendJsonField("clipSaveCanChoose", clipSaveCanChoose)
+        append(',')
         appendJsonField("showP2pConsent", showP2pConsent)
         append(',')
         appendJsonField("subtitleActiveTab", subtitleActiveTab)
@@ -1832,6 +1841,16 @@ private fun StringBuilder.appendClipLibraryItemJson(item: PlayerClipLibraryItem)
     appendJsonField("rangeLabel", item.rangeLabel)
     append(',')
     appendJsonField("durationLabel", item.durationLabel)
+    append('}')
+}
+
+private fun StringBuilder.appendClipSaveFolderItemJson(item: PlayerClipSaveFolderItem) {
+    append('{')
+    appendJsonField("path", item.path)
+    append(',')
+    appendJsonField("isClipsFolder", item.isClipsFolder)
+    append(',')
+    appendJsonField("isLastUsed", item.isLastUsed)
     append('}')
 }
 

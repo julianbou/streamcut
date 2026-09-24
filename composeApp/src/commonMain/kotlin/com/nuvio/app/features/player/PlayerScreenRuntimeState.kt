@@ -219,6 +219,14 @@ internal class PlayerScreenRuntime(
     // clip too, and a shared MP4 has no track picker to turn them on later.
     // Observable, unlike the In/Out points: the chrome draws this one.
     var clipBurnSubtitles by mutableStateOf(true)
+    // Save as: the file name the chrome is spelling out, one code point per
+    // event, ahead of the clipSaveExport that uses it. Not observable -- only
+    // the next export reads it.
+    val clipSaveName = StringBuilder()
+    // The folder a Save as batch writes to, resolved once from the index the
+    // chrome sent: remembering it reorders the list, so resolving per clip
+    // would send the second clip of a batch somewhere else.
+    var clipSaveFolderPath: String? = null
     var playerControlsPendingP2pSwitch by mutableStateOf<PendingPlayerP2pSwitch?>(null)
     var playerControlsCloseModalsToken by mutableStateOf(0L)
     var playerControlsSubmitIntroSuccessToken by mutableStateOf(0L)

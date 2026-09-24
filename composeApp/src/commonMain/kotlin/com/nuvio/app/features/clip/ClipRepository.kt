@@ -105,6 +105,9 @@ object ClipRepository {
      * [audioTrackIndex] and [subtitle] carry what the viewer is watching --
      * the selected audio language, and the subtitle to burn in -- so the file
      * on disk matches the player instead of the source's defaults.
+     *
+     * [saveTo] is Save as: an exact folder and name, which also skips the
+     * per-title subfolders -- the user picked where the file goes.
      */
     fun startClip(
         sourceUrl: String,
@@ -117,6 +120,7 @@ object ClipRepository {
         subtitle: ClipSubtitleSelection? = null,
         aspect: ClipAspect = ClipAspect.Source,
         targetSizeMb: Int = 0,
+        saveTo: ClipSaveTarget? = null,
     ) {
         if (!isSupported) return
         if (sourceUrl.isBlank() || endMs <= startMs) return
@@ -132,7 +136,8 @@ object ClipRepository {
             subtitle = subtitle,
             aspect = aspect,
             targetSizeMb = targetSizeMb,
-            folderSegments = ClipGroupingSettings.folderSegmentsFor(content),
+            folderSegments = if (saveTo == null) ClipGroupingSettings.folderSegmentsFor(content) else emptyList(),
+            saveTo = saveTo,
         )
         onMain {
             // A double-click on Export would otherwise encode the same range
@@ -141,6 +146,7 @@ object ClipRepository {
                 job.contentKey == content.key &&
                     job.startMs == startMs &&
                     job.endMs == endMs &&
+                    job.destinationDir == saveTo?.directory &&
                     (job.status == ClipStatus.Queued || job.status == ClipStatus.Running)
             }
             if (alreadyQueued) return@onMain
@@ -157,6 +163,7 @@ object ClipRepository {
                     endMs = endMs,
                     status = ClipStatus.Queued,
                     progress = 0f,
+                    destinationDir = saveTo?.directory,
                 ),
             ) + _jobs.value
             queue[id] = request
