@@ -1322,23 +1322,6 @@ let clipFrameSession = 0;
 let clipHoverStrip = { session: 0, count: 0, spacingMs: 0 };
 
 /**
- * Reports how far the hover path gets, once per code.
- *
- * The hover has now been wrong three times, each time in a way a browser
- * harness could not see -- a browser synthesises events the player does not
- * send, and resolves URLs the player may not. Kotlin logs these, so the answer
- * comes from the app rather than from another guess. Once per code because
- * pointermove fires continuously; the interesting thing is the furthest point
- * reached, not how often.
- */
-const clipHoverSeen = new Set();
-const clipHoverTrace = code => {
-  if (clipHoverSeen.has(code)) return;
-  clipHoverSeen.add(code);
-  send("clipStripTrace", code);
-};
-
-/**
  * Forgets what was known when the session changes.
  *
  * Called from the hover path as well as the grid, because a title can be opened
@@ -1422,13 +1405,7 @@ const clipHoverMove = event => {
   };
   if (live.session > 0 && live.count > 0 && live.spacingMs > 0) clipHoverStrip = live;
   const { session, count, spacingMs } = live.session > 0 && live.spacingMs > 0 ? live : clipHoverStrip;
-  if (session <= 0 || spacingMs <= 0 || clipDraftDurationMs <= 0) {
-    // Which of the three is missing, so the log distinguishes "no strip yet"
-    // from "no duration yet".
-    clipHoverTrace(session <= 0 ? 30 : spacingMs <= 0 ? 31 : 32);
-    return clipHoverHide();
-  }
-  clipHoverTrace(3);
+  if (session <= 0 || spacingMs <= 0 || clipDraftDurationMs <= 0) return clipHoverHide();
   clipFrameKnowledgeFor(session);
   if (session === live.session) clipFrameMissingRefresh(Number(state.clipStripReady) || 0);
 
@@ -1457,7 +1434,6 @@ const clipHoverMove = event => {
   const img = new Image();
   img.className = "clip-hover-img";
   img.addEventListener("load", () => {
-    clipHoverTrace(5);
     clipFramePresent.add(index);
     // Discarded if the cursor has already moved on: frames load out of order
     // and a late arrival must not replace a newer one.
@@ -1467,7 +1443,6 @@ const clipHoverMove = event => {
     clipHoverPreview.hidden = false;
   });
   img.addEventListener("error", () => {
-    clipHoverTrace(6);
     clipFrameMissing.add(index);
     // Also forgotten as present, or the retry below could pick it again forever.
     clipFramePresent.delete(index);
@@ -1476,7 +1451,6 @@ const clipHoverMove = event => {
     clipHoverIndex = -1;
     if (clipHoverLastEvent) clipHoverMove(clipHoverLastEvent);
   });
-  clipHoverTrace(4);
   img.src = `strip/${session}/${index}.jpg`;
 };
 
@@ -1493,7 +1467,6 @@ const clipHoverMove = event => {
 const CLIP_HOVER_MARGIN = 10;
 
 document.addEventListener("pointermove", event => {
-  clipHoverTrace(1);
   const rect = scrubWrap.getBoundingClientRect();
   const inside =
     rect.width > 0 &&
@@ -1502,7 +1475,6 @@ document.addEventListener("pointermove", event => {
     event.clientY >= rect.top - CLIP_HOVER_MARGIN &&
     event.clientY <= rect.bottom + CLIP_HOVER_MARGIN;
   if (inside) {
-    clipHoverTrace(2);
     clipHoverMove(event);
   } else {
     clipHoverHide();

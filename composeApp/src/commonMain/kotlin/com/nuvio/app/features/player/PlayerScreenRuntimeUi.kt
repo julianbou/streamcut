@@ -1336,10 +1336,6 @@ private fun PlayerScreenRuntime.handlePlayerControlsEvent(type: String, value: D
             )
         }
         "clipStripFocus" -> ClipStrip.focus(value.toInt())
-        // Temporary: reports how far the scrub-bar hover preview gets. See the
-        // codes in clip-controls.js -- the page cannot log anywhere we can read,
-        // so it reports through the one channel that reaches us.
-        "clipStripTrace" -> playerControlsLog.i { "clipStripTrace ${value.toInt()}" }
         "clipStripSeek" -> {
             val target = value.takeIf { it.isFinite() && it >= 0.0 }?.toLong() ?: return true
             playerController?.seekTo(target)
