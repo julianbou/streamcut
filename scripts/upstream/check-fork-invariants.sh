@@ -64,6 +64,10 @@ else
 fi
 check "player loads the clip controls" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-controls\.js'
 check "player loads the subtitle search" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-search\.js'
+check "player loads Save as" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-save\.js'
+check "Save as is extracted with the player page" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt '"clip-save\.js" to' \
+  "exportControlsPageAssets() in NativePlayerBridge.kt must list clip-save.js and clip-save.css, or the running app 404s them"
 check "clipper build defaults to the top bar" \
   composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DesktopNavigationLayout.kt 'viewingChromeEnabled\) Sidebar else TopBar'
 check "clip keys run before upstream's single-key shortcuts" \

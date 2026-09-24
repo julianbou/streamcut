@@ -1,0 +1,507 @@
+/* Save as sheet and the split Export button.
+   Kept alongside clip-save.js so upstream Nuvio merges never touch it. The sheet
+   is printed like the rest of the clip panels -- plum stock, paper grain -- and
+   uses the inks by their meanings: pink for the folder about to be written to,
+   blue for the one you were last in. */
+
+:root {
+  --clip-save-ink-blue: #3d5afe;
+}
+
+/* --- split Export ---------------------------------------------------------- */
+
+/* The two halves read as one button: the caret is joined to Export, not a
+   neighbour of it, so the group's gap is cancelled between them. */
+.clip-save-split-host .clip-save-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.clip-save-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  margin-left: -6px;
+  padding: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  /* A hairline of stock between the halves, the width a riso plate gap would be. */
+  box-shadow: inset 1px 0 0 rgba(var(--riso-stock-rgb, 20, 16, 25), .38);
+}
+.clip-save-caret svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+  transition: transform 180ms cubic-bezier(.16, 1, .3, 1);
+}
+.clip-save-caret[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+.clip-save-caret[hidden] {
+  display: none;
+}
+
+/* --- the sheet ------------------------------------------------------------- */
+
+/* Anchored over Export, where it was opened from, rather than across the row:
+   the marks on the left stay in view while you name what you marked. */
+.clip-save {
+  width: min(600px, 100%);
+  margin: 0 0 10px auto;
+  padding: 16px 18px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--riso-paper-rgb, 255, 255, 255), .12);
+  background-color: rgba(26, 20, 32, .97);
+  background-image: var(--riso-grain, none);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .5);
+  color: var(--riso-paper, #f2ece4);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: min(560px, calc(100vh - 220px));
+  overflow: hidden;
+  transform-origin: 100% 100%;
+  animation: clip-save-print 200ms cubic-bezier(.16, 1, .3, 1);
+}
+.clip-save[hidden] {
+  display: none;
+}
+/* Title and footer keep their height; when the sheet is capped, the body
+   between them is what scrolls. */
+.clip-save > * {
+  flex-shrink: 0;
+}
+.clip-save > .clip-save-body {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 -6px;
+  padding: 0 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--riso-paper-rgb, 255, 255, 255), .22) transparent;
+}
+@keyframes clip-save-print {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.985);
+    filter: blur(2px);
+  }
+}
+
+.clip-save-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: -4px;
+}
+.clip-save-title {
+  margin: 0;
+  font-family: "Riso Display", "Nuvio JetBrains Sans", sans-serif;
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: .01em;
+  color: var(--riso-paper, #f2ece4);
+}
+.clip-save-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .66);
+  cursor: pointer;
+}
+.clip-save-close svg {
+  width: 14px;
+  height: 14px;
+}
+.clip-save-close:hover {
+  background: rgba(var(--riso-raised-rgb, 45, 37, 54), .9);
+  color: var(--riso-paper, #f2ece4);
+}
+
+.clip-save-label {
+  display: block;
+  padding: 0;
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .66);
+}
+
+/* --- name ------------------------------------------------------------------ */
+
+/* The suffix sits inside the field so the numbering is visible where the name
+   is typed: "lift-reveal" reads as "lift-reveal 01-03.mp4" before you save. */
+.clip-save-field {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--riso-paper-rgb, 255, 255, 255), .16);
+  background: rgba(var(--riso-stock-rgb, 20, 16, 25), .72);
+  cursor: text;
+  transition: border-color 150ms ease-out, background-color 150ms ease-out;
+}
+.clip-save-field:hover {
+  border-color: rgba(var(--riso-paper-rgb, 255, 255, 255), .28);
+}
+.clip-save-field:focus-within {
+  border-color: var(--theme-accent);
+  background: rgba(var(--riso-stock-rgb, 20, 16, 25), .9);
+}
+.clip-save-input {
+  flex: 0 1 auto;
+  min-width: 2ch;
+  max-width: 100%;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--riso-paper, #f2ece4);
+  caret-color: var(--theme-accent);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+}
+.clip-save-input:focus {
+  outline: none;
+}
+.clip-save-input::placeholder {
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .5);
+  font-weight: 500;
+}
+.clip-save-input::selection,
+.clip-save-file-input::selection {
+  background: color-mix(in srgb, var(--theme-accent) 45%, transparent);
+  color: #fff;
+}
+.clip-save-suffix {
+  flex: none;
+  padding-left: 1px;
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .5);
+  white-space: pre;
+  pointer-events: none;
+}
+.clip-save-suffix[hidden] {
+  display: none;
+}
+
+/* --- files ----------------------------------------------------------------- */
+
+.clip-save-files {
+  list-style: none;
+  margin: -4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  max-height: 172px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--riso-paper-rgb, 255, 255, 255), .22) transparent;
+}
+.clip-save-files[hidden] {
+  display: none;
+}
+.clip-save-file {
+  display: grid;
+  grid-template-columns: 2.4ch 17ch 6ch minmax(0, 1fr) 22px;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 32px;
+  padding: 0 4px 0 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.clip-save-file:hover {
+  background: rgba(var(--riso-paper-rgb, 255, 255, 255), .04);
+}
+.clip-save-file-n {
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .5);
+  font-weight: 700;
+}
+.clip-save-file-range {
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .78);
+  white-space: nowrap;
+}
+.clip-save-file-len {
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .55);
+  text-align: right;
+  white-space: nowrap;
+}
+/* The name is a button until clicked, so renaming is one click and one Tab
+   stop per row, and the row still reads as text. */
+.clip-save-file-name {
+  grid-column: 4;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--riso-paper, #f2ece4);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: text;
+}
+.clip-save-file-name:hover {
+  border-color: rgba(var(--riso-paper-rgb, 255, 255, 255), .16);
+  background: rgba(var(--riso-stock-rgb, 20, 16, 25), .6);
+}
+.clip-save-file-stem {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clip-save-file-ext {
+  flex: none;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .5);
+}
+.clip-save-file-name.is-template {
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .55);
+  font-style: italic;
+}
+/* A row renamed by hand prints its name at full weight; the numbered ones
+   are the batch speaking. */
+.clip-save-file[data-renamed="true"] .clip-save-file-stem {
+  font-weight: 700;
+}
+.clip-save-file-input {
+  grid-column: 4 / span 2;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid var(--theme-accent);
+  background: rgba(var(--riso-stock-rgb, 20, 16, 25), .92);
+  color: var(--riso-paper, #f2ece4);
+  caret-color: var(--theme-accent);
+  font: inherit;
+  font-size: 13px;
+}
+.clip-save-file-input:focus {
+  outline: none;
+}
+.clip-save-file-reset {
+  grid-column: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .55);
+  cursor: pointer;
+}
+.clip-save-file-reset svg {
+  width: 10px;
+  height: 10px;
+}
+.clip-save-file-reset:hover {
+  background: rgba(var(--riso-raised-rgb, 45, 37, 54), .9);
+  color: var(--riso-paper, #f2ece4);
+}
+
+/* --- destination ----------------------------------------------------------- */
+
+.clip-save-dest {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.clip-save-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.clip-save-folder {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background-color 150ms ease-out;
+}
+.clip-save-folder:hover {
+  background: rgba(var(--riso-paper-rgb, 255, 255, 255), .05);
+}
+/* The native radio stays in the tree for arrow keys and screen readers; the
+   ink mark beside it is what is seen. */
+.clip-save-folder input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+.clip-save-folder-mark {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  box-shadow: inset 0 0 0 1.5px rgba(var(--riso-paper-rgb, 255, 255, 255), .38);
+  transition: box-shadow 150ms ease-out, background 150ms ease-out;
+}
+.clip-save-folder-leaf {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .82);
+  white-space: nowrap;
+}
+.clip-save-folder-parent {
+  min-width: 0;
+  font-size: 12px;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-save-folder-tag {
+  position: relative;
+  font-size: 12px;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .6);
+  white-space: nowrap;
+}
+/* "Last used" carries the blue position mark the home prints under the films
+   you were last in -- the same ink for the same idea. */
+.clip-save-folder-tag[data-kind="last"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: var(--clip-save-ink-blue);
+}
+
+/* Selected: pink ink, the folder about to be written to. */
+.clip-save-folder:has(input:checked) {
+  background: color-mix(in srgb, var(--theme-accent) 11%, transparent);
+}
+.clip-save-folder:has(input:checked) .clip-save-folder-mark {
+  box-shadow: inset 0 0 0 1.5px var(--theme-accent);
+  background: radial-gradient(circle, var(--theme-accent) 0 40%, transparent 46%);
+}
+.clip-save-folder:has(input:checked) .clip-save-folder-leaf {
+  color: var(--riso-paper, #f2ece4);
+}
+.clip-save-folder:has(input:focus-visible) {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
+}
+
+.clip-save-choose {
+  margin: 4px 0 0;
+  min-height: 32px;
+  padding: 0 10px 0 36px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .78);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.clip-save-choose:hover {
+  background: rgba(var(--riso-paper-rgb, 255, 255, 255), .05);
+  color: var(--riso-paper, #f2ece4);
+}
+.clip-save-choose[hidden] {
+  display: none;
+}
+
+/* --- footer ---------------------------------------------------------------- */
+
+.clip-save-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(var(--riso-paper-rgb, 255, 255, 255), .08);
+}
+.clip-save-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-save-foot .clip-action {
+  min-height: 32px;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.clip-save-close:focus-visible,
+.clip-save-file-name:focus-visible,
+.clip-save-file-reset:focus-visible,
+.clip-save-choose:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 720px) {
+  .clip-save-file {
+    grid-template-columns: 2.4ch minmax(0, 1fr) 22px;
+    row-gap: 2px;
+    padding: 4px 4px 4px 8px;
+  }
+  .clip-save-file-range,
+  .clip-save-file-len {
+    display: none;
+  }
+  .clip-save-file-name,
+  .clip-save-file-input {
+    grid-column: 2;
+  }
+  .clip-save-file-reset {
+    grid-column: 3;
+  }
+  .clip-save-folder {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+  }
+  .clip-save-folder-parent {
+    display: none;
+  }
+  .clip-save-folder-tag[data-kind="clips"] {
+    display: none;
+  }
+}

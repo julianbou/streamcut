@@ -40,4 +40,12 @@ internal actual object ClipStorage {
     actual fun saveGroupByTitle(enabled: Boolean) {
         store.putString("clip_group_by_title", if (enabled) "1" else null)
     }
+
+    // Paths on this disk, so a machine preference like the clips folder.
+    actual fun loadSaveFolders(): String? =
+        store.getString("clip_save_folders")?.takeIf { it.isNotBlank() }
+
+    actual fun saveSaveFolders(payload: String?) {
+        store.putString("clip_save_folders", payload?.takeIf { it.isNotBlank() })
+    }
 }

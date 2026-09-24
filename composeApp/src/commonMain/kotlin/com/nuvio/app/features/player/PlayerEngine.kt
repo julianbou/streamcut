@@ -256,6 +256,15 @@ data class PlayerControlsState(
     val clipStripSpacingMs: Int = 0,
     val clipJobs: List<PlayerClipJobItem> = emptyList(),
     val clipLibrary: List<PlayerClipLibraryItem> = emptyList(),
+    /**
+     * Save as: the name the sheet starts from (the title, already sanitized),
+     * the folders it offers -- addressed by index, since the bridge carries
+     * numbers -- and a counter that moves when the folder picker returns one.
+     */
+    val clipSaveBaseName: String = "",
+    val clipSaveFolders: List<PlayerClipSaveFolderItem> = emptyList(),
+    val clipSavePickToken: Int = 0,
+    val clipSaveCanChoose: Boolean = false,
     val showP2pConsent: Boolean = false,
     val subtitleActiveTab: String = "BuiltIn",
     val subtitleLanguageItems: List<PlayerControlSubtitleLanguageItem> = emptyList(),
@@ -467,4 +476,11 @@ data class PlayerClipLibraryItem(
     val fileName: String,
     val rangeLabel: String,
     val durationLabel: String,
+)
+
+/** A folder Save as offers. [isLastUsed] marks the one the last Save as went to. */
+data class PlayerClipSaveFolderItem(
+    val path: String,
+    val isClipsFolder: Boolean,
+    val isLastUsed: Boolean,
 )

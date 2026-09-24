@@ -1104,18 +1104,18 @@ clipAddRangeButton.addEventListener("click", event => {
   clipAddRange();
 });
 
-clipExportButton.addEventListener("click", event => {
-  event.stopPropagation();
-  const ranges = clipExportableRanges();
+/**
+ * Hands every range to Kotlin through `sendRange`, then clears them. Shared by
+ * Export and Save as (clip-save.js), which differ only in what follows each
+ * In/Out pair on the wire.
+ */
+const clipQueueExports = (ranges, sendRange) => {
   if (ranges.length === 0) return;
   clipPreviewActive = false;
-  // Kotlin holds no state between these: clipExport starts a job from whatever
-  // clipStart/clipEnd last said, so one triple per range queues one job per
-  // range, and they encode concurrently.
-  ranges.forEach(range => {
+  ranges.forEach((range, index) => {
     send("clipStart", range.inMs / 1000);
     send("clipEnd", range.outMs / 1000);
-    send("clipExport", 0);
+    sendRange(range, index);
   });
   // The ranges live in the Exports panel now; leaving them here would re-queue
   // every one of them on the next press.
@@ -1123,6 +1123,14 @@ clipExportButton.addEventListener("click", event => {
   clipDraft = { inMs: null, outMs: null };
   clipZoomView = null;
   renderClipUi();
+};
+
+clipExportButton.addEventListener("click", event => {
+  event.stopPropagation();
+  // Kotlin holds no state between these: clipExport starts a job from whatever
+  // clipStart/clipEnd last said, so one triple per range queues one job per
+  // range, and they encode concurrently.
+  clipQueueExports(clipExportableRanges(), () => send("clipExport", 0));
 });
 /** Row buttons carry the index of the job they act on, set during render. */
 const bindClipRowJobAction = (button, event) => {
@@ -1200,6 +1208,7 @@ const CLIP_KEY_GROUPS = [
   ]],
   ["Export and find", [
     [["X"], "Export every range"],
+    [["\u21e7X"], "Save as: name the clips, pick the folder"],
     [["/"], "Find a line of dialogue"],
     [["B"], "Browse the film as stills"],
     [["Space"], "Play / pause"],

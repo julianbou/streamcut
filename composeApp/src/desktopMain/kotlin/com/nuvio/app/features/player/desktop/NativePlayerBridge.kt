@@ -288,6 +288,8 @@ internal object NativePlayerBridge {
             "clip-controls.js" to readResourceBytes("/player-ui/clip-controls.js"),
             "clip-search.css" to readResourceBytes("/player-ui/clip-search.css"),
             "clip-search.js" to readResourceBytes("/player-ui/clip-search.js"),
+            "clip-save.css" to readResourceBytes("/player-ui/clip-save.css"),
+            "clip-save.js" to readResourceBytes("/player-ui/clip-save.js"),
             "fonts/jetbrains_sans_regular.ttf" to readResourceBytes(
                 "/composeResources/nuvio.composeapp.generated.resources/font/jetbrains_sans_regular.ttf",
             ),
