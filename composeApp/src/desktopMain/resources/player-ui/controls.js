@@ -3305,6 +3305,10 @@ root.addEventListener("wheel", event => {
     }
     return;
   }
+  // StreamCut: no wheel volume in the clipper build. It fought every panel that
+  // scrolls and turned stray trackpad motion into volume jumps. Returning before
+  // preventDefault leaves the wheel to whatever is under the cursor.
+  if (state.viewingChromeEnabled === false) return;
   event.preventDefault();
   const delta = Math.sign(event.deltaY) * -1;
   if (delta !== 0) {

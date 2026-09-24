@@ -2,6 +2,7 @@ package com.nuvio.app.features.player.desktop
 
 import androidx.compose.ui.unit.IntSize
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.settings.AppIconRepository
 import java.awt.GraphicsEnvironment
 import java.awt.KeyboardFocusManager
@@ -154,9 +155,12 @@ internal object DesktopPlayerPictureInPicture {
         notifyChanged()
     }
 
+    // Off in the clipper build: a floating mini-player is for watching, and
+    // clipping happens in the full window.
     private fun isSupportedHost(): Boolean =
-        DesktopHostOs.current == DesktopHostOs.WINDOWS ||
-            DesktopHostOs.current == DesktopHostOs.MACOS
+        AppFeaturePolicy.viewingChromeEnabled &&
+            (DesktopHostOs.current == DesktopHostOs.WINDOWS ||
+                DesktopHostOs.current == DesktopHostOs.MACOS)
 
     private fun videoAspectRatio(): Float =
         if (lastVideoSize.width > 0 && lastVideoSize.height > 0) {

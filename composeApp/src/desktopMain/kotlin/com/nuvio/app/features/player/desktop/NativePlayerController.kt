@@ -1458,8 +1458,10 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField(
             "pipLabel",
-            if (DesktopHostOs.current == DesktopHostOs.WINDOWS ||
-                DesktopHostOs.current == DesktopHostOs.MACOS
+            // A blank label hides the PiP button; the clipper build has no PiP.
+            if (AppFeaturePolicy.viewingChromeEnabled &&
+                (DesktopHostOs.current == DesktopHostOs.WINDOWS ||
+                    DesktopHostOs.current == DesktopHostOs.MACOS)
             ) {
                 pipLabel
             } else {

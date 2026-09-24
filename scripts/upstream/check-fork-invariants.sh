@@ -57,6 +57,15 @@ check "privacy policy is StreamCut's" \
 echo "Clipper build"
 check "viewing chrome stays gated off on desktop" \
   composeApp/src/desktopMain/kotlin/com/nuvio/app/core/build/AppFeaturePolicy.desktop.kt 'viewingChromeEnabled: Boolean = false'
+check "picture-in-picture cannot open in the clipper build" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/DesktopPlayerPictureInPicture.kt 'AppFeaturePolicy\.viewingChromeEnabled &&' \
+  "isSupportedHost() in DesktopPlayerPictureInPicture.kt must require AppFeaturePolicy.viewingChromeEnabled"
+check "picture-in-picture button stays hidden in the clipper build" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt 'AppFeaturePolicy\.viewingChromeEnabled &&' \
+  "the pipLabel field in NativePlayerController.kt must be blank unless AppFeaturePolicy.viewingChromeEnabled"
+check "mouse wheel never changes volume in the clipper build" \
+  composeApp/src/desktopMain/resources/player-ui/controls.js 'if \(state\.viewingChromeEnabled === false\) return;' \
+  "the root wheel handler in controls.js must return before sendKeyboardVolume when viewingChromeEnabled is false"
 if [[ -d composeApp/src/commonMain/kotlin/com/nuvio/app/features/profiles ]]; then
   fail "profiles feature stays deleted" "git rm -r composeApp/src/commonMain/kotlin/com/nuvio/app/features/profiles (see the sync-upstream skill)"
 else

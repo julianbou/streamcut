@@ -21,7 +21,7 @@ expect object AppFeaturePolicy {
     /**
      * Chrome that exists to make watching comfortable: the pause metadata card,
      * the skip-intro and next-episode prompts, the opening logo animation, hero
-     * trailers and Continue Watching.
+     * trailers, Continue Watching and desktop picture-in-picture.
      *
      * The clipper build turns all of it off. Pausing is how you inspect a frame,
      * so nothing may cover one; and anything that advances playback on its own
