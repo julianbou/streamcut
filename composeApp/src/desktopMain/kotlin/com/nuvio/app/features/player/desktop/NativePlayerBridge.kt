@@ -57,6 +57,8 @@ internal object NativePlayerBridge {
         runCatching { reparentSurfaceNative(handle, hostViewPtr) }.isSuccess
     external fun setPaused(handle: Long, paused: Boolean)
     external fun seekTo(handle: Long, positionMs: Long)
+    /** Lands on the exact frame; [seekTo] snaps to the keyframe before it. */
+    external fun seekExact(handle: Long, positionMs: Long)
     external fun seekBy(handle: Long, offsetMs: Long)
     external fun setSpeed(handle: Long, speed: Float)
     external fun adjustVolume(handle: Long, delta: Float)

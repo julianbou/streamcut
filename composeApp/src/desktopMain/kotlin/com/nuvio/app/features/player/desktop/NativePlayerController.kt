@@ -508,6 +508,9 @@ internal class NativePlayerController(
                     seekTo(value.toLong())
                 }
             }
+            // The clipper's `,` / `.` step. Not a scrubFinish: that seek snaps to a
+            // keyframe, so a one-frame target lands back where it started.
+            "clipFrameSeek" -> seekExact(value.toLong())
             "toggleFullscreen" -> {
                 if (DesktopPlayerPictureInPicture.isEnabled) {
                     DesktopPlayerPictureInPicture.toggle()
@@ -919,6 +922,17 @@ internal class NativePlayerController(
     override fun seekTo(positionMs: Long) {
         log.d { "seekTo positionMs=$positionMs handle=$handle" }
         handle.takeIf { it != 0L }?.let { nativeSeekTo(it, positionMs) }
+    }
+
+    private fun seekExact(positionMs: Long) {
+        val current = handle.takeIf { it != 0L } ?: return
+        log.d { "seekExact positionMs=$positionMs handle=$current" }
+        try {
+            NativePlayerBridge.seekExact(current, positionMs)
+        } catch (_: UnsatisfiedLinkError) {
+            // A bridge library built before seekExact existed.
+            nativeSeekTo(current, positionMs)
+        }
     }
 
     override fun trySeekTo(positionMs: Long): Boolean {

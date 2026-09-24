@@ -101,6 +101,7 @@ static constexpr double kMaxVolumePercent = 200.0;
 - (void)setPaused:(BOOL)paused;
 - (BOOL)isPaused;
 - (void)seekToMilliseconds:(long long)positionMs;
+- (void)seekExactToMilliseconds:(long long)positionMs;
 - (void)seekByMilliseconds:(long long)offsetMs;
 - (void)setSpeed:(double)speed;
 - (double)speed;
@@ -1864,6 +1865,17 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     _cachedPositionSeconds.store(fmax((double)positionMs / 1000.0, 0.0));
 }
 
+// hr-seek is off player-wide so scrubbing stays fast, which means a plain seek
+// lands on the keyframe before its target -- and a one-frame step lands back on
+// the same keyframe, so nothing moves. Frame stepping asks for this one instead.
+- (void)seekExactToMilliseconds:(long long)positionMs {
+    if (!_mpv) return;
+    std::string seconds = std::to_string((double)positionMs / 1000.0);
+    const char *command[] = {"seek", seconds.c_str(), "absolute+exact", NULL};
+    mpv_command(_mpv, command);
+    _cachedPositionSeconds.store(fmax((double)positionMs / 1000.0, 0.0));
+}
+
 - (void)seekByMilliseconds:(long long)offsetMs {
     if (!_mpv) return;
     std::string seconds = std::to_string((double)offsetMs / 1000.0);
@@ -2765,6 +2777,20 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_seekTo(
     MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
     runOnMainAsync(^{
         [player seekToMilliseconds:positionMs];
+    });
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_seekExact(
+    JNIEnv * /* env */,
+    jobject /* bridge */,
+    jlong handle,
+    jlong positionMs
+) {
+    if (handle == 0) return;
+    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
+    runOnMainAsync(^{
+        [player seekExactToMilliseconds:positionMs];
     });
 }
 
