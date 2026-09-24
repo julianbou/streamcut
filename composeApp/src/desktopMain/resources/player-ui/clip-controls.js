@@ -1350,6 +1350,25 @@ const clipFrameKnowledgeFor = session => {
   clipFrameSession = session;
   clipFramePresent.clear();
   clipFrameMissing.clear();
+  clipFrameMissingReady = -1;
+};
+
+/** The ready count [clipFrameMissing] was learned against. */
+let clipFrameMissingReady = -1;
+
+/**
+ * Forgets the misses once Kotlin reports more frames written.
+ *
+ * A miss only means "not written yet" while the strip is building. Kept
+ * forever, the frames the hover asked for early stayed refused after they
+ * existed, so the preview showed a handful of stills until Scenes loaded every
+ * cell and cleared them one by one. Clearing on each new ready count costs at
+ * most one failed file load per hovered frame per step of the build.
+ */
+const clipFrameMissingRefresh = ready => {
+  if (ready === clipFrameMissingReady) return;
+  clipFrameMissingReady = ready;
+  clipFrameMissing.clear();
 };
 
 /** Used only for the first hover, before the element has ever been laid out. */
@@ -1374,18 +1393,26 @@ const clipHoverHide = () => {
 };
 
 /**
- * The nearest frame to [index] that is known to exist, or the index itself when
- * nothing is known yet -- an untried frame is worth attempting, and the attempt
- * is what fills in [clipFramePresent] for next time.
+ * [index] itself unless it is known to be missing, then the nearest neighbour
+ * known to exist.
+ *
+ * The exact frame first, even untried: the attempt is what fills in
+ * [clipFramePresent]. Preferring a known neighbour over an untried exact frame
+ * meant every loaded still captured the two either side of it, which were then
+ * never asked for -- a 15-frame strip hovered as about five steps until Scenes
+ * had loaded every cell.
  */
 const clipHoverNearest = index => {
-  if (clipFramePresent.has(index)) return index;
+  if (!clipFrameMissing.has(index)) return index;
   for (let step = 1; step <= CLIP_HOVER_NEIGHBOURS; step += 1) {
     if (clipFramePresent.has(index - step)) return index - step;
     if (clipFramePresent.has(index + step)) return index + step;
   }
-  return clipFrameMissing.has(index) ? -1 : index;
+  return -1;
 };
+
+/** The last move over the bar, so a failed frame can fall back without another. */
+let clipHoverLastEvent = null;
 
 const clipHoverMove = event => {
   const live = {
@@ -1403,7 +1430,9 @@ const clipHoverMove = event => {
   }
   clipHoverTrace(3);
   clipFrameKnowledgeFor(session);
+  if (session === live.session) clipFrameMissingRefresh(Number(state.clipStripReady) || 0);
 
+  clipHoverLastEvent = event;
   const ms = clipTrackMsFromEvent(event);
   // -1 because frame i sits at (i+1) spacings, as above.
   const target = Math.max(0, Math.min(count - 1, Math.round(ms / spacingMs) - 1));
@@ -1440,7 +1469,12 @@ const clipHoverMove = event => {
   img.addEventListener("error", () => {
     clipHoverTrace(6);
     clipFrameMissing.add(index);
-    if (clipHoverIndex === index) clipHoverHide();
+    // Also forgotten as present, or the retry below could pick it again forever.
+    clipFramePresent.delete(index);
+    if (clipHoverIndex !== index) return;
+    // Still under the cursor: go again, which now settles on a neighbour.
+    clipHoverIndex = -1;
+    if (clipHoverLastEvent) clipHoverMove(clipHoverLastEvent);
   });
   clipHoverTrace(4);
   img.src = `strip/${session}/${index}.jpg`;
