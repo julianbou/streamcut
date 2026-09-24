@@ -789,7 +789,11 @@ const clipStepPlayhead = frames => {
   if (clipDraftDurationMs <= 0) return;
   clipPauseForInspection();
   const from = Math.max(0, Number(state.positionMs) || 0);
-  clipSeekTo(clipFrameStepMs(from, frames));
+  // Not clipSeekTo: its scrubFinish seek snaps to a keyframe, so a one-frame
+  // target lands back on the same picture. clipFrameSeek asks for the exact one.
+  const target = Math.max(0, Math.min(Number(state.durationMs) || Infinity, clipFrameStepMs(from, frames)));
+  state.positionMs = target;
+  send("clipFrameSeek", target);
   noteChromeActivity();
 };
 

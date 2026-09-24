@@ -1037,6 +1037,15 @@ public:
         mpvApi().command(mpv, command);
     }
 
+    // hr-seek is off so scrubbing stays fast; frame stepping needs the exact frame.
+    void seekExactToMilliseconds(long long positionMs) {
+        std::lock_guard<std::mutex> lock(mpvMutex);
+        if (!mpv) return;
+        std::string seconds = std::to_string((double)positionMs / 1000.0);
+        const char *command[] = {"seek", seconds.c_str(), "absolute+exact", nullptr};
+        mpvApi().command(mpv, command);
+    }
+
     void seekByMilliseconds(long long offsetMs) {
         std::lock_guard<std::mutex> lock(mpvMutex);
         if (!mpv) return;
@@ -2388,6 +2397,12 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_seekTo(JNIEnv *, jobject, jlong handle, jlong positionMs) {
     auto player = playerFromHandle(handle);
     if (player) player->seekToMilliseconds(positionMs);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_seekExact(JNIEnv *, jobject, jlong handle, jlong positionMs) {
+    auto player = playerFromHandle(handle);
+    if (player) player->seekExactToMilliseconds(positionMs);
 }
 
 extern "C" JNIEXPORT void JNICALL
