@@ -154,6 +154,16 @@
     </section>
     <div class="content">
       <header class="header">
+        <div class="clip-header-leading">
+          <button class="clip-action compact" id="clipLibraryButton" type="button" hidden>Clips</button>
+          <div class="clip-library-panel" id="clipLibraryPanel" hidden>
+            <div class="clip-library-head">
+              <span id="clipLibraryTitle">Clips from this title</span>
+              <span class="clip-library-path" id="clipLibraryPath"></span>
+            </div>
+            <div class="clip-library-list" id="clipLibraryList"></div>
+          </div>
+        </div>
         <div class="clip-search-panel" id="clipSearchPanel" hidden>
           <div class="clip-search-head">
             <select class="clip-search-source" id="clipSearchSource" title="Subtitle to search" hidden></select>
@@ -245,14 +255,18 @@
           </div>
           <div class="clip-library-list" id="clipJobsList"></div>
         </div>
-        <div class="clip-library-panel" id="clipLibraryPanel" hidden>
-          <div class="clip-library-head">
-            <span id="clipLibraryTitle">Clips from this title</span>
-            <span class="clip-library-path" id="clipLibraryPath"></span>
-          </div>
-          <div class="clip-library-list" id="clipLibraryList"></div>
-        </div>
         <div class="clip-row" id="clipRow" hidden>
+          <div class="clip-row-status">
+            <span class="clip-inline-status" id="clipStatus" role="status" aria-live="polite"></span>
+            <div class="clip-progress-track" id="clipProgressTrack" hidden>
+              <div class="clip-progress-bar" id="clipProgressBar"></div>
+            </div>
+            <button class="clip-action compact" id="clipUndoButton" type="button" hidden>Undo</button>
+            <button class="clip-action compact" id="clipCancelButton" type="button" hidden>Cancel export</button>
+            <button class="clip-action compact" id="clipRevealButton" type="button" hidden>Show file</button>
+            <button class="clip-action compact" id="clipDismissButton" type="button" aria-label="Dismiss" title="Dismiss" hidden><svg class="clip-dismiss-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
+            <button class="clip-action compact" id="clipJobsButton" type="button" hidden>Exports</button>
+          </div>
           <div class="clip-row-main">
             <div class="clip-group clip-group-marks" role="group" aria-label="Clip points">
               <div class="clip-point">
@@ -283,18 +297,6 @@
               <button class="clip-action primary" id="clipExportButton" type="button" data-key="X" title="Export (X)">Export clip</button>
             </div>
           </div>
-          <div class="clip-row-status">
-            <span class="clip-inline-status" id="clipStatus" role="status" aria-live="polite"></span>
-            <div class="clip-progress-track" id="clipProgressTrack" hidden>
-              <div class="clip-progress-bar" id="clipProgressBar"></div>
-            </div>
-            <button class="clip-action compact" id="clipUndoButton" type="button" hidden>Undo</button>
-            <button class="clip-action compact" id="clipCancelButton" type="button" hidden>Cancel export</button>
-            <button class="clip-action compact" id="clipRevealButton" type="button" hidden>Show file</button>
-            <button class="clip-action compact" id="clipDismissButton" type="button" aria-label="Dismiss" title="Dismiss" hidden><svg class="clip-dismiss-icon" aria-hidden="true"><use href="#icon-close"></use></svg></button>
-            <button class="clip-action compact" id="clipJobsButton" type="button" hidden>Exports</button>
-            <button class="clip-action compact" id="clipLibraryButton" type="button" hidden>Clips</button>
-          </div>
         </div>
         <div class="scrub-wrap" id="scrubWrap">
           <input id="seek" class="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek">
@@ -309,7 +311,7 @@
           <div class="clip-zoom-track" id="clipZoomTrack">
             <div class="clip-range-list" id="clipZoomRangeList"></div>
             <div class="clip-zoom-range" id="clipZoomRange"></div>
-            <div class="clip-zoom-playhead" id="clipZoomPlayhead"></div>
+            <div class="clip-zoom-playhead" id="clipZoomPlayhead"><span class="clip-zoom-now" id="clipZoomNow"></span></div>
             <div class="clip-zoom-handle" id="clipZoomHandleIn" data-clip-handle="in" role="slider" tabindex="0" aria-label="IN point, zoomed"></div>
             <div class="clip-zoom-handle" id="clipZoomHandleOut" data-clip-handle="out" role="slider" tabindex="0" aria-label="OUT point, zoomed"></div>
           </div>

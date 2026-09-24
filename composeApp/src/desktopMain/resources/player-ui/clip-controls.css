@@ -487,6 +487,33 @@
      what is already decided, and it is usually inside one of them. */
   z-index: 2;
 }
+/* The current time, hanging under the playhead. The wrap leaves room for it
+   below the track so it never touches the play/volume row. */
+.clip-zoom-wrap:not([hidden]) {
+  margin-bottom: 14px;
+}
+.clip-zoom-now {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .8);
+}
+.clip-zoom-now[data-edge="start"] {
+  left: 0;
+  transform: none;
+}
+.clip-zoom-now[data-edge="end"] {
+  left: auto;
+  right: 0;
+  transform: none;
+}
 .clip-zoom-handle {
   position: absolute;
   top: -3px;
@@ -590,6 +617,48 @@
 .clip-action.danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--riso-red) 32%, transparent);
   color: #fff;
+}
+
+/* --- saved clips, top left ---------------------------------------------
+   The Clips button lives in the header, opposite the player actions, and its
+   panel drops down from it. Nothing clip-related may sit between the clip row
+   and the progress bar: that gap is where the eye travels from the marks to
+   the bar they describe. Fades with the rest of the header. */
+.clip-header-leading {
+  position: relative;
+  margin-right: auto;
+  flex: 0 0 auto;
+  transition: opacity 160ms ease;
+}
+.player.chrome-hidden .clip-header-leading,
+.player.native-resizing .clip-header-leading,
+.player.error-active .clip-header-leading {
+  opacity: 0;
+  pointer-events: none;
+}
+.clip-header-leading > .clip-action {
+  min-height: var(--header-button);
+  padding: 0 16px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: rgba(0, 0, 0, .35);
+  font-size: 13px;
+}
+.clip-header-leading > .clip-action:hover:not(:disabled) {
+  background: rgba(0, 0, 0, .5);
+}
+.clip-header-leading > .clip-library-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(560px, calc(100vw - 2 * var(--hp)));
+  max-height: min(340px, 50vh);
+  margin: 0;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .45);
+  z-index: 5;
+}
+.clip-header-leading > .clip-library-panel[hidden] {
+  display: none;
 }
 
 /* --- exports in flight ---------------------------------------------------

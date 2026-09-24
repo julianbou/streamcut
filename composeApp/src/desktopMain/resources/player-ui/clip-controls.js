@@ -40,6 +40,7 @@ const clipZoomWrap = document.getElementById("clipZoomWrap");
 const clipZoomTrack = document.getElementById("clipZoomTrack");
 const clipZoomRange = document.getElementById("clipZoomRange");
 const clipZoomPlayhead = document.getElementById("clipZoomPlayhead");
+const clipZoomNow = document.getElementById("clipZoomNow");
 const clipZoomHandleIn = document.getElementById("clipZoomHandleIn");
 const clipZoomHandleOut = document.getElementById("clipZoomHandleOut");
 const clipZoomStartLabel = document.getElementById("clipZoomStartLabel");
@@ -254,11 +255,25 @@ const clipZoomPaint = () => {
     clipZoomRange.style.width = `${outPct - inPct}%`;
   }
   clipPaintRangeList(clipZoomRangeList, clipZoomPercentFor);
-  clipZoomPlayhead.style.left = `${clipZoomPercentFor(Number(state.positionMs) || 0)}%`;
+  clipZoomSetPlayhead(Number(state.positionMs) || 0);
   clipZoomStartLabel.textContent = formatClipTime(clipZoomView.startMs);
   clipZoomEndLabel.textContent = formatClipTime(clipZoomView.endMs);
   const windowSec = (clipZoomView.endMs - clipZoomView.startMs) / 1000;
   clipZoomScale.textContent = `${windowSec < 10 ? windowSec.toFixed(1) : Math.round(windowSec)}s view`;
+};
+
+/**
+ * Moves the zoom playhead and the timecode riding under it.
+ *
+ * The only "where am I" readout next to the bars: the runtime label sits at the
+ * far bottom right, away from where the eye is while trimming. Near either end
+ * the label flips to hang inward rather than spill over the edge timecodes.
+ */
+const clipZoomSetPlayhead = positionMs => {
+  const pct = clipZoomPercentFor(positionMs);
+  clipZoomPlayhead.style.left = `${pct}%`;
+  clipZoomNow.textContent = formatClipTime(positionMs);
+  clipZoomNow.dataset.edge = pct < 6 ? "start" : pct > 94 ? "end" : "";
 };
 
 const clipZoomUpdatePlayhead = positionMs => {
@@ -269,9 +284,10 @@ const clipZoomUpdatePlayhead = positionMs => {
   if (!clipHasRange() && clipDragTarget == null) {
     clipZoomPanTo(positionMs);
     clipZoomPaint();
+    clipZoomSetPlayhead(positionMs);
     return;
   }
-  clipZoomPlayhead.style.left = `${clipZoomPercentFor(positionMs)}%`;
+  clipZoomSetPlayhead(positionMs);
 };
 
 const renderClipZoom = () => {
@@ -629,7 +645,7 @@ const renderClipUi = () => {
   renderClipLibrary();
   // The line collapses when it has nothing to say, so an idle row is one line.
   clipRowStatus.hidden = !statusText && !running && [
-    clipUndoButton, clipCancelButton, clipRevealButton, clipDismissButton, clipJobsButton, clipLibraryButton,
+    clipUndoButton, clipCancelButton, clipRevealButton, clipDismissButton, clipJobsButton,
   ].every(button => button.hidden);
   clipSyncHandleAria();
 };
