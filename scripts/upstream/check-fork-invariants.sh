@@ -68,6 +68,9 @@ check "player loads Save as" composeApp/src/desktopMain/resources/player-ui/cont
 check "Save as is extracted with the player page" \
   composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt '"clip-save\.js" to' \
   "exportControlsPageAssets() in NativePlayerBridge.kt must list clip-save.js and clip-save.css, or the running app 404s them"
+check "clipper build reuses the last stream link by default" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt 'loadStreamReuseLastLinkEnabled\(\) \?: DefaultStreamReuseLastLink' \
+  "PlayerSettingsRepository.kt: the saved-setting fallback must be DefaultStreamReuseLastLink (on in the clipper build)"
 check "clipper build defaults to the top bar" \
   composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DesktopNavigationLayout.kt 'viewingChromeEnabled\) Sidebar else TopBar'
 check "clip keys run before upstream's single-key shortcuts" \
