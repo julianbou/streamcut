@@ -995,6 +995,33 @@ body.clipper-mode .clip-zoom-edge {
 body.clipper-mode .clip-io-time {
   color: var(--riso-paper);
 }
+/* The key for each clip-row action, printed on the button. Keyboard first is
+   the point of the row, and a key listed only in the ? sheet went unfound --
+   A (set the range aside) above all. Drawn from data-key so the labels that
+   JS rewrites (Export N clips, Stop preview) keep their cap. */
+body.clipper-mode [data-key]::after {
+  content: attr(data-key);
+  display: inline-block;
+  min-width: 15px;
+  margin-left: 7px;
+  padding: 0 4px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(var(--riso-paper-rgb), .24);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 700;
+  text-align: center;
+  color: rgba(var(--riso-paper-rgb), .66);
+}
+body.clipper-mode .clip-action.primary[data-key]::after {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .28);
+  color: rgba(0, 0, 0, .6);
+}
+body.clipper-mode .clip-action.primary:disabled[data-key]::after,
+body.clipper-mode .clip-action:disabled[data-key]::after {
+  box-shadow: inset 0 0 0 1px rgba(var(--riso-paper-rgb), .12);
+  color: rgba(var(--riso-paper-rgb), .34);
+}
 /* Preview and Add range both act on the selection being marked, so they sit
    with the marks as one pair, apart from the ranges already set aside. */
 .clip-group-draft {
