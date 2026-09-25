@@ -407,7 +407,7 @@ const renderClipLibrary = () => {
 
     const meta = document.createElement("span");
     meta.className = "clip-library-item-meta";
-    meta.textContent = `${item.rangeLabel || ""} - ${item.durationLabel || ""}`;
+    meta.textContent = [item.rangeLabel, item.durationLabel].filter(Boolean).join(" \u00b7 ");
     row.appendChild(meta);
 
     // The index is the address: Kotlin resolves it against the same

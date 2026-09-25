@@ -14,6 +14,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -75,17 +76,19 @@ internal fun ClipCard(
     var menuOpen by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
+    // Tabbing onto a clip lights it like pointing at it, plus a pink ring below.
+    val focused by interactionSource.collectIsFocusedAsState()
     // Resolved once per entry: the drag modifier needs a path, while identity
     // everywhere else in the clip feature is the file: URI.
     val filePath = remember(entry.outputFileUri) { ClipRepository.filePathOf(entry.outputFileUri) }
 
-    val glow by animateFloatAsState(if (hovered || selected) 1f else 0f, tween(320), label = "clipCardGlow")
+    val glow by animateFloatAsState(if (hovered || focused || selected) 1f else 0f, tween(320), label = "clipCardGlow")
     Column(
         modifier = modifier
             .hoverable(interactionSource)
             .fileDragSource(filePath)
             .secondaryClick { menuOpen = true }
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
     ) {
         Box(
             modifier = Modifier
@@ -98,7 +101,17 @@ internal fun ClipCard(
                 // Sun is the brightest ink; at full strength a missing still
                 // shouts louder than the clips that have one.
                 // Selection is the pink bloom plus the check -- never an outline.
-                .risoInkTile(Riso.Sun, strength = 0.42f),
+                .risoInkTile(Riso.Sun, strength = 0.42f)
+                // Keyboard focus draws pink ink over the still: the glow alone
+                // sits behind a full-bleed frame and barely shows, so a Tab
+                // through the grid had nothing to follow.
+                .then(
+                    if (focused && !hovered) {
+                        Modifier.border(2.dp, Riso.Pink, RoundedCornerShape(14.dp))
+                    } else {
+                        Modifier
+                    },
+                ),
         ) {
             // The clip's own midpoint frame, falling back to the title's poster
             // for clips exported before stills were captured.

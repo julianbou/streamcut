@@ -121,10 +121,13 @@
   font-weight: 600;
 }
 
-/* An exact hit is the line as written; anything else is a guess worth flagging. */
+/* An exact hit is the line as written; anything else is a guess worth flagging.
+   Exact is set in full paper, a guess stays dim: confidence is contrast, not a
+   colour, since every ink already owns a meaning and green is not one of them. */
 .clip-search-tag.exact {
-  border-color: rgba(126, 226, 168, .35);
-  color: rgba(126, 226, 168, .9);
+  border-color: rgba(242, 236, 228, .42);
+  background: rgba(242, 236, 228, .1);
+  color: #f2ece4;
 }
 
 .clip-search-spacer {

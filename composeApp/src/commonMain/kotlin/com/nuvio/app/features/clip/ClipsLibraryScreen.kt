@@ -6,6 +6,11 @@ import com.nuvio.app.core.ui.RisoDisplay
 import com.nuvio.app.core.ui.risoBlooms
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +43,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +71,8 @@ import nuvio.composeapp.generated.resources.clip_empty_title
 import nuvio.composeapp.generated.resources.clip_library_count_format
 import nuvio.composeapp.generated.resources.clip_library_filter_placeholder
 import nuvio.composeapp.generated.resources.clip_library_free_format
+import nuvio.composeapp.generated.resources.clip_library_no_match_format
+import nuvio.composeapp.generated.resources.clip_library_no_match_hint
 import nuvio.composeapp.generated.resources.clip_library_open_folder
 import nuvio.composeapp.generated.resources.clip_library_selected_format
 import nuvio.composeapp.generated.resources.clip_library_sort_largest
@@ -154,6 +166,13 @@ internal fun ClipsLibraryScreen(
 
         if (entries.isEmpty()) {
             ClipsEmptyCard()
+            return@Column
+        }
+
+        // A filter that matches nothing used to leave a blank page, which reads
+        // as "the clips are gone" rather than "the filter is too narrow".
+        if (visible.isEmpty()) {
+            ClipsNoMatch(query = query.trim())
             return@Column
         }
 
@@ -326,6 +345,7 @@ private fun ClipsLibraryHeader(
                 )
                 ClipsChip(
                     label = stringResource(Res.string.clip_action_delete),
+                    danger = true,
                     onClick = onDeleteSelection,
                 )
                 ClipsChip(
@@ -361,24 +381,86 @@ private fun ClipsSearchField(query: String, onQueryChange: (String) -> Unit) {
                 TextStyle(color = MaterialTheme.colorScheme.onSurface),
             ),
             cursorBrush = SolidColor(Riso.Pink),
-            modifier = Modifier.fillMaxWidth(),
+            // Escape clears a non-empty filter, as it does in the home masthead.
+            modifier = Modifier
+                .fillMaxWidth()
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.Escape && query.isNotEmpty()) {
+                        onQueryChange("")
+                        true
+                    } else {
+                        false
+                    }
+                },
         )
     }
 }
 
 @Composable
-private fun ClipsChip(label: String, selected: Boolean = false, onClick: () -> Unit) {
+private fun ClipsChip(
+    label: String,
+    selected: Boolean = false,
+    danger: Boolean = false,
+    onClick: () -> Unit,
+) {
+    // Hover and keyboard focus are one affordance (DESIGN.md): both raise the
+    // chip's stock, and focus adds the pink ink line, so a Tab through the
+    // header always shows where it is.
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val focused by interactionSource.collectIsFocusedAsState()
+    val lifted = hovered || focused
     Text(
         text = label,
         style = MaterialTheme.typography.bodySmall,
         fontWeight = FontWeight.SemiBold,
-        color = if (selected) Riso.Stock else Riso.Paper.copy(alpha = 0.82f),
+        color = when {
+            selected -> Riso.Stock
+            danger -> Riso.Red
+            lifted -> Riso.Paper
+            else -> Riso.Paper.copy(alpha = 0.82f)
+        },
         modifier = Modifier
             .clip(RoundedCornerShape(percent = 50))
-            .background(if (selected) Riso.Pink else Riso.Paper.copy(alpha = 0.07f))
-            .clickable(onClick = onClick)
+            .background(
+                when {
+                    selected -> Riso.Pink
+                    lifted -> Riso.Paper.copy(alpha = 0.14f)
+                    else -> Riso.Paper.copy(alpha = 0.07f)
+                },
+            )
+            .then(
+                if (focused) {
+                    // On the pink selected chip a pink ring would vanish; it rings in paper.
+                    Modifier.border(1.5.dp, if (selected) Riso.Paper else Riso.Pink, RoundedCornerShape(percent = 50))
+                } else {
+                    Modifier
+                },
+            )
+            .hoverable(interactionSource)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
+}
+
+/** What the grid says when the filter leaves nothing to show. */
+@Composable
+private fun ClipsNoMatch(query: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Text(
+            text = stringResource(Res.string.clip_library_no_match_format, query),
+            style = TextStyle(fontFamily = RisoDisplay, fontSize = 34.sp, lineHeight = 36.sp, fontWeight = FontWeight.ExtraBold),
+            color = Riso.Paper,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(Res.string.clip_library_no_match_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = Riso.PaperDim,
+        )
+    }
 }
 
 /**
