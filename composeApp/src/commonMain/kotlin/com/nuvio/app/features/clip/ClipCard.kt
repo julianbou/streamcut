@@ -76,7 +76,7 @@ internal fun ClipCard(
     var menuOpen by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
-    // Tabbing onto a clip answers with the same ink as pointing at it.
+    // Tabbing onto a clip lights it like pointing at it, plus a pink ring below.
     val focused by interactionSource.collectIsFocusedAsState()
     // Resolved once per entry: the drag modifier needs a path, while identity
     // everywhere else in the clip feature is the file: URI.
@@ -101,7 +101,17 @@ internal fun ClipCard(
                 // Sun is the brightest ink; at full strength a missing still
                 // shouts louder than the clips that have one.
                 // Selection is the pink bloom plus the check -- never an outline.
-                .risoInkTile(Riso.Sun, strength = 0.42f),
+                .risoInkTile(Riso.Sun, strength = 0.42f)
+                // Keyboard focus draws pink ink over the still: the glow alone
+                // sits behind a full-bleed frame and barely shows, so a Tab
+                // through the grid had nothing to follow.
+                .then(
+                    if (focused && !hovered) {
+                        Modifier.border(2.dp, Riso.Pink, RoundedCornerShape(14.dp))
+                    } else {
+                        Modifier
+                    },
+                ),
         ) {
             // The clip's own midpoint frame, falling back to the title's poster
             // for clips exported before stills were captured.

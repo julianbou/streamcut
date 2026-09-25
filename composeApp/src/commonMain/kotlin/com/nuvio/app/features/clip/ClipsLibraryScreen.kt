@@ -430,8 +430,9 @@ private fun ClipsChip(
                 },
             )
             .then(
-                if (focused && !selected) {
-                    Modifier.border(1.5.dp, Riso.Pink, RoundedCornerShape(percent = 50))
+                if (focused) {
+                    // On the pink selected chip a pink ring would vanish; it rings in paper.
+                    Modifier.border(1.5.dp, if (selected) Riso.Paper else Riso.Pink, RoundedCornerShape(percent = 50))
                 } else {
                     Modifier
                 },

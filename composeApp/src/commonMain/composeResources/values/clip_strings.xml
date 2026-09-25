@@ -20,7 +20,7 @@
     <string name="clip_library_free_format">%1$s free</string>
     <string name="clip_library_filter_placeholder">Filter by title or file name</string>
     <string name="clip_library_no_match_format">No clip matches “%1$s”</string>
-    <string name="clip_library_no_match_hint">Esc clears the filter.</string>
+    <string name="clip_library_no_match_hint">Clear the filter to see every clip.</string>
     <string name="clip_library_sort_newest">Newest</string>
     <string name="clip_library_sort_longest">Longest</string>
     <string name="clip_library_sort_largest">Largest</string>
