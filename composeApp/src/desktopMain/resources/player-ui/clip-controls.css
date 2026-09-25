@@ -1105,7 +1105,8 @@ body.clipper-mode .track-panel {
   background-image: var(--riso-grain);
 }
 body.clipper-mode .clip-keys-card,
-body.clipper-mode .clip-library-panel {
+body.clipper-mode .clip-library-panel,
+body.clipper-mode .clip-search-panel {
   background-color: rgba(26, 20, 32, .96);
 }
 body.clipper-mode .clip-strip {
@@ -1126,6 +1127,65 @@ body.clipper-mode .title {
 /* A readout is not an action: dim paper, not pink. */
 body.clipper-mode .clip-zoom-scale {
   color: rgba(var(--riso-paper-rgb), .66);
+}
+/* Panel names are headlines in the display face, never small tracked caps
+   (the No Eyebrow Rule). The folder path beside the name stays a quiet label. */
+body.clipper-mode .clip-library-head {
+  align-items: baseline;
+  gap: 10px;
+  font-family: "Riso Display", "Nuvio JetBrains Sans", sans-serif;
+  font-size: 22px;
+  line-height: 24px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  text-transform: none;
+  color: var(--riso-paper);
+}
+body.clipper-mode .clip-library-path {
+  font-family: "Nuvio JetBrains Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: rgba(var(--riso-paper-rgb), .62);
+}
+/* No outlines at rest: panels part from the picture by raised stock and grain. */
+body.clipper-mode .clip-library-panel,
+body.clipper-mode .clip-search-panel {
+  border-color: transparent;
+}
+body.clipper-mode .clip-library-item-name {
+  color: var(--riso-paper);
+}
+body.clipper-mode .clip-library-item-meta {
+  color: rgba(var(--riso-paper-rgb), .62);
+}
+/* Delete is the one destructive action in the panel; it reads as one before
+   the pointer gets there, not only on hover. */
+body.clipper-mode .clip-action.danger {
+  color: var(--riso-red);
+}
+body.clipper-mode .clip-action.danger:hover:not(:disabled) {
+  color: var(--riso-paper);
+}
+/* Volume is a level, not an action: it fills in paper like the played part of
+   the timeline, and the boost zone past 100% warns in riso red, the ink that
+   owns danger, instead of the viewing build's amber-to-red ramp. */
+body.clipper-mode .volume-slider::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(
+      to right,
+      transparent 0 50%,
+      rgba(241, 80, 96, 0) 50%,
+      rgba(241, 80, 96, .22) 66%,
+      rgba(241, 80, 96, .6) 84%,
+      var(--riso-red) 100%
+    ),
+    linear-gradient(rgba(var(--riso-paper-rgb), .92), rgba(var(--riso-paper-rgb), .92))
+      left center / var(--volume-position) 100% no-repeat,
+    rgba(var(--riso-paper-rgb), .22);
+}
+body.clipper-mode .volume-slider::-webkit-slider-thumb {
+  background: var(--riso-paper);
 }
 /* Loading as ink: the riso bloom (pink and blue overprinting) instead of a ring. */
 body.clipper-mode .center-spinner,

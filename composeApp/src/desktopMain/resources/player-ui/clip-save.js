@@ -411,7 +411,8 @@ const clipSaveRender = () => {
     ? [`${clipSaveLength(totalMs)} in all`]
     : [`${formatClipTime(ranges[0].inMs)} – ${formatClipTime(ranges[0].outMs)}`, clipSaveLength(totalMs)];
   if (state.clipSubtitlesAvailable) {
-    parts.push(state.clipBurnSubtitles === false ? "no subtitles" : "subtitles burned in");
+    // Same reading as the row's Subtitles button, so the two never disagree.
+    parts.push(state.clipBurnSubtitles ? "subtitles burned in" : "no subtitles");
   }
   clipSaveSummary.textContent = parts.join(" · ");
   clipSaveConfirm.textContent = count > 1 ? `Save ${count} clips` : "Save clip";
