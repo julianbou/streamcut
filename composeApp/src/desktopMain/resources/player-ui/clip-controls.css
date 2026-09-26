@@ -1224,6 +1224,7 @@ body.clipper-mode .clip-row.clip-jobs-open .clip-row-status > :not(#clipJobsButt
    in the column's flow, where opening one pushed the title up the picture. The
    title stays put on the left; --clip-row-top is set from clip-controls.js. */
 body.clipper-mode .progress > #clipJobsPanel,
+body.clipper-mode .progress > #clipRangesPanel,
 body.clipper-mode .progress > .clip-save {
   position: absolute;
   right: 0;
@@ -1237,6 +1238,101 @@ body.clipper-mode .progress > .clip-save {
    no traffic lights and keeps the row at the top. */
 body.clipper-mode.clip-mac-windowed .header {
   top: calc(var(--slider-bottom) + 22px + env(safe-area-inset-top));
+}
+/* --- ranges set aside ------------------------------------------------------
+   One sun button in the row ("8 ranges") instead of a chip per range; the list
+   lives in a panel over the row, each range named by a still from its middle.
+   A lit range (hovered in the list or on a track) rings in paper everywhere. */
+body.clipper-mode .clip-ranges-button {
+  background:
+    linear-gradient(color-mix(in srgb, var(--clip-set-aside) 18%, transparent), color-mix(in srgb, var(--clip-set-aside) 18%, transparent)),
+    rgba(var(--riso-stock-rgb), .82);
+  border-color: color-mix(in srgb, var(--clip-set-aside) 60%, transparent);
+  color: #fff3c4;
+}
+body.clipper-mode .clip-ranges-button[aria-expanded="true"] {
+  border-color: var(--clip-set-aside);
+}
+body.clipper-mode .clip-ranges-panel {
+  max-height: min(420px, 52vh);
+  padding: 12px 12px 10px;
+  gap: 10px;
+}
+.clip-ranges-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 4px;
+  border-radius: 10px;
+  transition: background-color 120ms ease;
+}
+.clip-ranges-item.is-lit {
+  background: color-mix(in srgb, var(--clip-set-aside) 14%, transparent);
+}
+.clip-ranges-go {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.clip-ranges-go:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.clip-ranges-shot {
+  flex: none;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  overflow: hidden;
+  /* No still yet: a grained tile of the range's own ink, never a flat box. */
+  background:
+    var(--riso-grain, none),
+    color-mix(in srgb, var(--clip-set-aside) 22%, rgb(var(--riso-stock-rgb, 20, 16, 25)));
+}
+.clip-ranges-shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.clip-ranges-time {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--riso-paper, #fff);
+  white-space: nowrap;
+}
+.clip-ranges-length {
+  margin-left: auto;
+  padding-right: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .66);
+}
+.clip-ranges-item .clip-action {
+  min-height: 24px;
+  padding: 2px 10px;
+  font-size: 12px;
+}
+.clip-range-item.is-lit {
+  box-shadow: 0 0 0 2px var(--riso-paper, #fff), 0 0 0 3px rgba(0, 0, 0, .5);
+  z-index: 1;
+}
+.clip-hover-range {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #fff3c4;
 }
 /* Readouts under the bar at a size that survives a bright frame. */
 body.clipper-mode .clip-zoom-now,
