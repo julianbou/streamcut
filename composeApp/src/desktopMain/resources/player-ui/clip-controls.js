@@ -259,7 +259,7 @@ const clipZoomPaint = () => {
   clipZoomStartLabel.textContent = formatClipTime(clipZoomView.startMs);
   clipZoomEndLabel.textContent = formatClipTime(clipZoomView.endMs);
   const windowSec = (clipZoomView.endMs - clipZoomView.startMs) / 1000;
-  clipZoomScale.textContent = `${windowSec < 10 ? windowSec.toFixed(1) : Math.round(windowSec)}s view`;
+  clipZoomScale.textContent = `Showing ${windowSec < 10 ? windowSec.toFixed(1) : Math.round(windowSec)} s`;
 };
 
 /**
@@ -321,9 +321,10 @@ const renderClipJobs = () => {
   const items = clipJobItems();
   const active = items.filter(item => item.isActive).length;
   clipJobsButton.hidden = items.length === 0;
-  clipJobsButton.textContent = active > 0 ? `Exports (${active})` : "Exports";
   const open = clipJobsOpen && items.length > 0;
+  clipJobsButton.textContent = open ? "Hide exports" : active > 0 ? `Exports (${active})` : "Exports";
   clipJobsPanel.hidden = !open;
+  clipRow.classList.toggle("clip-jobs-open", open);
   if (!open) return;
 
   clipJobsList.textContent = "";
@@ -516,17 +517,49 @@ const clipShortPath = path => String(path || "").replace(/^\/(Users|home)\/[^/]+
  */
 let clipSubtitleLiftSent = -1;
 let clipSubtitleLiftFrame = 0;
+/**
+ * While cutting, the chrome is pinned open, and laid over the picture it hid
+ * the bottom of the very frame being judged. So once anything is marked the
+ * picture is laid out above the chrome instead (mpv's bottom video margin,
+ * percent of the window), and gets the whole window back when the draft is
+ * cleared. Subtitles follow the picture there on their own, so the lift above
+ * only runs while the picture is still full-frame under the chrome.
+ */
+let clipVideoInsetSent = -1;
+/** Room kept for the export status line over the row, shown or not. */
+const CLIP_STATUS_RESERVE_PX = 34;
+const clipCutting = () =>
+  clipDraft.inMs != null || clipDraft.outMs != null || clipRanges.length > 0;
 const clipSyncSubtitleLift = () => {
   if (clipSubtitleLiftFrame) return;
   clipSubtitleLiftFrame = requestAnimationFrame(() => {
     clipSubtitleLiftFrame = 0;
     let lift = 0;
+    let inset = 0;
     const chromeUp = isClipperMode() && state.controlsVisible && !root.classList.contains("chrome-hidden");
     if (chromeUp && !clipRow.hidden && window.innerHeight > 0) {
-      const top = clipRow.getBoundingClientRect().top;
-      // A little air over the row, so the line never touches the buttons.
-      lift = Math.round((window.innerHeight - top) / window.innerHeight * 100) + 2;
-      lift = Math.max(0, Math.min(60, lift));
+      if (clipCutting()) {
+        // The band holds the row, the status line over it and the title --
+        // measured from the row itself, so a panel opening above the row (the
+        // exports list, Save as) lays over the picture instead of shrinking it,
+        // and the status line coming and going does not make the picture jump.
+        const rowTop = (clipRow.querySelector(".clip-row-main") || clipRow).getBoundingClientRect().top;
+        const titleHeight = document.querySelector(".progress .metadata")?.offsetHeight ?? 0;
+        const top = rowTop - titleHeight - CLIP_STATUS_RESERVE_PX;
+        inset = Math.round((window.innerHeight - top) / window.innerHeight * 100) + 1;
+        inset = Math.max(0, Math.min(50, inset));
+      } else {
+        const top = clipRow.getBoundingClientRect().top;
+        // A little air over the row, so the line never touches the buttons.
+        lift = Math.round((window.innerHeight - top) / window.innerHeight * 100) + 2;
+        lift = Math.max(0, Math.min(60, lift));
+      }
+    }
+    if (inset !== clipVideoInsetSent) {
+      clipVideoInsetSent = inset;
+      document.body.classList.toggle("clip-video-inset", inset > 0);
+      document.documentElement.style.setProperty("--clip-video-inset", `${inset}vh`);
+      send("clipVideoInset", inset);
     }
     if (lift === clipSubtitleLiftSent) return;
     clipSubtitleLiftSent = lift;
@@ -536,9 +569,34 @@ const clipSyncSubtitleLift = () => {
 window.addEventListener("resize", clipSyncSubtitleLift);
 if (typeof ResizeObserver === "function") new ResizeObserver(clipSyncSubtitleLift).observe(clipRow);
 
+/**
+ * The chrome's icon buttons carry no words, so in the clipper each says what it
+ * does and its key on hover. Set from here rather than in controls.html so the
+ * upstream markup stays as it is. Upstream rewrites the action buttons' titles
+ * to their bare state ("1x", "Subs") on every render just before this one, so
+ * those are re-titled each time, with that state kept in the text.
+ */
+const CLIP_ICON_TITLES = [
+  ['[data-command="speed"]', state => `Playback speed: ${state} (\`)`],
+  ['[data-command="subtitles"]', state => `Subtitles: ${state} (S)`],
+  ['[data-command="audio"]', state => `Audio track: ${state}`],
+  ['[data-command="sources"]', () => "Sources (Q)"],
+  ["#videoSettingsButton", () => "Video settings"],
+  ["#fullscreenButton", () => "Fullscreen (F)"],
+  ["#backButton", () => "Close player (Esc)"],
+];
+const clipSetIconTitles = () => {
+  if (!isClipperMode()) return;
+  CLIP_ICON_TITLES.forEach(([selector, title]) => {
+    const button = document.querySelector(selector);
+    if (button) button.title = title(button.getAttribute("aria-label") || "");
+  });
+};
+
 const renderClipUi = () => {
   clipSyncSubtitleLift();
   document.body.classList.toggle("clipper-mode", isClipperMode());
+  clipSetIconTitles();
   // Declared later in the file; safe because every render happens after load.
   clipStripRender();
   const show = Boolean(state.showClip);

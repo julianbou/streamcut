@@ -98,6 +98,17 @@ internal expect object ClipExtractor {
      */
     suspend fun toolStatus(): ClipToolStatus?
 
+    /**
+     * A handful of stills spread evenly across an exported clip, as file: URIs
+     * in order, for scrubbing a clip card under the pointer. Built on first ask
+     * from the local file and cached beside the clip's still; empty where
+     * clips are not supported or ffmpeg cannot be found.
+     */
+    suspend fun hoverFrames(outputFileUri: String, durationMs: Long): List<String>
+
+    /** Removes what [hoverFrames] cached for a clip; called when the clip is deleted. */
+    fun deleteHoverFrames(outputFileUri: String)
+
     /** Reveal the finished clip in the platform file manager. No-op where unsupported. */
     fun reveal(outputFileUri: String)
 

@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.Desktop
 import java.io.File
+import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -561,6 +562,9 @@ internal actual object ClipExtractor {
      */
     private fun captureThumbnail(ffmpeg: String, outFile: File, durationSec: Double): String =
         runCatching {
+            // A re-export to the same path gets new hover stills on first hover,
+            // not the ones cut from the file it replaced.
+            deleteHoverFrames(outFile.toURI().toString())
             val target = File(thumbnailDir, "${thumbnailStem(outFile)}.jpg")
             val args = listOf(
                 ffmpeg, "-hide_banner", "-nostdin",
@@ -582,6 +586,45 @@ internal actual object ClipExtractor {
             }
             if (target.exists() && target.length() > 0L) target.toURI().toString() else ""
         }.getOrDefault("")
+
+    actual suspend fun hoverFrames(outputFileUri: String, durationMs: Long): List<String> =
+        withContext(Dispatchers.IO) {
+            val clip = runCatching { File(URI(outputFileUri)) }.getOrNull()
+            if (clip == null || !clip.isFile || durationMs <= 0L) return@withContext emptyList()
+            val targets = (0 until HOVER_FRAME_COUNT).map { File(thumbnailDir, "${thumbnailStem(clip)}-h$it.jpg") }
+            if (targets.any { !it.exists() || it.length() == 0L }) {
+                val ffmpeg = resolveFfmpegPath() ?: return@withContext emptyList()
+                val durationSec = durationMs / 1000.0
+                targets.forEachIndexed { index, target ->
+                    if (target.exists() && target.length() > 0L) return@forEachIndexed
+                    // Centre of each of N equal slices, so the first and last
+                    // stills are inside the clip rather than on its cut points.
+                    val at = durationSec * (index + 0.5) / HOVER_FRAME_COUNT
+                    runCatching {
+                        val process = ProcessBuilder(
+                            ffmpeg, "-hide_banner", "-nostdin",
+                            "-ss", formatSeconds(at),
+                            "-i", clip.absolutePath,
+                            "-frames:v", "1",
+                            "-vf", "scale=480:-2",
+                            "-q:v", "5",
+                            "-y", target.absolutePath,
+                        ).redirectErrorStream(true).start()
+                        process.inputStream.bufferedReader().readText()
+                        if (!process.waitFor(15, TimeUnit.SECONDS)) process.destroyForcibly()
+                    }
+                }
+            }
+            targets.filter { it.exists() && it.length() > 0L }.map { it.toURI().toString() }
+        }
+
+    actual fun deleteHoverFrames(outputFileUri: String) {
+        val clip = runCatching { File(URI(outputFileUri)) }.getOrNull() ?: return
+        repeat(HOVER_FRAME_COUNT) { File(thumbnailDir, "${thumbnailStem(clip)}-h$it.jpg").delete() }
+    }
+
+    /** Enough to read a clip's motion under the pointer; each costs one local seek. */
+    private const val HOVER_FRAME_COUNT = 6
 
     private val thumbnailDir: File
         get() = File(DesktopStorage.cacheDir.resolve("clip-thumbs").also { it.createDirectories() }.toUri())

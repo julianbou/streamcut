@@ -31,6 +31,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +73,8 @@ internal fun ClipCard(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     selectionMode: Boolean = false,
+    /** Under a film's heading on the clips page, where naming the film again on every card is noise. */
+    grouped: Boolean = false,
     onClick: () -> Unit,
     onReveal: () -> Unit,
     onDelete: () -> Unit,
@@ -82,6 +88,16 @@ internal fun ClipCard(
     // everywhere else in the clip feature is the file: URI.
     val filePath = remember(entry.outputFileUri) { ClipRepository.filePathOf(entry.outputFileUri) }
 
+    // Hover scrub: a few stills across the clip, picked by where the pointer is
+    // over the card, so a clip can be recognised without opening it. Fetched on
+    // the first hover (built once, cached on disk beside the clip's still).
+    var hoverFrames by remember(entry.outputFileUri) { mutableStateOf<List<String>>(emptyList()) }
+    var scrubFraction by remember { mutableFloatStateOf(-1f) }
+    LaunchedEffect(hovered, entry.outputFileUri) {
+        if (hovered && hoverFrames.isEmpty()) hoverFrames = ClipExtractor.hoverFrames(entry.outputFileUri, entry.durationMs)
+        if (!hovered) scrubFraction = -1f
+    }
+
     val glow by animateFloatAsState(if (hovered || focused || selected) 1f else 0f, tween(320), label = "clipCardGlow")
     Column(
         modifier = modifier
@@ -94,6 +110,17 @@ internal fun ClipCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
+                // Observes the pointer without consuming it: click, right-click
+                // and drag-out all still reach the card.
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val x = event.changes.firstOrNull()?.position?.x ?: continue
+                            if (size.width > 0) scrubFraction = (x / size.width).coerceIn(0f, 0.999f)
+                        }
+                    }
+                }
                 // Hover prints sun ink behind the still; a selected clip is
                 // held in pink (you are about to act on it).
                 .risoSelectionInk(if (selected) Riso.Pink else Riso.Sun, glow, spread = 1.2f)
@@ -116,12 +143,24 @@ internal fun ClipCard(
             // The clip's own midpoint frame, falling back to the title's poster
             // for clips exported before stills were captured.
             val artwork = entry.thumbnailUri.ifBlank { entry.content.posterUrl }
-            if (artwork.isNotBlank()) {
+            val scrubbing = hovered && !selectionMode && hoverFrames.isNotEmpty() && scrubFraction >= 0f
+            val shown = if (scrubbing) hoverFrames[(scrubFraction * hoverFrames.size).toInt()] else artwork
+            if (shown.isNotBlank()) {
                 NuvioAsyncImage(
-                    model = artwork,
+                    model = shown,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
+                )
+            }
+            if (scrubbing) {
+                // Where in the clip the still is from: a paper tick along the foot.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(scrubFraction.coerceAtLeast(0.02f))
+                        .height(3.dp)
+                        .background(Riso.Paper.copy(alpha = 0.9f)),
                 )
             }
 
@@ -129,6 +168,16 @@ internal fun ClipCard(
                 text = formatClipLength(entry.durationMs),
                 modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp),
             )
+            // What the file is, for the one moment it matters: when choosing it.
+            val fileFacts = listOf(entry.resolutionLabel, entry.fileSizeLabel).filter { it.isNotBlank() }
+            if (hovered && fileFacts.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    fileFacts.forEach { ClipBadge(text = it) }
+                }
+            }
 
             // Quick actions on hover. Suppressed while selecting, where a click
             // means "add to the selection" and a stray Delete would be a trap.
@@ -185,40 +234,41 @@ internal fun ClipCard(
             }
         }
 
-        // Three lines, each one fact: the film, the file it became, and where in
-        // the film it was cut. The file name matters since Save as -- a clip
-        // named for an edit ("lift reveal 03") is found by that name, not by
-        // its title.
+        // Under a film's heading the range leads -- it is what tells one clip of
+        // a film from the next -- and the file name follows, since Save as
+        // names clips for an edit ("lift reveal 03") and they are found by it.
+        // Anywhere else the film leads. Resolution and size wait for hover.
         Column(
             modifier = Modifier.padding(top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             val film = entry.content.label
-            if (film.isNotBlank()) {
+            val range = clipRangeLabel(entry)
+            val lead = if (grouped || film.isBlank()) range else film
+            Text(
+                text = lead,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                fontWeight = FontWeight.SemiBold,
+                color = Riso.Paper,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = entry.fileName,
+                style = MaterialTheme.typography.bodySmall,
+                color = Riso.Paper.copy(alpha = 0.82f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (lead != range) {
                 Text(
-                    text = film,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Riso.Paper,
+                    text = range,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                    color = Riso.PaperDim,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = entry.fileName,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = if (film.isBlank()) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (film.isBlank()) Riso.Paper else Riso.Paper.copy(alpha = 0.82f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = clipSubtitle(entry),
-                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
-                color = Riso.PaperDim,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }
@@ -252,16 +302,9 @@ private fun ClipHoverAction(label: String, onClick: () -> Unit, color: Color = R
     )
 }
 
-/**
- * The line under a clip's title: where it came from in the film, then what it
- * is. Facts that were never captured are dropped rather than shown as blanks --
- * every clip exported before stills and sizes existed has none of them.
- */
-internal fun clipSubtitle(entry: ClipEntry): String = listOf(
-    "${formatClipClockLabel(entry.startMs)} \u2013 ${formatClipClockLabel(entry.endMs)}",
-    entry.resolutionLabel,
-    entry.fileSizeLabel,
-).filter { it.isNotBlank() }.joinToString(" · ")
+/** Where in the film the clip was cut, e.g. `24:31 – 25:09`. */
+internal fun clipRangeLabel(entry: ClipEntry): String =
+    "${formatClipClockLabel(entry.startMs)} \u2013 ${formatClipClockLabel(entry.endMs)}"
 
 internal fun formatClipLength(durationMs: Long): String {
     val tenths = (durationMs.coerceAtLeast(0L) + 50) / 100

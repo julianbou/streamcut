@@ -136,6 +136,7 @@ object ClipLibrary {
             // The still is a cache entry keyed by the clip's path, so leaving it
             // behind would hand the next clip written to that path the wrong picture.
             if (entry.thumbnailUri.isNotBlank()) ClipExtractor.deleteFile(entry.thumbnailUri)
+            ClipExtractor.deleteHoverFrames(entry.outputFileUri)
         }
         persist()
     }

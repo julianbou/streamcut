@@ -23,6 +23,10 @@ internal actual object ClipExtractor {
 
     actual suspend fun toolStatus(): ClipToolStatus? = null
 
+    actual suspend fun hoverFrames(outputFileUri: String, durationMs: Long): List<String> = emptyList()
+
+    actual fun deleteHoverFrames(outputFileUri: String) = Unit
+
     actual fun reveal(outputFileUri: String) = Unit
     actual fun openFile(outputFileUri: String) = Unit
     actual fun exists(outputFileUri: String): Boolean = false

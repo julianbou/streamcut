@@ -1014,10 +1014,20 @@ fun HomeScreen(
                             animationSpec = tween(durationMillis = 900),
                             label = "clipperHomeSwell",
                         )
+                        // Blue is "where you were": it prints behind the films you
+                        // opened, so it lifts off while search results (pink,
+                        // acting) take their place.
+                        val whereYouWereInk by animateFloatAsState(
+                            targetValue = if (clipperQuery.isBlank()) 1f else 0f,
+                            animationSpec = tween(durationMillis = 600),
+                            label = "clipperHomeBlueInk",
+                        )
                         Modifier
                             .background(Riso.Stock)
                             .risoBlooms(
-                                blooms = ClipperHomeBlooms,
+                                blooms = ClipperHomeBlooms.map { bloom ->
+                                    if (bloom.color == Riso.Blue) bloom.copy(strength = bloom.strength * whereYouWereInk) else bloom
+                                },
                                 swell = swell,
                                 scrollY = {
                                     // Page-space ink, lifted by the true scroll distance so it
@@ -1049,9 +1059,12 @@ fun HomeScreen(
                     onQueryChange = { clipperQuery = it },
                     searchFocusRequester = clipperSearchFocus,
                     onSearchFocusChange = { clipperSearchFocused = it },
-                    // The search owns the upper half of the window; the films you
-                    // opened fill the rest, and catalogs start below the fold.
-                    mastheadHeight = maxHeight * 0.5f,
+                    // The search owns the top of the window, but not so much of it
+                    // that the films you opened (and what you cut from them) drop
+                    // below the fold: at half the window their posters were cut
+                    // off and "Stopped at" needed a scroll. 300dp still fits the
+                    // display line, its ink rule and the hint.
+                    mastheadHeight = (maxHeight * 0.38f).coerceAtLeast(300.dp),
                     searchState = clipperSearchState,
                     recentItems = continueWatchingItems.openedInPlayer(),
                     browseExpanded = clipperBrowseExpanded,

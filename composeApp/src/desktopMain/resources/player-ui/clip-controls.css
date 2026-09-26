@@ -1187,6 +1187,55 @@ body.clipper-mode .volume-slider::-webkit-slider-runnable-track {
 body.clipper-mode .volume-slider::-webkit-slider-thumb {
   background: var(--riso-paper);
 }
+/* What has been played means nothing to a cut, so the played fill drops to a
+   faint wash and the loudest marks on the bar are the ones the user makes: the
+   pink range, its handles, the white playhead. At full paper the fill was the
+   brightest thing in the chrome and a 30-second range was a sliver beside it. */
+body.clipper-mode .scrub::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(rgba(var(--riso-paper-rgb), .3), rgba(var(--riso-paper-rgb), .3))
+      left center / var(--progress, 0%) 100% no-repeat,
+    rgba(var(--riso-paper-rgb), .12);
+}
+body.clipper-mode .clip-range {
+  background: color-mix(in srgb, var(--theme-accent) 88%, transparent);
+}
+body.clipper-mode .clip-zoom-range {
+  background: color-mix(in srgb, var(--theme-accent) 40%, transparent);
+}
+/* Pink is the range and the export, nothing else. Play is transport: paper. */
+body.clipper-mode .action.playback-action,
+body.clipper-mode .action.playback-action.focused {
+  background: var(--riso-paper);
+  color: var(--riso-stock);
+}
+body.clipper-mode .action.playback-action:hover,
+body.clipper-mode .action.playback-action.focused:hover {
+  background: #fff;
+  color: var(--riso-stock);
+}
+/* With the exports list open, every job already shows its own progress and
+   its own Cancel; the summary line would say it all a second time. Only the
+   toggle that closes the list (and Undo, which is about a delete) stays. */
+body.clipper-mode .clip-row.clip-jobs-open .clip-row-status > :not(#clipJobsButton):not(#clipUndoButton) {
+  display: none;
+}
+/* While cutting, the picture sits above the chrome (see clipSyncSubtitleLift),
+   so the scrim stops being a ramp over the frame and becomes the stock the
+   chrome is printed on: exactly as tall as the band under the picture. */
+body.clipper-mode.clip-video-inset .bottom-gradient {
+  height: var(--clip-video-inset, 0);
+  background: rgba(var(--riso-stock-rgb), .96) var(--riso-grain);
+}
+/* Readouts under the bar at a size that survives a bright frame. */
+body.clipper-mode .clip-zoom-now,
+body.clipper-mode .clip-zoom-scale {
+  font-size: 12px;
+}
+body.clipper-mode [data-key]::after {
+  font-size: 12px;
+  line-height: 16px;
+}
 /* Loading as ink: the riso bloom (pink and blue overprinting) instead of a ring. */
 body.clipper-mode .center-spinner,
 body.clipper-mode .opening-spinner {

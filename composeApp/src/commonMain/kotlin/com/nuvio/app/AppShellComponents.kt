@@ -43,6 +43,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -762,12 +763,23 @@ internal fun DesktopHoverSidebar(
                     expanded = sidebarExpanded,
                     onClick = { onTabSelected(AppScreenTab.Library) },
                 ) { color ->
-                    Icon(
-                        painter = painterResource(Res.drawable.sidebar_library),
-                        contentDescription = libraryTabLabel(),
-                        modifier = Modifier.size(DesktopSidebarIconSize),
-                        tint = color,
-                    )
+                    // In the clipper this tab is the clips folder, not a shelf of
+                    // saved shows, so it wears scissors rather than a library stack.
+                    if (AppFeaturePolicy.viewingChromeEnabled) {
+                        Icon(
+                            painter = painterResource(Res.drawable.sidebar_library),
+                            contentDescription = libraryTabLabel(),
+                            modifier = Modifier.size(DesktopSidebarIconSize),
+                            tint = color,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Rounded.ContentCut,
+                            contentDescription = libraryTabLabel(),
+                            modifier = Modifier.size(DesktopSidebarIconSize),
+                            tint = color,
+                        )
+                    }
                 }
                 DesktopSidebarItem(
                     label = stringResource(Res.string.compose_settings_page_root),

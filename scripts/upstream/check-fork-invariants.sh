@@ -84,6 +84,17 @@ check "clipper build defaults to the top bar" \
   composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DesktopNavigationLayout.kt 'viewingChromeEnabled\) Sidebar else TopBar'
 check "clip keys run before upstream's single-key shortcuts" \
   composeApp/src/desktopMain/resources/player-ui/controls.js '!activeModal && window\.clipUi\?\.handleKey'
+check "clip chrome can lay the picture above it (macOS bridge)" \
+  composeApp/src/desktopMain/native/macos/player_bridge.mm 'NativePlayerBridge_setVideoMarginBottom' \
+  "player_bridge.mm must export setVideoMarginBottom (video-margin-ratio-bottom); clip-controls.js sends clipVideoInset while cutting"
+check "clip chrome can lay the picture above it (Windows bridge)" \
+  composeApp/src/desktopMain/native/windows/player_bridge.cpp 'NativePlayerBridge_setVideoMarginBottom'
+check "clip chrome can lay the picture above it (controller)" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt '"clipVideoInset" ->'
+check "Clips tab wears scissors in the clipper build" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt 'Icons\.Rounded\.ContentCut'
+check "Clips tab wears scissors in the clipper top bar" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt 'Icons\.Rounded\.ContentCut'
 check "Windows build bundles ffmpeg" .github/workflows/windows-build.yml 'nuvio\.windows\.ffmpeg\.dir'
 check "macOS app bundles ffmpeg" composeApp/build.gradle.kts 'from\(prepareMacosFfmpeg\)' \
   "prepareMacosPlayerAppResources in composeApp/build.gradle.kts must copy prepareMacosFfmpeg into ffmpeg/: macOS has no usable ffmpeg"

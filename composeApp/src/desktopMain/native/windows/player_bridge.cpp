@@ -1085,6 +1085,12 @@ public:
         return std::max(0.0, std::min(kMaxVolumePercent, doubleProperty("volume", 100.0))) / 100.0;
     }
 
+    void setVideoMarginBottom(double ratio) {
+        char value[32];
+        std::snprintf(value, sizeof(value), "%.4f", std::max(0.0, std::min(0.9, ratio)));
+        setStringProperty("video-margin-ratio-bottom", value);
+    }
+
     void setResizeMode(int mode) {
         switch (mode) {
             case 1:
@@ -2481,6 +2487,12 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setResizeMode(JNIEnv *, jobject, jlong handle, jint mode) {
     auto player = playerFromHandle(handle);
     if (player) player->setResizeMode(mode);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setVideoMarginBottom(JNIEnv *, jobject, jlong handle, jdouble ratio) {
+    auto player = playerFromHandle(handle);
+    if (player) player->setVideoMarginBottom(ratio);
 }
 
 extern "C" JNIEXPORT jstring JNICALL

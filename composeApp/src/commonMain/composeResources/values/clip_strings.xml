@@ -23,7 +23,12 @@
     <string name="clip_library_no_match_hint">Esc clears the filter.</string>
     <string name="clip_library_sort_newest">Newest</string>
     <string name="clip_library_sort_longest">Longest</string>
-    <string name="clip_library_sort_largest">Largest</string>
+    <string name="clip_library_sort_by_film">By film</string>
+    <string name="clip_library_drag_hint">Drag a clip into your editor to use it.</string>
+    <string name="clip_library_group_count_one">1 clip</string>
+    <string name="clip_library_group_count_many">%1$d clips</string>
+    <string name="clip_home_recent_clips_one">1 clip, at %1$s</string>
+    <string name="clip_home_recent_clips_many">%1$d clips, latest %2$s</string>
     <string name="clip_library_selected_format">%1$d selected</string>
 
     <!-- Actions on a clip -->

@@ -108,6 +108,8 @@ internal class NativePlayerController(
     private var pendingUseLibass: Boolean = false
     /** Percent of the window the clip chrome covers from the bottom; subtitles sit above it. */
     private var subtitleLiftPercent: Int = 0
+    /** Percent of the window the clip chrome reserves under the picture while cutting; 0 = full frame. */
+    private var videoInsetPercent: Int = 0
     private var lastSentControlsStructureKey: NativeControlsStructureKey? = null
     private var onAction: (PlayerControlsAction) -> Boolean = { false }
     private var onEvent: (String, Double) -> Boolean = { _, _ -> false }
@@ -529,6 +531,13 @@ internal class NativePlayerController(
                     val current = handle.takeIf { it != 0L }
                     val style = pendingSubtitleStyle
                     if (current != null && style != null) applySubtitleStyle(current, style, pendingUseLibass)
+                }
+            }
+            "clipVideoInset" -> {
+                val inset = value.toInt().coerceIn(0, 50)
+                if (inset != videoInsetPercent) {
+                    videoInsetPercent = inset
+                    handle.takeIf { it != 0L }?.let { NativePlayerBridge.setVideoMarginBottom(it, inset / 100.0) }
                 }
             }
             "volumeChangeTemporary" -> setTemporaryVolume(value.toFloat())
@@ -1087,6 +1096,7 @@ internal class NativePlayerController(
 
     private fun applyPendingSubtitleSettings() {
         val current = handle.takeIf { it != 0L } ?: return
+        if (videoInsetPercent > 0) NativePlayerBridge.setVideoMarginBottom(current, videoInsetPercent / 100.0)
         pendingSubtitleDelayMs?.let { delayMs ->
             NativePlayerBridge.setSubtitleDelayMs(current, delayMs)
         }

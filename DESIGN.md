@@ -119,7 +119,7 @@ A three-ink riso palette on dark stock: fluorescent pink, riso blue and sunflowe
 - **Riso Blue** (`ink-blue`): where you were. The bloom behind recently opened films, the position mark under each of them, the hover bloom behind a recent listing.
 
 ### Tertiary
-- **Sunflower** (`ink-sun`): set aside. Defined in `Riso.Sun` and reserved for ranges and items put aside for later; the player's set-aside ranges and the clips page print it.
+- **Sunflower** (`ink-sun`): set aside. Defined in `Riso.Sun` and reserved for ranges and items put aside for later; the player's set-aside ranges, the clips page and the dot beside a recent film's clip count print it.
 
 ### Neutral
 - **Plum Stock** (`stock`): the sheet. Full-bleed page background, under the blooms.
@@ -133,7 +133,9 @@ A three-ink riso palette on dark stock: fluorescent pink, riso blue and sunflowe
 
 **The Own Colour Rule.** Posters and frame art keep their own colour. Ink blooms sit behind them, never over them.
 
-**The Ink Pairing Rule.** The player chrome runs the same inks: paper white = playhead and played fill, pink = the range being marked, sun `#FFD84A` = set-aside ranges. The video itself is never tinted or grained.
+**The Ink Pairing Rule.** The player chrome runs the same inks: paper white = playhead and transport (Play), a faint paper wash = the played part of the bar (it means nothing to a cut, so it never outshines one), pink = the range being marked and Export, sun `#FFD84A` = set-aside ranges. The video itself is never tinted or grained.
+
+**The Picture Above Rule.** While anything is marked, the picture is laid out above the chrome (mpv's bottom video margin) instead of under it, and the band it leaves is printed stock. Panels that open over the row (exports, Save as) still lay over the picture; they are brief.
 
 ## Typography
 
@@ -163,7 +165,7 @@ A three-ink riso palette on dark stock: fluorescent pink, riso blue and sunflowe
 
 A single scrolling programme sheet. Horizontal inset is the inherited home section padding (`homeSectionHorizontalPaddingForWidth`, width-responsive); the ink and grain run full-bleed beyond it.
 
-- **Masthead:** at least 300px tall, content bottom-aligned, 96px above the field and 36px below the hint; 22px between the field and its hint.
+- **Masthead:** 38% of the window and at least 300px tall, content bottom-aligned, 44px below the hint; 22px between the field and its hint. Sized so the first row of recent films, with its position marks and clip counts, sits above the fold.
 - **Sections:** 28px above a section, 16px from title to content (14px for result groups).
 - **Listings:** fixed 156px columns, 22px apart horizontally. Recent films wrap in a flowing grid with 28px between rows (at most 12). Search results scroll horizontally, one row per result group.
 - **Listing interior:** 10px poster to title, 2px title to meta, 8px to the position mark, 5px mark to its label.
@@ -208,6 +210,12 @@ One film as a listing: poster, title, meta, and for an opened film where you sto
 
 ### Position Mark
 Where you stopped, in blue ink: a 3px pill track in faint paper filled with blue to the resume fraction, with "Stopped at h:mm:ss" in dim label type 5px below. Shown only when a resume position exists.
+
+### Clip Count
+Under a recent film's position mark, when clips were cut from it: a 6px sun dot and "3 clips, latest 12:02" in label type. It says where the work is, not only where playback stopped.
+
+### Clip Card (clips page)
+16:9 still at 14px corners; duration badge bottom-right. Grouped by film by default, under a headline-size film name with its count in dim label type; inside a group the range leads the card and the file name follows. Hover scrubs six stills taken across the clip (built on first hover, cached beside its still) with a paper tick along the foot for where you are, and shows resolution and size as badges; no lift or scale.
 
 ### Browse Toggle
 Catalog browsing folded to the bottom as a headline-size text button with a 26px chevron. Dim paper at rest, paper on hover; the chevron turns 180° over 320ms when open, and the one-line hint fades out.
