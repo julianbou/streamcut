@@ -47,6 +47,7 @@ import com.nuvio.app.core.ui.PlatformBackHandler
 import com.nuvio.app.core.ui.rememberNuvioNavBarScrollState
 import com.nuvio.app.features.home.HomeCatalogSettingsRepository
 import com.nuvio.app.core.build.AppFeaturePolicy
+import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.Settings
 import com.nuvio.app.features.settings.DesktopNavigationLayout
 import com.nuvio.app.features.settings.NavBarStyle
@@ -148,7 +149,9 @@ internal fun MainTabsDestination(
             FloatingNavigationItem(
                 selected = selectedTab == AppScreenTab.Library,
                 onClick = { onTabSelected(AppScreenTab.Library) },
-                drawable = Res.drawable.sidebar_library,
+                // Clipper build: this tab is the clips folder, so scissors, not a shelf.
+                icon = if (AppFeaturePolicy.viewingChromeEnabled) null else Icons.Rounded.ContentCut,
+                drawable = if (AppFeaturePolicy.viewingChromeEnabled) Res.drawable.sidebar_library else null,
                 label = libraryTabLabel(),
             ),
             FloatingNavigationItem(

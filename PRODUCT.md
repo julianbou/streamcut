@@ -30,7 +30,7 @@ Clips are cut from the user's own resolved streams inside a native mpv player, r
 ## Capabilities and Constraints
 
 - Export: H.264/AAC MP4, yuv420p, stereo, via hardware encoders (VideoToolbox, NVENC, QSV, AMF) with libx264 fallback. Multi-range drafts export as a queue. Every export keeps the source shape with no size cap (the crop/size-cap Format popover was removed in `5120bdfb`; frame stepping came back 2026-09-21 as keys only, with no buttons in the clip row).
-- Clips-first library with real thumbnails, drag-out, and a 7-second undo on delete. Filmstrip scrubbing with cached, on-demand thumbnails.
+- Clips-first library, grouped by film, with real thumbnails, hover scrubbing, drag-out, and a 7-second undo on delete. Filmstrip scrubbing with cached, on-demand thumbnails.
 - Upstream Nuvio viewing features are **gated, never deleted**, behind `AppFeaturePolicy.viewingChromeEnabled` (false on desktop) so upstream merges keep applying. Profiles are the one exception: removed outright.
 - The webview bridge carries numbers only; enum-like values travel as ordinals.
 - Releases are built locally, ad-hoc signed, not notarized; the desktop auto-updater is disabled.

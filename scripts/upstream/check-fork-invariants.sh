@@ -84,6 +84,10 @@ check "clipper build defaults to the top bar" \
   composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/DesktopNavigationLayout.kt 'viewingChromeEnabled\) Sidebar else TopBar'
 check "clip keys run before upstream's single-key shortcuts" \
   composeApp/src/desktopMain/resources/player-ui/controls.js '!activeModal && window\.clipUi\?\.handleKey'
+check "Clips tab wears scissors in the clipper build" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt 'Icons\.Rounded\.ContentCut'
+check "Clips tab wears scissors in the clipper top bar" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt 'Icons\.Rounded\.ContentCut'
 check "Windows build bundles ffmpeg" .github/workflows/windows-build.yml 'nuvio\.windows\.ffmpeg\.dir'
 check "macOS app bundles ffmpeg" composeApp/build.gradle.kts 'from\(prepareMacosFfmpeg\)' \
   "prepareMacosPlayerAppResources in composeApp/build.gradle.kts must copy prepareMacosFfmpeg into ffmpeg/: macOS has no usable ffmpeg"

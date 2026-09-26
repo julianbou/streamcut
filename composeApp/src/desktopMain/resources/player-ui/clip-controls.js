@@ -98,7 +98,7 @@ let clipLibraryOpen = false;
 let clipJobsOpen = false;
 // Window of the timeline the zoom track spans, or null when zoom is off.
 let clipZoomView = null;
-// The range a chip's remove button just took out, kept long enough to undo.
+// The range the list's Remove just took out, kept long enough to undo.
 let clipRemovedRange = null;
 let clipRemovedTimer = 0;
 const CLIP_UNDO_WINDOW_MS = 6000;
@@ -224,12 +224,14 @@ const clipZoomPercentFor = ms => {
  */
 const clipPaintRangeList = (list, percentFor) => {
   list.textContent = "";
-  clipRanges.forEach(range => {
+  clipRanges.forEach((range, index) => {
     const start = percentFor(range.inMs);
     const end = percentFor(range.outMs);
     if (end <= start) return;
     const bar = document.createElement("div");
     bar.className = "clip-range-item";
+    bar.dataset.index = String(index);
+    if (index === clipLitRange) bar.classList.add("is-lit");
     bar.style.left = `${start}%`;
     bar.style.width = `${end - start}%`;
     list.appendChild(bar);
@@ -259,7 +261,7 @@ const clipZoomPaint = () => {
   clipZoomStartLabel.textContent = formatClipTime(clipZoomView.startMs);
   clipZoomEndLabel.textContent = formatClipTime(clipZoomView.endMs);
   const windowSec = (clipZoomView.endMs - clipZoomView.startMs) / 1000;
-  clipZoomScale.textContent = `${windowSec < 10 ? windowSec.toFixed(1) : Math.round(windowSec)}s view`;
+  clipZoomScale.textContent = `Showing ${windowSec < 10 ? windowSec.toFixed(1) : Math.round(windowSec)} s`;
 };
 
 /**
@@ -321,9 +323,10 @@ const renderClipJobs = () => {
   const items = clipJobItems();
   const active = items.filter(item => item.isActive).length;
   clipJobsButton.hidden = items.length === 0;
-  clipJobsButton.textContent = active > 0 ? `Exports (${active})` : "Exports";
   const open = clipJobsOpen && items.length > 0;
+  clipJobsButton.textContent = open ? "Hide exports" : active > 0 ? `Exports (${active})` : "Exports";
   clipJobsPanel.hidden = !open;
+  clipRow.classList.toggle("clip-jobs-open", open);
   if (!open) return;
 
   clipJobsList.textContent = "";
@@ -433,47 +436,231 @@ const renderClipLibrary = () => {
 };
 
 /**
- * One chip per set-aside range, numbered in film order and named by where it
- * sits -- a length alone stops telling ranges apart after the third. The chip
- * itself jumps to its IN; only the small x takes it out, and even that can be
- * undone for a few seconds, because a range can take minutes to find.
+ * Set-aside ranges: one button in the row, a list in a panel.
+ *
+ * They used to be one numbered chip each, which broke down past a handful: the
+ * chips wrapped the row onto three lines and shoved Export off its place, a
+ * label like "#5 29:31.8-29:42.6" said nothing about which scene it was, and
+ * the numbers shifted every time an earlier range was added. Now the row holds
+ * a single "8 ranges" button, and the panel names each range by a still from
+ * its middle plus where it sits. Hovering a range in the panel lights it on
+ * both tracks; hovering a block on a track lights its row.
  */
-const renderClipRangeChips = () => {
-  clipRangeChips.textContent = "";
-  clipRanges.forEach((range, index) => {
-    const label = `#${index + 1} ${formatClipTime(range.inMs)}\u2013${formatClipTime(range.outMs)}`;
-    const chip = document.createElement("span");
-    chip.className = "clip-range-chip";
+let clipRangesOpen = false;
+/** Index of the range lit on the tracks and in the panel, or -1. */
+let clipLitRange = -1;
+/** Who lit it: a panel row or the pointer over a track. */
+let clipLitSource = "";
 
-    const jump = document.createElement("button");
-    jump.type = "button";
-    jump.className = "clip-range-chip-jump";
-    jump.textContent = label;
-    jump.title = `Go to range ${index + 1} (${formatClipTime(range.outMs - range.inMs)} long)`;
-    jump.addEventListener("click", event => {
+const clipRangesButton = document.createElement("button");
+clipRangesButton.type = "button";
+clipRangesButton.className = "clip-action clip-ranges-button";
+clipRangesButton.id = "clipRangesButton";
+clipRangesButton.setAttribute("aria-haspopup", "true");
+clipRangeChips.appendChild(clipRangesButton);
+
+const clipRangesPanel = document.createElement("div");
+clipRangesPanel.className = "clip-library-panel clip-ranges-panel";
+clipRangesPanel.id = "clipRangesPanel";
+clipRangesPanel.hidden = true;
+clipRangesPanel.setAttribute("role", "dialog");
+clipRangesPanel.setAttribute("aria-label", "Ranges set aside");
+clipRangesPanel.innerHTML = `
+  <div class="clip-library-head">
+    <span>Set aside</span>
+    <span class="clip-library-path" id="clipRangesSummary"></span>
+  </div>
+  <div class="clip-library-list" id="clipRangesList"></div>`;
+clipRow.parentElement.insertBefore(clipRangesPanel, clipRow);
+const clipRangesList = clipRangesPanel.querySelector("#clipRangesList");
+const clipRangesSummary = clipRangesPanel.querySelector("#clipRangesSummary");
+
+/** "20:07.5 – 22:42.7" -- the name a range goes by everywhere. */
+const clipRangeLabel = range => `${formatClipTime(range.inMs)} – ${formatClipTime(range.outMs)}`;
+
+/** A length as people say it: "23.9s" under a minute, "2:35.2" above. */
+const clipLengthLabel = ms => {
+  const tenths = Math.round(Math.max(0, ms) / 100);
+  const seconds = Math.floor(tenths / 10);
+  if (seconds < 60) return `${seconds}.${tenths % 10}s`;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}.${tenths % 10}`;
+};
+
+/** Index of the set-aside range containing [ms], or -1. */
+const clipRangeAt = ms => clipRanges.findIndex(range => ms >= range.inMs && ms <= range.outMs);
+
+/** Lights one range on both tracks and in the panel (or none, with -1). */
+const clipLightRange = (index, source) => {
+  if (index < 0 && source && clipLitSource && source !== clipLitSource) return;
+  clipLitRange = index;
+  clipLitSource = index < 0 ? "" : source;
+  [clipRangeList, clipZoomRangeList].forEach(list => {
+    list.querySelectorAll(".clip-range-item").forEach(bar => {
+      bar.classList.toggle("is-lit", Number(bar.dataset.index) === index);
+    });
+  });
+  clipRangesList.querySelectorAll(".clip-ranges-item").forEach(row => {
+    row.classList.toggle("is-lit", Number(row.dataset.index) === index);
+  });
+  if (index >= 0 && source === "track" && !clipRangesPanel.hidden) {
+    clipRangesList.querySelector(`.clip-ranges-item[data-index="${index}"]`)?.scrollIntoView({ block: "nearest" });
+  }
+};
+
+/**
+ * A still for [ms] from the filmstrip cache, trying the nearest frames when the
+ * exact one was never written. Leaves the ink tile showing when there is none.
+ */
+const clipRangeShot = (holder, ms) => {
+  const live = {
+    session: Number(state.clipStripSession) || 0,
+    count: Number(state.clipStripCount) || 0,
+    spacingMs: Number(state.clipStripSpacingMs) || 0,
+  };
+  const strip = live.session > 0 && live.spacingMs > 0 ? live : clipHoverStrip;
+  if (strip.session <= 0 || strip.spacingMs <= 0 || strip.count <= 0) return;
+  const target = Math.max(0, Math.min(strip.count - 1, Math.round(ms / strip.spacingMs) - 1));
+  const candidates = [0, -1, 1, -2, 2]
+    .map(step => target + step)
+    .filter(index => index >= 0 && index < strip.count && !clipFrameMissing.has(index));
+  const tryNext = () => {
+    const index = candidates.shift();
+    if (index == null) return;
+    const img = new Image();
+    img.alt = "";
+    img.addEventListener("load", () => {
+      clipFramePresent.add(index);
+      holder.textContent = "";
+      holder.appendChild(img);
+    });
+    img.addEventListener("error", tryNext);
+    img.src = `strip/${strip.session}/${index}.jpg`;
+  };
+  tryNext();
+};
+
+/**
+ * Puts a set-aside range back into IN/OUT for adjusting. Refused while another
+ * selection is half-marked: taking it over would drop a point the user found.
+ * A finished selection is set aside first, so nothing is lost either way.
+ */
+const clipEditRange = index => {
+  const range = clipRanges[index];
+  if (!range) return;
+  const partial = (clipDraft.inMs == null) !== (clipDraft.outMs == null);
+  if (partial) return;
+  if (clipHasRange()) clipRanges.push({ inMs: clipDraft.inMs, outMs: clipDraft.outMs });
+  clipRanges.splice(clipRanges.indexOf(range), 1);
+  clipSortRanges();
+  clipDraft = { inMs: range.inMs, outMs: range.outMs };
+  clipPreviewActive = false;
+  clipZoomView = null;
+  clipRangesOpen = false;
+  clipLightRange(-1);
+  clipPauseForInspection();
+  clipSeekTo(range.inMs);
+  renderClipUi();
+  noteChromeActivity();
+};
+
+const renderClipRangeChips = () => {
+  const count = clipRanges.length;
+  clipRangesButton.hidden = count === 0;
+  clipRangesButton.textContent = count === 1 ? "1 range" : `${count} ranges`;
+  clipRangesButton.setAttribute("aria-expanded", String(clipRangesOpen && count > 0));
+  clipRangesButton.title = "Ranges set aside for export";
+  const open = clipRangesOpen && count > 0;
+  clipRangesPanel.hidden = !open;
+  if (!open) {
+    if (clipRangesOpen && count === 0) clipRangesOpen = false;
+    return;
+  }
+
+  const totalMs = clipRanges.reduce((sum, range) => sum + (range.outMs - range.inMs), 0);
+  clipRangesSummary.textContent = `${count === 1 ? "1 range" : `${count} ranges`}, ${clipLengthLabel(totalMs)} in all`;
+  const partial = (clipDraft.inMs == null) !== (clipDraft.outMs == null);
+  clipRangesList.textContent = "";
+  clipRanges.forEach((range, index) => {
+    const row = document.createElement("div");
+    row.className = "clip-ranges-item";
+    row.dataset.index = String(index);
+    row.classList.toggle("is-lit", index === clipLitRange);
+    row.addEventListener("pointerenter", () => clipLightRange(index, "row"));
+    row.addEventListener("pointerleave", () => clipLightRange(-1, "row"));
+
+    const label = clipRangeLabel(range);
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "clip-ranges-go";
+    go.title = `Go to ${label}`;
+    const shot = document.createElement("span");
+    shot.className = "clip-ranges-shot";
+    clipRangeShot(shot, (range.inMs + range.outMs) / 2);
+    const time = document.createElement("span");
+    time.className = "clip-ranges-time";
+    time.textContent = label;
+    const length = document.createElement("span");
+    length.className = "clip-ranges-length";
+    length.textContent = clipLengthLabel(range.outMs - range.inMs);
+    go.append(shot, time, length);
+    go.addEventListener("click", event => {
       event.stopPropagation();
       clipPauseForInspection();
       clipSeekTo(range.inMs);
       noteChromeActivity();
     });
 
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "clip-action";
+    edit.textContent = "Edit";
+    edit.disabled = partial;
+    edit.title = partial
+      ? "Finish or clear the point you are marking first"
+      : "Put this range back into IN and OUT to adjust it";
+    edit.addEventListener("click", event => {
+      event.stopPropagation();
+      clipEditRange(index);
+    });
+
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.className = "clip-range-chip-remove";
-    remove.setAttribute("aria-label", `Remove range ${index + 1}, ${label}`);
-    remove.title = "Remove this range";
-    remove.innerHTML = `<svg aria-hidden="true"><use href="#icon-close"></use></svg>`;
+    remove.className = "clip-action danger";
+    remove.textContent = "Remove";
+    remove.setAttribute("aria-label", `Remove ${label}`);
     remove.addEventListener("click", event => {
       event.stopPropagation();
+      clipLightRange(-1);
       clipRemoveRange(index);
     });
 
-    chip.append(jump, remove);
-    clipRangeChips.appendChild(chip);
+    row.append(go, edit, remove);
+    clipRangesList.appendChild(row);
   });
 };
 
-/** Keeps set-aside ranges in film order, so chip numbers read left to right. */
+clipRangesButton.addEventListener("click", event => {
+  event.stopPropagation();
+  clipRangesOpen = !clipRangesOpen;
+  // One panel over the row at a time.
+  if (clipRangesOpen) clipJobsOpen = false;
+  renderClipUi();
+  noteChromeActivity();
+});
+
+// Escape closes the list rather than reaching controls.js (which would leave
+// the player) or the unexported-work guard below. Registered before that guard,
+// and stops the rest of the window listeners outright.
+window.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || clipRangesPanel.hidden) return;
+  if (typeof activeModal !== "undefined" && activeModal) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  clipRangesOpen = false;
+  renderClipUi();
+}, true);
+
+/** Keeps set-aside ranges in film order, so the list reads left to right like the bar. */
 const clipSortRanges = () => clipRanges.sort((a, b) => a.inMs - b.inMs);
 
 const clipClearRemoved = () => {
@@ -534,11 +721,55 @@ const clipSyncSubtitleLift = () => {
   });
 };
 window.addEventListener("resize", clipSyncSubtitleLift);
-if (typeof ResizeObserver === "function") new ResizeObserver(clipSyncSubtitleLift).observe(clipRow);
+if (typeof ResizeObserver === "function") {
+  new ResizeObserver(() => {
+    clipSyncSubtitleLift();
+    clipSyncPanelAnchor();
+  }).observe(clipRow);
+}
+
+/**
+ * The chrome's icon buttons carry no words, so in the clipper each says what it
+ * does and its key on hover. Set from here rather than in controls.html so the
+ * upstream markup stays as it is. Upstream rewrites the action buttons' titles
+ * to their bare state ("1x", "Subs") on every render just before this one, so
+ * those are re-titled each time, with that state kept in the text.
+ */
+const CLIP_ICON_TITLES = [
+  ['[data-command="speed"]', state => `Playback speed: ${state} (\`)`],
+  ['[data-command="subtitles"]', state => `Subtitles: ${state} (S)`],
+  ['[data-command="audio"]', state => `Audio track: ${state}`],
+  ['[data-command="sources"]', () => "Sources (Q)"],
+  ["#videoSettingsButton", () => "Video settings"],
+  ["#fullscreenButton", () => "Fullscreen (F)"],
+  ["#backButton", () => "Close player (Esc)"],
+];
+const clipSetIconTitles = () => {
+  if (!isClipperMode()) return;
+  CLIP_ICON_TITLES.forEach(([selector, title]) => {
+    const button = document.querySelector(selector);
+    if (button) button.title = title(button.getAttribute("aria-label") || "");
+  });
+};
+
+/**
+ * Exports and Save as open over the clip row. In the column's flow they pushed
+ * the title up the picture every time one opened; floated instead, they need
+ * to know where the row starts, which moves with the status line.
+ */
+const clipSyncPanelAnchor = () => {
+  const progress = clipRow.parentElement;
+  if (progress) progress.style.setProperty("--clip-row-top", `${clipRow.offsetTop}px`);
+};
+/** macOS draws the window's traffic lights over the page while windowed. */
+const CLIP_IS_MAC = /Mac/.test(navigator.platform || navigator.userAgent || "");
 
 const renderClipUi = () => {
   clipSyncSubtitleLift();
+  requestAnimationFrame(clipSyncPanelAnchor);
   document.body.classList.toggle("clipper-mode", isClipperMode());
+  document.body.classList.toggle("clip-mac-windowed", CLIP_IS_MAC && !state.isFullscreen);
+  clipSetIconTitles();
   // Declared later in the file; safe because every render happens after load.
   clipStripRender();
   const show = Boolean(state.showClip);
@@ -1090,6 +1321,7 @@ clipZoomTrack.addEventListener("pointerdown", event => {
 clipJobsButton.addEventListener("click", event => {
   event.stopPropagation();
   clipJobsOpen = !clipJobsOpen;
+  if (clipJobsOpen) clipRangesOpen = false;
   renderClipUi();
 });
 
@@ -1307,11 +1539,12 @@ if (clipKeysButton) {
 const clipHoverPreview = document.createElement("div");
 clipHoverPreview.className = "clip-hover-preview";
 clipHoverPreview.hidden = true;
-clipHoverPreview.innerHTML = `<span class="clip-hover-shot"></span><span class="clip-hover-time"></span>`;
+clipHoverPreview.innerHTML = `<span class="clip-hover-shot"></span><span class="clip-hover-time"></span><span class="clip-hover-range" hidden></span>`;
 document.body.appendChild(clipHoverPreview);
 
 const clipHoverShot = clipHoverPreview.querySelector(".clip-hover-shot");
 const clipHoverTime = clipHoverPreview.querySelector(".clip-hover-time");
+const clipHoverRange = clipHoverPreview.querySelector(".clip-hover-range");
 
 /**
  * Which frames of the open session exist, learned by whoever asks first.
@@ -1495,6 +1728,21 @@ document.addEventListener("pointermove", event => {
   } else {
     clipHoverHide();
   }
+  // A block on either track answers to the pointer: its range lights in the
+  // panel, and the hover preview says which range it is.
+  let rangeIndex = -1;
+  if (inside && clipDraftDurationMs > 0) {
+    rangeIndex = clipRangeAt(clipTrackMsFromEvent(event));
+  } else if (clipZoomView && !clipZoomWrap.hidden) {
+    const zoom = clipZoomTrack.getBoundingClientRect();
+    if (event.clientX >= zoom.left && event.clientX <= zoom.right &&
+        event.clientY >= zoom.top - 4 && event.clientY <= zoom.bottom + 4) {
+      rangeIndex = clipRangeAt(clipZoomMsFromEvent(event));
+    }
+  }
+  if (rangeIndex !== clipLitRange || clipLitSource === "track") clipLightRange(rangeIndex, "track");
+  clipHoverRange.textContent = rangeIndex >= 0 && inside ? `Set aside ${clipRangeLabel(clipRanges[rangeIndex])}` : "";
+  clipHoverRange.hidden = !clipHoverRange.textContent;
 });
 document.addEventListener("pointercancel", clipHoverHide);
 
@@ -1735,6 +1983,8 @@ const clipSyncPlayback = (durationMs, positionMs) => {
     // showing the previous one's clips until the next full render.
     clipLibraryOpen = false;
     clipJobsOpen = false;
+    clipRangesOpen = false;
+    clipLitRange = -1;
     // A different film: the previous title's frame numbers mean nothing now.
     clipHoverStrip = { session: 0, count: 0, spacingMs: 0 };
   }

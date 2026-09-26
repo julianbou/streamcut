@@ -93,6 +93,11 @@ import nuvio.composeapp.generated.resources.clip_home_search_placeholder
 import nuvio.composeapp.generated.resources.clip_home_searching
 import nuvio.composeapp.generated.resources.clip_home_stopped_at
 import org.jetbrains.compose.resources.stringResource
+import com.nuvio.app.features.clip.ClipEntry
+import com.nuvio.app.features.clip.ClipLibrary
+import nuvio.composeapp.generated.resources.clip_home_recent_clips_one
+import nuvio.composeapp.generated.resources.clip_home_recent_clips_many
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // Home for the clipper build, in the riso programme world (see RisoMaterial):
 // a search masthead, the films you have opened, and the addon catalogs folded
@@ -289,6 +294,10 @@ private fun ClipperRecentSection(
     sectionPadding: Dp,
     onClick: ((ContinueWatchingItem) -> Unit)?,
 ) {
+    // What you cut from each film, so the row says where the work is and not
+    // only where playback stopped.
+    LaunchedEffect(Unit) { ClipLibrary.ensureLoaded() }
+    val clips by ClipLibrary.entries.collectAsStateWithLifecycle()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -318,9 +327,16 @@ private fun ClipperRecentSection(
                     item.durationMs > 0 -> (item.resumePositionMs.toFloat() / item.durationMs).coerceIn(0f, 1f)
                     else -> item.progressFraction.coerceIn(0f, 1f)
                 }
+                val cut = clips.cutFrom(item)
+                val latest = cut.maxByOrNull { it.createdAtEpochMs }
                 RisoListing(
                     key = continueWatchingItemKey(item),
                     imageUrl = item.poster ?: item.imageUrl,
+                    clipsLabel = when {
+                        latest == null -> null
+                        cut.size == 1 -> stringResource(Res.string.clip_home_recent_clips_one, formatPlaybackTime(latest.startMs))
+                        else -> stringResource(Res.string.clip_home_recent_clips_many, cut.size, formatPlaybackTime(latest.startMs))
+                    },
                     title = item.title,
                     meta = item.subtitle.takeIf { it.isNotBlank() && it != item.title },
                     positionLabel = if (item.resumePositionMs > 0) {
@@ -345,6 +361,17 @@ private fun ClipperRecentSection(
 }
 
 private const val RecentLimit = 12
+
+/** Clips cut from this exact title (or episode); by title only when a clip carries no id. */
+private fun List<ClipEntry>.cutFrom(item: ContinueWatchingItem): List<ClipEntry> = filter { entry ->
+    val ref = entry.content
+    if (ref.videoId.isNotBlank()) {
+        ref.videoId == item.videoId
+    } else {
+        ref.title.equals(item.title, ignoreCase = true) &&
+            ref.seasonNumber == item.seasonNumber && ref.episodeNumber == item.episodeNumber
+    }
+}
 
 private const val ResultLimit = 18
 
@@ -434,6 +461,7 @@ private fun RisoListing(
     positionLabel: String?,
     positionFraction: Float?,
     hoverInk: androidx.compose.ui.graphics.Color,
+    clipsLabel: String? = null,
     onClick: (() -> Unit)?,
     removeLabel: String? = null,
     onRemove: (() -> Unit)? = null,
@@ -590,6 +618,21 @@ private fun RisoListing(
         if (positionLabel != null) {
             Spacer(Modifier.height(5.dp))
             Text(text = positionLabel, style = ListingMetaStyle, color = Riso.PaperDim, maxLines = 1)
+        }
+        if (clipsLabel != null) {
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Sun: exported clips are the ranges you set aside, made real.
+                Box(Modifier.size(6.dp).background(Riso.Sun, CircleShape))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = clipsLabel,
+                    style = ListingMetaStyle,
+                    color = Riso.Paper.copy(alpha = 0.86f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

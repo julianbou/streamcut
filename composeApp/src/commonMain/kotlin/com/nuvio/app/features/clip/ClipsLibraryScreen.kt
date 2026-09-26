@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,19 +76,31 @@ import nuvio.composeapp.generated.resources.clip_library_no_match_format
 import nuvio.composeapp.generated.resources.clip_library_no_match_hint
 import nuvio.composeapp.generated.resources.clip_library_open_folder
 import nuvio.composeapp.generated.resources.clip_library_selected_format
-import nuvio.composeapp.generated.resources.clip_library_sort_largest
+import nuvio.composeapp.generated.resources.clip_library_sort_by_film
+import nuvio.composeapp.generated.resources.clip_library_drag_hint
+import nuvio.composeapp.generated.resources.clip_library_group_count_one
+import nuvio.composeapp.generated.resources.clip_library_group_count_many
 import nuvio.composeapp.generated.resources.clip_library_sort_longest
 import nuvio.composeapp.generated.resources.clip_library_sort_newest
 import nuvio.composeapp.generated.resources.clip_library_title
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** How the grid is ordered. Newest first is the default: the last cut is the one being looked for. */
+/**
+ * How the grid is ordered. By film is the default: a clipper cuts several
+ * moments from one title, and a flat grid of ten cards all titled "Taxi Driver"
+ * could only be told apart by their smallest line. Grouped, each film is a
+ * heading and its clips run in film order under it; the film cut most recently
+ * comes first, so the last cut is still at the top.
+ */
 private enum class ClipSort(val label: StringResource) {
+    ByFilm(Res.string.clip_library_sort_by_film),
     Newest(Res.string.clip_library_sort_newest),
     Longest(Res.string.clip_library_sort_longest),
-    Largest(Res.string.clip_library_sort_largest),
 }
+
+/** One film's clips under its heading, in the order they occur in the film. */
+private data class ClipFilmGroup(val key: String, val label: String, val clips: List<ClipEntry>)
 
 /**
  * The clips page: everything exported on this machine, as a grid.
@@ -108,7 +121,7 @@ internal fun ClipsLibraryScreen(
     val entries by ClipLibrary.entries.collectAsStateWithLifecycle()
 
     var query by remember { mutableStateOf("") }
-    var sort by remember { mutableStateOf(ClipSort.Newest) }
+    var sort by remember { mutableStateOf(ClipSort.ByFilm) }
     var selection by remember { mutableStateOf(emptySet<String>()) }
     var pendingDelete by remember { mutableStateOf<List<ClipEntry>>(emptyList()) }
 
@@ -124,9 +137,23 @@ internal fun ClipsLibraryScreen(
             }
         }
         when (sort) {
-            ClipSort.Newest -> filtered.sortedByDescending { it.createdAtEpochMs }
+            ClipSort.ByFilm, ClipSort.Newest -> filtered.sortedByDescending { it.createdAtEpochMs }
             ClipSort.Longest -> filtered.sortedByDescending { it.durationMs }
-            ClipSort.Largest -> filtered.sortedByDescending { it.fileSizeBytes }
+        }
+    }
+    val groups = remember(visible, sort) {
+        if (sort != ClipSort.ByFilm) {
+            emptyList()
+        } else {
+            // `visible` is newest first, so groupBy's first-seen order is
+            // "film cut most recently" first.
+            visible.groupBy { it.contentKey }.map { (key, clips) ->
+                ClipFilmGroup(
+                    key = key,
+                    label = clips.first().content.label.ifBlank { clips.first().fileName },
+                    clips = clips.sortedBy { it.startMs },
+                )
+            }
         }
     }
 
@@ -184,12 +211,13 @@ internal fun ClipsLibraryScreen(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            items(visible, key = { it.id }) { entry ->
+            val clipItem: @Composable (ClipEntry, Boolean) -> Unit = { entry, grouped ->
                 val selectionMode = selection.isNotEmpty()
                 ClipCard(
                     entry = entry,
                     selected = entry.id in selection,
                     selectionMode = selectionMode,
+                    grouped = grouped,
                     onClick = {
                         // Once a selection exists every click extends or shrinks
                         // it; opening a clip mid-selection is never what is meant.
@@ -205,6 +233,16 @@ internal fun ClipsLibraryScreen(
                     // safety net for twenty files you may not be watching.
                     onDelete = { ClipLibrary.delete(entry.id) },
                 )
+            }
+            if (sort == ClipSort.ByFilm) {
+                groups.forEachIndexed { index, group ->
+                    item(key = "film:${group.key}", span = { GridItemSpan(maxLineSpan) }) {
+                        ClipFilmHeading(group, first = index == 0)
+                    }
+                    items(group.clips, key = { it.id }) { entry -> clipItem(entry, true) }
+                }
+            } else {
+                items(visible, key = { it.id }) { entry -> clipItem(entry, false) }
             }
         }
     }
@@ -286,7 +324,8 @@ private fun ClipsLibraryHeader(
                     stringResource(Res.string.clip_library_count_format, shown, total)
                 },
                 style = TextStyle(fontFamily = RisoDisplay, fontSize = 30.sp, fontWeight = FontWeight.Bold),
-                color = Riso.Sun,
+                // A total is not something set aside: dim paper, not sun.
+                color = Riso.PaperDim,
             )
             Spacer(modifier = Modifier.weight(1f))
             ClipsChip(
@@ -307,6 +346,17 @@ private fun ClipsLibraryHeader(
                 color = Riso.PaperDim,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        // Dragging out is how a clip leaves the app, and nothing on a card
+        // says it can be dragged, so the page says it once.
+        if (total > 0) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = stringResource(Res.string.clip_library_drag_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = Riso.PaperDim,
             )
         }
 
@@ -354,6 +404,34 @@ private fun ClipsLibraryHeader(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ClipFilmHeading(group: ClipFilmGroup, first: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = if (first) 0.dp else 18.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(
+            text = group.label,
+            style = TextStyle(fontFamily = RisoDisplay, fontSize = 30.sp, lineHeight = 32.sp, fontWeight = FontWeight.ExtraBold),
+            color = Riso.Paper,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = if (group.clips.size == 1) {
+                stringResource(Res.string.clip_library_group_count_one)
+            } else {
+                stringResource(Res.string.clip_library_group_count_many, group.clips.size)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = Riso.PaperDim,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
     }
 }
 

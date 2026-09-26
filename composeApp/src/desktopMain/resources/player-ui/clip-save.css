@@ -133,11 +133,10 @@
   display: block;
   padding: 0;
   margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .66);
+  /* A field name, set as one: sentence case, no tracked caps (No Eyebrow Rule). */
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(var(--riso-paper-rgb, 255, 255, 255), .72);
 }
 
 /* --- name ------------------------------------------------------------------ */
