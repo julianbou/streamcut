@@ -517,49 +517,17 @@ const clipShortPath = path => String(path || "").replace(/^\/(Users|home)\/[^/]+
  */
 let clipSubtitleLiftSent = -1;
 let clipSubtitleLiftFrame = 0;
-/**
- * While cutting, the chrome is pinned open, and laid over the picture it hid
- * the bottom of the very frame being judged. So once anything is marked the
- * picture is laid out above the chrome instead (mpv's bottom video margin,
- * percent of the window), and gets the whole window back when the draft is
- * cleared. Subtitles follow the picture there on their own, so the lift above
- * only runs while the picture is still full-frame under the chrome.
- */
-let clipVideoInsetSent = -1;
-/** Room kept for the export status line over the row, shown or not. */
-const CLIP_STATUS_RESERVE_PX = 34;
-const clipCutting = () =>
-  clipDraft.inMs != null || clipDraft.outMs != null || clipRanges.length > 0;
 const clipSyncSubtitleLift = () => {
   if (clipSubtitleLiftFrame) return;
   clipSubtitleLiftFrame = requestAnimationFrame(() => {
     clipSubtitleLiftFrame = 0;
     let lift = 0;
-    let inset = 0;
     const chromeUp = isClipperMode() && state.controlsVisible && !root.classList.contains("chrome-hidden");
     if (chromeUp && !clipRow.hidden && window.innerHeight > 0) {
-      if (clipCutting()) {
-        // The band holds the row, the status line over it and the title --
-        // measured from the row itself, so a panel opening above the row (the
-        // exports list, Save as) lays over the picture instead of shrinking it,
-        // and the status line coming and going does not make the picture jump.
-        const rowTop = (clipRow.querySelector(".clip-row-main") || clipRow).getBoundingClientRect().top;
-        const titleHeight = document.querySelector(".progress .metadata")?.offsetHeight ?? 0;
-        const top = rowTop - titleHeight - CLIP_STATUS_RESERVE_PX;
-        inset = Math.round((window.innerHeight - top) / window.innerHeight * 100) + 1;
-        inset = Math.max(0, Math.min(50, inset));
-      } else {
-        const top = clipRow.getBoundingClientRect().top;
-        // A little air over the row, so the line never touches the buttons.
-        lift = Math.round((window.innerHeight - top) / window.innerHeight * 100) + 2;
-        lift = Math.max(0, Math.min(60, lift));
-      }
-    }
-    if (inset !== clipVideoInsetSent) {
-      clipVideoInsetSent = inset;
-      document.body.classList.toggle("clip-video-inset", inset > 0);
-      document.documentElement.style.setProperty("--clip-video-inset", `${inset}vh`);
-      send("clipVideoInset", inset);
+      const top = clipRow.getBoundingClientRect().top;
+      // A little air over the row, so the line never touches the buttons.
+      lift = Math.round((window.innerHeight - top) / window.innerHeight * 100) + 2;
+      lift = Math.max(0, Math.min(60, lift));
     }
     if (lift === clipSubtitleLiftSent) return;
     clipSubtitleLiftSent = lift;
@@ -567,7 +535,12 @@ const clipSyncSubtitleLift = () => {
   });
 };
 window.addEventListener("resize", clipSyncSubtitleLift);
-if (typeof ResizeObserver === "function") new ResizeObserver(clipSyncSubtitleLift).observe(clipRow);
+if (typeof ResizeObserver === "function") {
+  new ResizeObserver(() => {
+    clipSyncSubtitleLift();
+    clipSyncPanelAnchor();
+  }).observe(clipRow);
+}
 
 /**
  * The chrome's icon buttons carry no words, so in the clipper each says what it
@@ -593,9 +566,23 @@ const clipSetIconTitles = () => {
   });
 };
 
+/**
+ * Exports and Save as open over the clip row. In the column's flow they pushed
+ * the title up the picture every time one opened; floated instead, they need
+ * to know where the row starts, which moves with the status line.
+ */
+const clipSyncPanelAnchor = () => {
+  const progress = clipRow.parentElement;
+  if (progress) progress.style.setProperty("--clip-row-top", `${clipRow.offsetTop}px`);
+};
+/** macOS draws the window's traffic lights over the page while windowed. */
+const CLIP_IS_MAC = /Mac/.test(navigator.platform || navigator.userAgent || "");
+
 const renderClipUi = () => {
   clipSyncSubtitleLift();
+  requestAnimationFrame(clipSyncPanelAnchor);
   document.body.classList.toggle("clipper-mode", isClipperMode());
+  document.body.classList.toggle("clip-mac-windowed", CLIP_IS_MAC && !state.isFullscreen);
   clipSetIconTitles();
   // Declared later in the file; safe because every render happens after load.
   clipStripRender();

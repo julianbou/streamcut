@@ -1220,12 +1220,23 @@ body.clipper-mode .action.playback-action.focused:hover {
 body.clipper-mode .clip-row.clip-jobs-open .clip-row-status > :not(#clipJobsButton):not(#clipUndoButton) {
   display: none;
 }
-/* While cutting, the picture sits above the chrome (see clipSyncSubtitleLift),
-   so the scrim stops being a ramp over the frame and becomes the stock the
-   chrome is printed on: exactly as tall as the band under the picture. */
-body.clipper-mode.clip-video-inset .bottom-gradient {
-  height: var(--clip-video-inset, 0);
-  background: rgba(var(--riso-stock-rgb), .96) var(--riso-grain);
+/* Exports and Save as float above the clip row on the right instead of sitting
+   in the column's flow, where opening one pushed the title up the picture. The
+   title stays put on the left; --clip-row-top is set from clip-controls.js. */
+body.clipper-mode .progress > #clipJobsPanel,
+body.clipper-mode .progress > .clip-save {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% - var(--clip-row-top, 0px) + 10px);
+  width: min(600px, 100%);
+  margin: 0;
+  z-index: 4;
+}
+/* Windowed on macOS the traffic lights sit in the page's top-left corner, right
+   where the Clips button is; the header row drops clear of them. Fullscreen has
+   no traffic lights and keeps the row at the top. */
+body.clipper-mode.clip-mac-windowed .header {
+  top: calc(var(--slider-bottom) + 22px + env(safe-area-inset-top));
 }
 /* Readouts under the bar at a size that survives a bright frame. */
 body.clipper-mode .clip-zoom-now,

@@ -1855,14 +1855,6 @@ JNIEXPORT jfloat JNICALL NP(speed)(JNIEnv *, jobject, jlong handle) {
     return static_cast<jfloat>(mpvGetDouble(p->mpv, "speed"));
 }
 
-JNIEXPORT void JNICALL NP(setVideoMarginBottom)(JNIEnv *, jobject, jlong handle, jdouble ratio) {
-    Player *p = asPlayer(handle);
-    if (!p) return;
-    char value[32];
-    snprintf(value, sizeof(value), "%.4f", std::max(0.0, std::min(0.9, static_cast<double>(ratio))));
-    mpv_set_property_string(p->mpv, "video-margin-ratio-bottom", value);
-}
-
 JNIEXPORT void JNICALL NP(setResizeMode)(JNIEnv *, jobject, jlong handle, jint mode) {
     Player *p = asPlayer(handle);
     if (!p) return;

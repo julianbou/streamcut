@@ -331,7 +331,7 @@ private fun ClipperRecentSection(
                 val latest = cut.maxByOrNull { it.createdAtEpochMs }
                 RisoListing(
                     key = continueWatchingItemKey(item),
-                    imageUrl = item.cleanPoster(),
+                    imageUrl = item.poster ?: item.imageUrl,
                     clipsLabel = when {
                         latest == null -> null
                         cut.size == 1 -> stringResource(Res.string.clip_home_recent_clips_one, formatPlaybackTime(latest.startMs))
@@ -361,18 +361,6 @@ private fun ClipperRecentSection(
 }
 
 private const val RecentLimit = 12
-
-/**
- * The poster as the addon's metadata gives it, not a rating-badge overlay
- * (awards, 4K, Dolby, genre and score printed into the artwork). Those collide
- * with each other and repeat the meta line, and a programme sheet shows the
- * film's own poster.
- */
-private fun ContinueWatchingItem.cleanPoster(): String? =
-    rawPosterUrl?.takeIf { it.isNotBlank() } ?: poster ?: imageUrl
-
-private fun MetaPreview.cleanPoster(): String? =
-    rawPosterUrl?.takeIf { it.isNotBlank() } ?: poster
 
 /** Clips cut from this exact title (or episode); by title only when a clip carries no id. */
 private fun List<ClipEntry>.cutFrom(item: ContinueWatchingItem): List<ClipEntry> = filter { entry ->
@@ -444,7 +432,7 @@ private fun LazyListScope.clipperSearchResults(
                     section.items.take(ResultLimit).forEach { meta ->
                         RisoListing(
                             key = meta.id,
-                            imageUrl = meta.cleanPoster(),
+                            imageUrl = meta.poster,
                             title = meta.name,
                             meta = meta.releaseInfo,
                             positionLabel = null,

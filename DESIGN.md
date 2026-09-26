@@ -135,8 +135,6 @@ A three-ink riso palette on dark stock: fluorescent pink, riso blue and sunflowe
 
 **The Ink Pairing Rule.** The player chrome runs the same inks: paper white = playhead and transport (Play), a faint paper wash = the played part of the bar (it means nothing to a cut, so it never outshines one), pink = the range being marked and Export, sun `#FFD84A` = set-aside ranges. The video itself is never tinted or grained.
 
-**The Picture Above Rule.** While anything is marked, the picture is laid out above the chrome (mpv's bottom video margin) instead of under it, and the band it leaves is printed stock. Panels that open over the row (exports, Save as) still lay over the picture; they are brief.
-
 ## Typography
 
 **Display Font:** Big Shoulders Display (variable, used at 800), bundled as `composeResources/font/big_shoulders_display.ttf`, SIL OFL in `third_party/licenses/`; exposed as `RisoDisplay` in `RisoMaterial.kt`

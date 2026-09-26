@@ -109,7 +109,6 @@ static constexpr double kMaxVolumePercent = 200.0;
 - (double)volume;
 - (void)applyRequestedVolume;
 - (void)setResizeMode:(int)mode;
-- (void)setVideoMarginBottom:(double)ratio;
 - (long long)durationMs;
 - (long long)positionMs;
 - (long long)bufferedPositionMs;
@@ -1976,23 +1975,6 @@ static void setMpvOptionString(mpv_handle *mpv, const char *name, const char *va
     });
 }
 
-- (void)setVideoMarginBottom:(double)ratio {
-    if (!_mpv) return;
-    NSString *value = [NSString stringWithFormat:@"%.4f", fmin(fmax(ratio, 0.0), 0.9)];
-    dispatch_queue_t queue = _mpvEventQueue;
-    if (!queue) {
-        [self setStringProperty:"video-margin-ratio-bottom" value:value];
-        return;
-    }
-    dispatch_async(queue, ^{
-        mpv_handle *mpv = self->_mpv;
-        if (!mpv) {
-            return;
-        }
-        mpv_set_property_string(mpv, "video-margin-ratio-bottom", value.UTF8String);
-    });
-}
-
 - (long long)durationMs {
     return (long long)llround(fmax(_cachedDurationSeconds.load(), 0.0) * 1000.0);
 }
@@ -2967,20 +2949,6 @@ Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setResizeMode(
     MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
     runOnMainAsync(^{
         [player setResizeMode:(int)mode];
-    });
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_nuvio_app_features_player_desktop_NativePlayerBridge_setVideoMarginBottom(
-    JNIEnv * /* env */,
-    jobject /* bridge */,
-    jlong handle,
-    jdouble ratio
-) {
-    if (handle == 0) return;
-    MpvWebPlayer *player = (__bridge MpvWebPlayer *)(void *)(intptr_t)handle;
-    runOnMainAsync(^{
-        [player setVideoMarginBottom:(double)ratio];
     });
 }
 

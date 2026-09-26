@@ -65,8 +65,6 @@ internal object NativePlayerBridge {
     external fun setVolume(handle: Long, level: Float)
     external fun volume(handle: Long): Float
     external fun setResizeMode(handle: Long, mode: Int)
-    /** mpv `video-margin-ratio-bottom`: the picture is laid out above this fraction of the window. */
-    external fun setVideoMarginBottom(handle: Long, ratio: Double)
     external fun durationMs(handle: Long): Long
     external fun positionMs(handle: Long): Long
     external fun bufferedPositionMs(handle: Long): Long
