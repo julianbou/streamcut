@@ -35,16 +35,39 @@ internal object DesktopStorage {
         stores.getOrPut(name) { Store(rootDir.resolve("$name.properties")) }
     }
 
+    /**
+     * Stores that describe files on this disk rather than the signed-in
+     * account: the clip library and its folder preferences, and the downloads
+     * index. Wiping them would orphan files that sign-out now leaves in place.
+     */
+    private val MACHINE_STORES = setOf("nuvio_clips", "nuvio_downloads")
+
+    /**
+     * Signs the account out of local storage: every settings store except
+     * [MACHINE_STORES] goes, and every subdirectory stays. Upstream Nuvio
+     * deletes the whole tree, which in StreamCut also took the exported clips,
+     * downloads, TorrServer and the staged ffmpeg the exporter was still
+     * pointing at.
+     */
     fun wipe() {
         synchronized(stores) {
-            stores.values.forEach(Store::clearInMemory)
-            stores.clear()
+            val iterator = stores.entries.iterator()
+            while (iterator.hasNext()) {
+                val (name, store) = iterator.next()
+                if (name in MACHINE_STORES) continue
+                store.clearInMemory()
+                iterator.remove()
+            }
         }
-        if (!rootDir.exists()) return
-        Files.walk(rootDir).use { stream ->
+        wipeAccountFiles(rootDir)
+    }
+
+    internal fun wipeAccountFiles(dir: Path) {
+        if (!dir.exists()) return
+        val kept = MACHINE_STORES.mapTo(HashSet()) { "$it.properties" }
+        Files.list(dir).use { stream ->
             stream
-                .sorted(Comparator.reverseOrder())
-                .filter { it != rootDir }
+                .filter { Files.isRegularFile(it) && it.fileName.toString() !in kept }
                 .forEach { path -> runCatching { Files.deleteIfExists(path) } }
         }
     }

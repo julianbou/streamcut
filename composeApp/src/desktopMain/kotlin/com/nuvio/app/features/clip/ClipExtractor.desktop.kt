@@ -1168,7 +1168,17 @@ internal actual object ClipExtractor {
     internal fun headersArgumentFor(headers: Map<String, String>): String? = headersArgument(headers)
 
     private fun resolveFfmpegPath(): String? {
-        cachedFfmpegPath?.let { return it }
+        // A cached absolute path can vanish under a running app -- the staged
+        // copy lives in the data folder -- so look again rather than report a
+        // missing ffmpeg until restart. The bare "ffmpeg" PATH fallback has no
+        // file to check and stays cached.
+        cachedFfmpegPath?.let { cached ->
+            if (!File(cached).isAbsolute || File(cached).canExecute()) return cached
+            log.i { "ffmpeg at $cached is gone; resolving again" }
+            cachedFfmpegPath = null
+            cachedEncoders = null
+            cachedFilters.remove(cached)
+        }
         val explicit = System.getenv("NUVIO_FFMPEG_PATH")?.takeIf { it.isNotBlank() }
         if (explicit != null && File(explicit).canExecute()) {
             cachedFfmpegPath = explicit

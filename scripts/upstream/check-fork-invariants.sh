@@ -45,6 +45,9 @@ refute "MSI upgrade code is not Nuvio's" composeApp/build.gradle.kts '395990ee-9
   "windowsMsiUpgradeUuid in composeApp/build.gradle.kts must stay StreamCut's own: sharing Nuvio's makes Windows uninstall one app when installing the other"
 check "data directory is StreamCut/" \
   composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt 'APP_DIR_NAME = "StreamCut"'
+check "sign-out keeps clips, downloads and the staged ffmpeg" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt 'wipeAccountFiles\(rootDir\)' \
+  "DesktopStorage.wipe() must delete only top-level settings files (wipeAccountFiles): upstream's Files.walk wipe deletes exported clips and the ffmpeg the exporter uses"
 
 echo "Updates and links"
 check "updater reads julianbou/streamcut" \
