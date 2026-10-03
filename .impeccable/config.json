@@ -23,6 +23,33 @@
         "value": "nuvio jetbrains sans",
         "createdAt": "2026-09-23T11:36:07.518Z",
         "reason": "DESIGN.md: local @font-face alias for JetBrains Sans, the declared body face"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "brag-output-2026-09-29-onetake/film/comp.html"
+        ],
+        "createdAt": "2026-09-29T05:56:41.520Z",
+        "reason": "Claude: the riso ink blooms are StreamCut's chosen visual world (DESIGN.md, RisoMaterial.kt risoBlooms), reproduced in the promo"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "brag-output-2026-09-29-onetake/film/comp.html"
+        ],
+        "createdAt": "2026-09-29T05:56:41.537Z",
+        "reason": "Claude: replica of the shipped player chrome (clip-controls.css key hints, clip-search.css) at 2x; paddings copied from the app, not new design"
+      },
+      {
+        "rule": "clipped-overflow-container",
+        "value": "*",
+        "files": [
+          "brag-output-2026-09-29-onetake/film2/comp.html"
+        ],
+        "createdAt": "2026-09-29T06:02:30.656Z",
+        "reason": "Claude: video composition; overflow clips are deliberate (player frame, search result drop, export status line)"
       }
     ]
   }
