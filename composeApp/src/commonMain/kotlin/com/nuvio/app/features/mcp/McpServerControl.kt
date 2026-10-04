@@ -34,4 +34,10 @@ internal expect object McpServerControl {
      * Cowork uses. Null when this build has no launcher for a client to start.
      */
     fun desktopConfigSnippet(): String?
+
+    /** The last thing an assistant did through the server, as one line; null when nothing has run. */
+    fun lastActivity(): String?
+
+    /** Shows the full record of what assistants have done, in whatever the system opens text with. */
+    fun openActivityLog()
 }

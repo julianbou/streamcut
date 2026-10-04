@@ -3,10 +3,15 @@ package com.nuvio.app.features.mcp
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.build.AppVersionConfig
 import com.nuvio.app.core.storage.DesktopStorage
+import com.nuvio.app.features.clip.ClipExtractor
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.io.File
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.security.SecureRandom
 
 internal actual object McpServerControl {
@@ -18,6 +23,8 @@ internal actual object McpServerControl {
 
     private var server: McpHttpServer? = null
     private var error: String? = null
+
+    private val activityLog = McpActivityLog(DesktopStorage.rootDir.resolve("mcp-activity.log").toFile())
 
     actual val isSupported: Boolean = true
 
@@ -35,9 +42,25 @@ internal actual object McpServerControl {
 
     // User scope, because the default registers the server only for whatever
     // folder the terminal happened to be in, and it then shows up nowhere else.
-    actual fun setupCommand(): String =
-        "claude mcp add --scope user --transport http streamcut ${endpointUrl()} " +
-            "--header \"Authorization: Bearer ${token()}\""
+    //
+    // Through the launcher when there is one: the relay reads the token
+    // itself, so nothing secret is written into the client's configuration,
+    // and it can start StreamCut when a call finds it closed. A build run from
+    // Gradle has no launcher and falls back to the URL and the token.
+    actual fun setupCommand(): String = launcherPath()
+        ?.let { "claude mcp add --scope user streamcut -- \"$it\" ${McpStdioBridge.Flag}" }
+        ?: (
+            "claude mcp add --scope user --transport http streamcut ${endpointUrl()} " +
+                "--header \"Authorization: Bearer ${token()}\""
+            )
+
+    actual fun lastActivity(): String? = activityLog.lastLine()
+
+    actual fun openActivityLog() {
+        // Opened even when empty: a blank file answers "has anything run", an error does not.
+        runCatching { File(activityLog.path).apply { parentFile?.mkdirs(); createNewFile() } }
+        ClipExtractor.openFile(activityLog.path)
+    }
 
     /**
      * One member to paste inside `mcpServers` in Claude Desktop's configuration,
@@ -46,7 +69,7 @@ internal actual object McpServerControl {
      * can start.
      */
     actual fun desktopConfigSnippet(): String? {
-        val launcher = System.getProperty("jpackage.app-path")?.takeIf { it.isNotBlank() } ?: return null
+        val launcher = launcherPath() ?: return null
         val entry = buildJsonObject {
             put("command", launcher)
             put("args", JsonArray(listOf(JsonPrimitive(McpStdioBridge.Flag))))
@@ -57,12 +80,49 @@ internal actual object McpServerControl {
     /** For [McpStdioBridge], which presents it to the server on the client's behalf. */
     fun accessToken(): String = token()
 
-    fun dispatcher(tools: List<McpTool>): McpDispatcher = McpDispatcher(
+    fun dispatcher(tools: List<McpTool>, logCalls: Boolean = true): McpDispatcher = McpDispatcher(
         serverName = "streamcut",
         serverVersion = AppVersionConfig.DESKTOP_VERSION_NAME,
         instructions = Instructions,
         tools = tools,
+        onToolCall = { tool, arguments, failed, tookMs ->
+            if (logCalls) activityLog.record(tool, arguments.toString(), failed, tookMs)
+        },
     )
+
+    /**
+     * Opens StreamCut and waits for its server, for [McpStdioBridge]. False
+     * when the user has the setting off -- the app would open and still not
+     * listen -- or when this is not a packaged build with a launcher to start.
+     */
+    fun launchAppAndWait(): Boolean {
+        if (!isEnabled()) return false
+        val launcher = launcherPath() ?: return false
+        val bundle = File(launcher).parentFile?.parentFile?.parentFile?.takeIf { it.name.endsWith(".app") }
+        // On macOS through `open`, in the background: a job that needs the
+        // app should not take the screen from whoever is using the machine.
+        val command = if (bundle != null) listOf("open", "-g", "-a", bundle.absolutePath) else listOf(launcher)
+        val started = runCatching {
+            ProcessBuilder(command)
+                // Never inherited: this process's stdout is the protocol.
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start()
+        }.isSuccess
+        if (!started) return false
+
+        val deadline = System.currentTimeMillis() + LaunchWaitMs
+        while (System.currentTimeMillis() < deadline) {
+            val listening = runCatching {
+                Socket().use { it.connect(InetSocketAddress(InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)), port()), 500) }
+            }.isSuccess
+            if (listening) return true
+            Thread.sleep(500)
+        }
+        return false
+    }
+
+    private fun launcherPath(): String? = System.getProperty("jpackage.app-path")?.takeIf { it.isNotBlank() }
 
     /** Called once at launch. Does nothing unless the user turned the server on. */
     @Synchronized
@@ -117,11 +177,17 @@ internal actual object McpServerControl {
     /** Fixed rather than picked at launch: the client's configuration names it. */
     private const val DefaultPort = 47_800
 
+    /** A cold start on a slow disk; past this the call is answered as unreachable. */
+    private const val LaunchWaitMs = 40_000L
+
     private const val Instructions =
         "StreamCut cuts clips out of films and series. Typical flow: search_titles to get a title's " +
             "type and id (get_title lists a series' episodes), find_line to locate a moment by its " +
             "dialogue, list_streams to choose a source, create_clip with the range in milliseconds, then " +
             "get_clip with wait_seconds until it completes and reports the file. Subtitle timings can be " +
-            "a second or two off from a given stream, so pad a range taken from find_line, or look with " +
-            "get_frames: it returns stills from a stream, which is how to place a cut on the exact shot."
+            "most of a minute off from a given stream: give find_line the stream_id to re-time its matches " +
+            "against that stream, and use detect_cuts to end a clip exactly on a cut. For a moment nobody " +
+            "speaks in, scan with get_contact_sheet and look closer with get_frames. Skip any stream that " +
+            "list_streams marks with a warning, and call probe_stream first when a stream carries several " +
+            "audio languages."
 }

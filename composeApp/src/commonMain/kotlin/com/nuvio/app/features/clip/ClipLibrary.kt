@@ -141,6 +141,19 @@ object ClipLibrary {
         persist()
     }
 
+    /**
+     * Points an entry at the file it has been renamed to. The caller moves the
+     * file; this only keeps the library telling the truth about where it is.
+     */
+    internal fun relocate(id: String, outputFileUri: String, fileName: String): ClipEntry? {
+        ensureLoaded()
+        val current = _entries.value.firstOrNull { it.id == id } ?: return null
+        val moved = current.copy(outputFileUri = outputFileUri, fileName = fileName)
+        _entries.value = _entries.value.map { if (it.id == id) moved else it }
+        persist()
+        return moved
+    }
+
     /** Show a saved clip in the platform file manager. */
     fun reveal(id: String) {
         val entry = _entries.value.firstOrNull { it.id == id } ?: return

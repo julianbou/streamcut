@@ -75,6 +75,34 @@ class McpServerTest {
     }
 
     @Test
+    fun `each tool says whether it only reads, so a client can let the ones that do run unasked`() {
+        val tools = listOf(
+            jsonTool("look", "", buildJsonObject { }) { JsonPrimitive(1) },
+            jsonTool("make", "", buildJsonObject { }, McpEffect.Changes) { JsonPrimitive(1) },
+            jsonTool("remove", "", buildJsonObject { }, McpEffect.Destroys) { JsonPrimitive(1) },
+        )
+        val listed = runBlocking {
+            McpDispatcher("streamcut", "test", "", tools).handle(Json.parseToJsonElement("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}"""))
+        }!!.jsonObject["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject["annotations"]!!.jsonObject }
+        assertEquals(listOf(true, false, false), listed.map { it["readOnlyHint"]!!.jsonPrimitive.boolean })
+        assertEquals(listOf(false, false, true), listed.map { it["destructiveHint"]!!.jsonPrimitive.boolean })
+    }
+
+    @Test
+    fun `every tool call is reported with its outcome, and nothing else is`() {
+        val calls = ArrayList<String>()
+        val watched = McpDispatcher("streamcut", "test", "", listOf(echo, refuses)) { tool, arguments, failed, _ ->
+            calls += "$tool $arguments ${if (failed) "failed" else "ok"}"
+        }
+        runBlocking {
+            watched.handle(Json.parseToJsonElement("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}"""))
+            watched.handle(Json.parseToJsonElement("""{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi"}}}"""))
+            watched.handle(Json.parseToJsonElement("""{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"refuses"}}"""))
+        }
+        assertEquals(listOf("""echo {"text":"hi"} ok""", "refuses {} failed"), calls)
+    }
+
+    @Test
     fun `tools are listed with their schemas`() {
         val tools = ask("""{"jsonrpc":"2.0","id":2,"method":"tools/list"}""")!!["result"]!!.jsonObject["tools"]!!.jsonArray
         assertEquals(listOf("echo", "refuses"), tools.map { it.jsonObject["name"]!!.jsonPrimitive.content })
@@ -251,6 +279,39 @@ class McpServerTest {
         val call = replies[2]["result"]!!.jsonObject
         assertTrue(call["isError"]!!.jsonPrimitive.boolean)
         assertEquals("StreamCut is not reachable.", call["content"]!!.jsonArray.first().jsonObject["text"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `a tool call that finds the app closed starts it and goes through`() {
+        val closedPort = ServerSocket(0).use { it.localPort }
+        var wakes = 0
+        val offline = McpDispatcher("streamcut", "test", "", listOf(echo))
+        val written = ByteArrayOutputStream()
+        McpStdioBridge(
+            endpoint = "http://127.0.0.1:$closedPort/mcp",
+            token = "secret",
+            offline = offline,
+            wake = {
+                wakes++
+                // "Starting the app": the server comes up on the port the relay was told about.
+                server = McpHttpServer(port = closedPort, token = "secret", dispatcher = dispatcher).also { it.start() }
+                true
+            },
+        ).relay(
+            listOf(
+                """{"jsonrpc":"2.0","id":1,"method":"tools/list"}""",
+                """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"hi"}}}""",
+            ).joinToString("\n").reader().buffered(),
+            PrintStream(written, true),
+        )
+        val replies = written.toString().lines().filter { it.isNotBlank() }.map { Json.parseToJsonElement(it).jsonObject }
+        // Listing tools is answered offline and wakes nothing; the call is what starts the app.
+        assertEquals(1, wakes)
+        assertEquals(1, replies[0]["result"]!!.jsonObject["tools"]!!.jsonArray.size)
+        assertEquals(
+            """{"said":"hi"}""",
+            replies[1]["result"]!!.jsonObject["content"]!!.jsonArray.first().jsonObject["text"]!!.jsonPrimitive.content,
+        )
     }
 
     @Test

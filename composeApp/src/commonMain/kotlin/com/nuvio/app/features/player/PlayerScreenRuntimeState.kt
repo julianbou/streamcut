@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.features.addons.AddonsUiState
+import com.nuvio.app.features.clip.ClipPlayerRequests
 import com.nuvio.app.features.details.MetaDetails
 import com.nuvio.app.features.details.MetaDetailsUiState
 import com.nuvio.app.features.details.MetaScreenSettingsUiState
@@ -215,6 +216,9 @@ internal class PlayerScreenRuntime(
     // before an export command is issued.
     var clipStartMs: Long? = null
     var clipEndMs: Long? = null
+    // The range this player was opened to show, if it was opened on one.
+    // Taken once here, so switching source or reopening does not revive it.
+    val clipPreset: ClipPlayerRequests.Range? = ClipPlayerRequests.takeRange(args.sourceUrl)
     // Defaults on: someone watching with subtitles usually wants them in the
     // clip too, and a shared MP4 has no track picker to turn them on later.
     // Observable, unlike the In/Out points: the chrome draws this one.

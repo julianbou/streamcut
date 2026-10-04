@@ -85,7 +85,9 @@
     <string name="clip_settings_mcp_description_on_format">Listening at %1$s</string>
     <string name="clip_settings_mcp_error_format">Couldn\'t start: %1$s</string>
     <string name="clip_settings_mcp_copy_title">Copy Claude Code command</string>
-    <string name="clip_settings_mcp_copy_description">Paste it in a terminal to connect Claude Code. It contains this computer\'s access token.</string>
+    <string name="clip_settings_mcp_copy_description">Paste it in a terminal to connect Claude Code.</string>
+    <string name="clip_settings_mcp_activity_title">Activity</string>
+    <string name="clip_settings_mcp_activity_empty">Nothing yet. Every request an assistant makes is recorded here.</string>
     <string name="clip_settings_mcp_copied">Copied</string>
     <string name="clip_settings_mcp_desktop_title">Copy Claude Desktop config</string>
     <string name="clip_settings_mcp_desktop_description">For the Claude app and Cowork. Paste it inside \"mcpServers\" in Settings › Developer › Edit Config, then restart Claude.</string>

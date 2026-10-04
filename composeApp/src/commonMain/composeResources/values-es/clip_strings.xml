@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spanish for the clipper's own strings. Only the AI assistants section so
+     far; everything else in values/clip_strings.xml still falls back to English. -->
+<resources>
+    <string name="clip_settings_mcp_section">Asistentes de IA</string>
+    <string name="clip_settings_mcp_title">Dejar que un asistente de IA use StreamCut</string>
+    <string name="clip_settings_mcp_description_off">Un asistente como Claude puede buscar títulos, encontrar una frase y cortar clips por vos. Funciona solo desde esta computadora.</string>
+    <string name="clip_settings_mcp_description_on_format">Escuchando en %1$s</string>
+    <string name="clip_settings_mcp_error_format">No se pudo iniciar: %1$s</string>
+    <string name="clip_settings_mcp_copy_title">Copiar comando para Claude Code</string>
+    <string name="clip_settings_mcp_copy_description">Pegalo en una terminal para conectar Claude Code.</string>
+    <string name="clip_settings_mcp_copied">Copiado</string>
+    <string name="clip_settings_mcp_desktop_title">Copiar configuración para Claude Desktop</string>
+    <string name="clip_settings_mcp_desktop_description">Para la app de Claude y Cowork. Pegala dentro de \"mcpServers\" en Ajustes › Desarrollador › Editar configuración y reiniciá Claude.</string>
+    <string name="clip_settings_mcp_activity_title">Actividad</string>
+    <string name="clip_settings_mcp_activity_empty">Nada todavía. Acá queda registrado cada pedido que hace un asistente.</string>
+</resources>

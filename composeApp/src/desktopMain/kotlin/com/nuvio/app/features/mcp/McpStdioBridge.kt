@@ -4,6 +4,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.PrintStream
@@ -29,7 +32,16 @@ internal class McpStdioBridge(
     private val token: String,
     /** Answers when the app cannot be reached, so the client still sees a working server. */
     private val offline: McpDispatcher,
+    /**
+     * Starts the app and waits for its server; true once it is listening.
+     * What lets a job scheduled for the small hours run without someone having
+     * left StreamCut open for it.
+     */
+    private val wake: () -> Boolean = { false },
 ) {
+    /** When waking the app last failed, so a client that keeps calling does not relaunch it on every call. */
+    private var wakeFailedAt = 0L
+
     fun relay(input: BufferedReader, output: PrintStream) {
         while (true) {
             val line = input.readLine() ?: return
@@ -48,15 +60,31 @@ internal class McpStdioBridge(
         return try {
             post(message)
         } catch (error: IOException) {
-            // Closed, or open with the setting off: either way nothing is
-            // listening. The client keeps its connection and its tool list;
-            // only calling a tool says what is wrong, where the model can
-            // read it and tell the user. The cause goes to stderr, which is
-            // where a client keeps a server's log.
             System.err.println("streamcut: $endpoint unreachable: $error")
+            // Only for a tool call. Connecting and listing tools happen every
+            // time the client starts, and opening StreamCut each time someone
+            // opens their assistant would be the app launching itself.
+            if (parsed.isToolCall() && wakeApp()) {
+                try {
+                    return post(message)
+                } catch (retry: IOException) {
+                    System.err.println("streamcut: still unreachable after launching the app: $retry")
+                }
+            }
+            // The client keeps its connection and its tool list; only calling
+            // a tool says what is wrong, where the model can read it and tell
+            // the user.
             runBlocking { offline.handle(parsed) }?.toString()
         }
     }
+
+    private fun wakeApp(): Boolean {
+        if (System.currentTimeMillis() - wakeFailedAt < WakeRetryAfterMs) return false
+        return wake().also { woke -> if (!woke) wakeFailedAt = System.currentTimeMillis() }
+    }
+
+    private fun JsonElement.isToolCall(): Boolean =
+        ((this as? JsonObject)?.get("method") as? JsonPrimitive)?.contentOrNull == "tools/call"
 
     private fun post(message: String): String? {
         val connection = URI(endpoint).toURL().openConnection() as HttpURLConnection
@@ -84,9 +112,11 @@ internal class McpStdioBridge(
         /** Past the server's own request limit, so it is the server that decides a call took too long. */
         private const val ReadTimeoutMs = 130_000
 
+        private const val WakeRetryAfterMs = 60_000L
+
         private const val NotRunning =
-            "StreamCut is not reachable. Ask the user to open StreamCut and check that " +
-                "Settings > Clips > \"Let an AI assistant use StreamCut\" is on, then try again."
+            "StreamCut is not reachable and could not be started. Ask the user to open StreamCut and check " +
+                "that Settings > Clips > \"Let an AI assistant use StreamCut\" is on, then try again."
 
         /** Runs the relay on this process's stdin and stdout until the client closes the pipe. */
         fun runOnStandardStreams() {
@@ -98,14 +128,17 @@ internal class McpStdioBridge(
                 endpoint = McpServerControl.endpointUrl(),
                 token = McpServerControl.accessToken(),
                 offline = offlineDispatcher(),
+                wake = McpServerControl::launchAppAndWait,
             ).relay(System.`in`.bufferedReader(), protocolOut)
         }
 
         /** The real tool list, with every tool answering that the app is not there. */
         fun offlineDispatcher(): McpDispatcher = McpServerControl.dispatcher(
-            McpTools().all.map { tool ->
-                McpTool(tool.name, tool.description, tool.inputSchema) { throw McpToolException(NotRunning) }
+            tools = McpTools().all.map { tool ->
+                McpTool(tool.name, tool.description, tool.inputSchema, tool.effect) { throw McpToolException(NotRunning) }
             },
+            // Nothing happened, so there is nothing for the record.
+            logCalls = false,
         )
     }
 }

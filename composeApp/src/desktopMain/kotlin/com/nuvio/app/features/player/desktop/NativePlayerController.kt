@@ -1654,6 +1654,12 @@ private fun PlayerControlsState.toControlsJson(isFullscreen: Boolean): String =
         append(',')
         appendJsonField("subtitleSearchDelayMs", subtitleSearchDelayMs)
         append(',')
+        appendJsonField("clipPresetInMs", clipPresetInMs)
+        append(',')
+        appendJsonField("clipPresetOutMs", clipPresetOutMs)
+        append(',')
+        appendJsonField("clipPresetToken", clipPresetToken)
+        append(',')
         appendJsonField("subtitleStyle", subtitleStyle)
         append(',')
         appendJsonArrayField("subtitleColorSwatches", SubtitleColorSwatches.map { it.toStorageHexString() }) { append(it.toJsonString()) }

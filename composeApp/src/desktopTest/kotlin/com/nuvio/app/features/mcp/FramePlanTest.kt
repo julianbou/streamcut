@@ -45,6 +45,12 @@ class FramePlanTest {
     }
 
     @Test
+    fun `a contact sheet may ask for more frames than a run of full ones`() {
+        assertEquals(24, FramePlan.from(atMs = null, fromMs = 0, toMs = 3_600_000, count = 24, maxFrames = 30).timesMs.size)
+        assertEquals(30, FramePlan.from(atMs = null, fromMs = 0, toMs = 3_600_000, count = 99, maxFrames = 30).timesMs.size)
+    }
+
+    @Test
     fun `requests that do not say which frames are refused with the reason`() {
         assertFailsWith<McpToolException> { FramePlan.from(atMs = null, fromMs = null, toMs = null, count = null) }
         assertFailsWith<McpToolException> { FramePlan.from(atMs = null, fromMs = 5_000, toMs = 5_000, count = 3) }

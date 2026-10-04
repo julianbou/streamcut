@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,8 @@ import nuvio.composeapp.generated.resources.clip_settings_group_description_off
 import nuvio.composeapp.generated.resources.clip_settings_group_description_on
 import nuvio.composeapp.generated.resources.clip_settings_group_example_format
 import nuvio.composeapp.generated.resources.clip_settings_group_title
+import nuvio.composeapp.generated.resources.clip_settings_mcp_activity_empty
+import nuvio.composeapp.generated.resources.clip_settings_mcp_activity_title
 import nuvio.composeapp.generated.resources.clip_settings_mcp_copied
 import nuvio.composeapp.generated.resources.clip_settings_mcp_copy_description
 import nuvio.composeapp.generated.resources.clip_settings_mcp_copy_title
@@ -237,6 +240,17 @@ private fun McpSettingsSection(isTablet: Boolean) {
                         clipboardManager.setText(AnnotatedString(McpServerControl.setupCommand()))
                         copied = "code"
                     },
+                )
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.clip_settings_mcp_activity_title),
+                    // The last request, as recorded: what the row is for is
+                    // seeing at a glance that something ran, and what.
+                    description = remember(enabled) { McpServerControl.lastActivity() }
+                        ?: stringResource(Res.string.clip_settings_mcp_activity_empty),
+                    icon = Icons.Rounded.History,
+                    isTablet = isTablet,
+                    onClick = { McpServerControl.openActivityLog() },
                 )
                 if (desktopConfig != null) {
                     SettingsGroupDivider(isTablet = isTablet)

@@ -86,6 +86,15 @@ fi
 check "player loads the clip controls" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-controls\.js'
 check "player loads the subtitle search" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-search\.js'
 check "player loads Save as" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-save\.js'
+check "player loads the preset clip range" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-preset\.js'
+check "the preset clip range is extracted with the player page" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt '"clip-preset\.js" to' \
+  "exportControlsPageAssets() in NativePlayerBridge.kt must list clip-preset.js, or the running app 404s it"
+check "the preset clip range reaches the player page" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt 'appendJsonField\("clipPresetToken"' \
+  "the control-state JSON in NativePlayerController.kt must carry clipPresetInMs, clipPresetOutMs and clipPresetToken"
+check "an assistant can open the player" composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt 'ClipPlayerRequests\.pending' \
+  "MainAppContent.kt must collect ClipPlayerRequests.pending and navigate to PlayerRoute, or open_in_player does nothing"
 check "Save as is extracted with the player page" \
   composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt '"clip-save\.js" to' \
   "exportControlsPageAssets() in NativePlayerBridge.kt must list clip-save.js and clip-save.css, or the running app 404s them"

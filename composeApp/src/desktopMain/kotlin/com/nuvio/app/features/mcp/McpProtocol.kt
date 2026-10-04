@@ -23,10 +23,27 @@ internal sealed interface McpContent {
     class Image(val bytes: ByteArray, val mimeType: String) : McpContent
 }
 
+/**
+ * What a tool does to the world, which is what a client decides its
+ * permission prompt on. A tool that only reads can be approved once and left
+ * to run; without this every search in an unattended job stops to ask.
+ */
+internal enum class McpEffect {
+    /** Looks, and changes nothing. */
+    Reads,
+
+    /** Adds or alters something -- a new clip, a new name, a window -- and loses nothing. */
+    Changes,
+
+    /** Removes or replaces something the user had. */
+    Destroys,
+}
+
 internal class McpTool(
     val name: String,
     val description: String,
     val inputSchema: JsonObject,
+    val effect: McpEffect = McpEffect.Reads,
     val handler: suspend (arguments: JsonObject) -> List<McpContent>,
 )
 
@@ -35,8 +52,9 @@ internal fun jsonTool(
     name: String,
     description: String,
     inputSchema: JsonObject,
+    effect: McpEffect = McpEffect.Reads,
     handler: suspend (arguments: JsonObject) -> JsonElement,
-): McpTool = McpTool(name, description, inputSchema) { arguments ->
+): McpTool = McpTool(name, description, inputSchema, effect) { arguments ->
     listOf(McpContent.Text(handler(arguments).toString()))
 }
 
@@ -55,6 +73,8 @@ internal class McpDispatcher(
     private val serverVersion: String,
     private val instructions: String,
     tools: List<McpTool>,
+    /** Told about every tool call once it has ended: name, arguments, whether it failed, how long it took. */
+    private val onToolCall: (tool: String, arguments: JsonObject, failed: Boolean, tookMs: Long) -> Unit = { _, _, _, _ -> },
 ) {
     private val tools = tools.associateBy { it.name }
 
@@ -112,6 +132,15 @@ internal class McpDispatcher(
                             put("name", tool.name)
                             put("description", tool.description)
                             put("inputSchema", tool.inputSchema)
+                            put(
+                                "annotations",
+                                buildJsonObject {
+                                    put("readOnlyHint", tool.effect == McpEffect.Reads)
+                                    put("destructiveHint", tool.effect == McpEffect.Destroys)
+                                    // Every tool reaches the user's addons or disk, never the open web.
+                                    put("openWorldHint", false)
+                                },
+                            )
                         },
                     )
                 }
@@ -127,6 +156,7 @@ internal class McpDispatcher(
         // A tool that fails is still a successful call as far as JSON-RPC goes:
         // the failure goes back as the result, where the model reads it and can
         // correct course, instead of as a protocol error the client swallows.
+        val startedAt = System.nanoTime()
         val (content, isError) = try {
             tool.handler(arguments) to false
         } catch (error: CancellationException) {
@@ -136,6 +166,7 @@ internal class McpDispatcher(
         } catch (error: Throwable) {
             listOf(McpContent.Text("${tool.name} failed: ${error.message ?: error::class.simpleName}")) to true
         }
+        onToolCall(tool.name, arguments, isError, (System.nanoTime() - startedAt) / 1_000_000)
         return reply(
             id,
             buildJsonObject {

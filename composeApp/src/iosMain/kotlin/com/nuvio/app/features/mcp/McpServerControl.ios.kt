@@ -14,4 +14,8 @@ internal actual object McpServerControl {
     actual fun setupCommand(): String = ""
 
     actual fun desktopConfigSnippet(): String? = null
+
+    actual fun lastActivity(): String? = null
+
+    actual fun openActivityLog() = Unit
 }
