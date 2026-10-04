@@ -129,6 +129,7 @@ import com.nuvio.app.features.player.infusePlaybackCallbacks
 import com.nuvio.app.features.player.recordExternalPlaybackProgress
 import com.nuvio.app.features.player.ExternalPlayerPlatform
 import com.nuvio.app.features.player.PlayerLaunch
+import com.nuvio.app.features.clip.ClipPlayerRequests
 import com.nuvio.app.features.player.PlayerLaunchStore
 import com.nuvio.app.features.player.PlayerSettingsRepository
 import com.nuvio.app.features.player.SubtitleLanguageOption
@@ -760,6 +761,18 @@ internal fun MainAppContent(
 
                     null -> Unit
                 }
+            }
+        }
+
+        // StreamCut: the player opened from outside the graph, on a source an
+        // assistant resolved and usually with a clip range to check.
+        LaunchedEffect(navController) {
+            if (!ownsAppRuntime) return@LaunchedEffect
+            ClipPlayerRequests.pending.collectLatest { launch ->
+                if (launch == null) return@collectLatest
+                val launchId = PlayerLaunchStore.put(launch)
+                navController.navigate(PlayerRoute(launchId = launchId, title = launch.title))
+                ClipPlayerRequests.markConsumed(launch)
             }
         }
 

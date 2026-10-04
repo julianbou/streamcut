@@ -78,6 +78,20 @@
     <string name="clip_settings_group_description_off">Every clip goes straight into the clips folder.</string>
     <string name="clip_settings_group_example_format">Example: %1$s</string>
 
+    <!-- Settings: letting an AI assistant drive the app over MCP -->
+    <string name="clip_settings_mcp_section">AI assistants</string>
+    <string name="clip_settings_mcp_title">Let an AI assistant use StreamCut</string>
+    <string name="clip_settings_mcp_description_off">An assistant such as Claude can search titles, find a line and cut clips for you. Works only from this computer.</string>
+    <string name="clip_settings_mcp_description_on_format">Listening at %1$s</string>
+    <string name="clip_settings_mcp_error_format">Couldn\'t start: %1$s</string>
+    <string name="clip_settings_mcp_copy_title">Copy Claude Code command</string>
+    <string name="clip_settings_mcp_copy_description">Paste it in a terminal to connect Claude Code.</string>
+    <string name="clip_settings_mcp_activity_title">Activity</string>
+    <string name="clip_settings_mcp_activity_empty">Nothing yet. Every request an assistant makes is recorded here.</string>
+    <string name="clip_settings_mcp_copied">Copied</string>
+    <string name="clip_settings_mcp_desktop_title">Copy Claude Desktop config</string>
+    <string name="clip_settings_mcp_desktop_description">For the Claude app and Cowork. Paste it inside \"mcpServers\" in Settings › Developer › Edit Config, then restart Claude.</string>
+
     <!-- Details page. The clipper build never says "Play": pressing this opens
          the title to cut from, and "Resume" describes watching, not clipping. -->
     <string name="clip_details_action">Clip</string>

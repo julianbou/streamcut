@@ -1167,6 +1167,15 @@ internal actual object ClipExtractor {
     /** Header block for a source, shared with the filmstrip builder. */
     internal fun headersArgumentFor(headers: Map<String, String>): String? = headersArgument(headers)
 
+    /** ffprobe beside [ffmpeg], for the other clip-side tools that read a source's layout. */
+    internal fun ffprobePathFor(ffmpeg: String): String = ffprobePath(ffmpeg)
+
+    /** The reconnect and timeout options every remote read here uses. */
+    internal fun remoteReadArgsForTools(): List<String> = remoteReadArgs()
+
+    /** Whether a subtitle codec is pictures rather than text, and so has no lines to read. */
+    internal fun isBitmapSubtitleCodec(codec: String): Boolean = codec in bitmapSubtitleCodecs
+
     private fun resolveFfmpegPath(): String? {
         // A cached absolute path can vanish under a running app -- the staged
         // copy lives in the data folder -- so look again rather than report a

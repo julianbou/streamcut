@@ -297,6 +297,14 @@ data class PlayerControlsState(
     val subtitleSearchErrorMessage: String = "",
     /** Delay for result times: 0 unless the searched file is the one on screen. */
     val subtitleSearchDelayMs: Int = 0,
+    /**
+     * A clip range the player was opened with, for the page to mark once it
+     * knows the duration. [clipPresetToken] is 0 when there is none, and
+     * otherwise names this range so the page applies it exactly once.
+     */
+    val clipPresetInMs: Long = 0L,
+    val clipPresetOutMs: Long = 0L,
+    val clipPresetToken: Long = 0L,
     val closeModalsToken: Long = 0L,
     val submitIntroContentKey: String = "",
     val submitIntroSuccessToken: Long = 0L,

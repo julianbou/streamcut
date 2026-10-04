@@ -48,6 +48,15 @@ check "data directory is StreamCut/" \
 check "sign-out keeps clips, downloads and the staged ffmpeg" \
   composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt 'wipeAccountFiles\(rootDir\)' \
   "DesktopStorage.wipe() must delete only top-level settings files (wipeAccountFiles): upstream's Files.walk wipe deletes exported clips and the ffmpeg the exporter uses"
+check "sign-out keeps the MCP access token" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt 'MACHINE_STORES = .*"streamcut_mcp"' \
+  "DesktopStorage.MACHINE_STORES must list streamcut_mcp: the token is written into the assistant's own configuration"
+check "MCP server starts with the app" composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt 'McpServerControl\.startIfEnabled\(\)' \
+  "main() in Main.kt must call McpServerControl.startIfEnabled(), or the AI assistants setting does nothing after a restart"
+check "launcher answers --mcp-stdio before opening a window" composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt 'McpStdioBridge\.Flag in args' \
+  "main() in Main.kt must hand off to McpStdioBridge first thing: Claude Desktop and Cowork start the app with --mcp-stdio and need a pipe, not a second window"
+check "packaged runtime includes the HTTP server module" composeApp/build.gradle.kts '"jdk\.httpserver"' \
+  "nativeDistributions modules(...) must keep jdk.httpserver: the MCP server is built on it and a jlinked app without it fails at the toggle"
 
 echo "Updates and links"
 check "updater reads julianbou/streamcut" \
@@ -77,6 +86,15 @@ fi
 check "player loads the clip controls" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-controls\.js'
 check "player loads the subtitle search" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-search\.js'
 check "player loads Save as" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-save\.js'
+check "player loads the preset clip range" composeApp/src/desktopMain/resources/player-ui/controls.html 'clip-preset\.js'
+check "the preset clip range is extracted with the player page" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt '"clip-preset\.js" to' \
+  "exportControlsPageAssets() in NativePlayerBridge.kt must list clip-preset.js, or the running app 404s it"
+check "the preset clip range reaches the player page" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerController.kt 'appendJsonField\("clipPresetToken"' \
+  "the control-state JSON in NativePlayerController.kt must carry clipPresetInMs, clipPresetOutMs and clipPresetToken"
+check "an assistant can open the player" composeApp/src/commonMain/kotlin/com/nuvio/app/MainAppContent.kt 'ClipPlayerRequests\.pending' \
+  "MainAppContent.kt must collect ClipPlayerRequests.pending and navigate to PlayerRoute, or open_in_player does nothing"
 check "Save as is extracted with the player page" \
   composeApp/src/desktopMain/kotlin/com/nuvio/app/features/player/desktop/NativePlayerBridge.kt '"clip-save\.js" to' \
   "exportControlsPageAssets() in NativePlayerBridge.kt must list clip-save.js and clip-save.css, or the running app 404s them"
