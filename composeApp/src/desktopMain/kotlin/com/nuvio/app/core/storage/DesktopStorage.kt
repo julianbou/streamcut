@@ -39,8 +39,10 @@ internal object DesktopStorage {
      * Stores that describe files on this disk rather than the signed-in
      * account: the clip library and its folder preferences, and the downloads
      * index. Wiping them would orphan files that sign-out now leaves in place.
+     * The MCP store is here for a different reason: its token is written into
+     * an assistant's configuration, which sign-out has no way to update.
      */
-    private val MACHINE_STORES = setOf("nuvio_clips", "nuvio_downloads")
+    private val MACHINE_STORES = setOf("nuvio_clips", "nuvio_downloads", "streamcut_mcp")
 
     /**
      * Signs the account out of local storage: every settings store except

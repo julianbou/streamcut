@@ -23,6 +23,8 @@ import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.diagnostics.SentryInitializer
 import com.nuvio.app.core.ui.NuvioTheme
 import com.nuvio.app.features.discordrpc.DiscordPresenceManager
+import com.nuvio.app.features.mcp.McpServerControl
+import com.nuvio.app.features.mcp.McpStdioBridge
 import com.nuvio.app.features.p2p.P2pStreamingEngine
 import com.nuvio.app.features.plugins.configureDesktopQuickJsLibrary
 import com.nuvio.app.features.player.PlatformPlayerSurface
@@ -50,6 +52,12 @@ private const val MacosDarkAquaAppearance = "NSAppearanceNameDarkAqua"
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
+    // Before anything else: this mode is a pipe for an AI client, not the app,
+    // and must not open a window or touch the player.
+    if (McpStdioBridge.Flag in args) {
+        McpStdioBridge.runOnStandardStreams()
+        return
+    }
     // On Linux, initialize GTK BEFORE AWT/Compose/Skia to prevent GdkDisplayManager
     // type registration conflict (Skiko partially loads GDK without full GTK init).
     if (System.getProperty("os.name", "").lowercase().contains("linux")) {
@@ -65,6 +73,7 @@ fun main(args: Array<String>) {
     preloadNativePlayerBridgeAsync()
     AppIconRepository.ensureLoaded()
     DiscordPresenceManager.start()
+    McpServerControl.startIfEnabled()
 
     application {
         val appIconState by AppIconRepository.state.collectAsState()

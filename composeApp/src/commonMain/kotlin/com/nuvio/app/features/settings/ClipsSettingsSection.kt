@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Refresh
@@ -25,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,6 +36,7 @@ import com.nuvio.app.features.clip.ClipFilenameTemplate
 import com.nuvio.app.features.clip.ClipFolderPicker
 import com.nuvio.app.features.clip.ClipGroupingSettings
 import com.nuvio.app.features.clip.ClipRepository
+import com.nuvio.app.features.mcp.McpServerControl
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.clip_action_cancel
 import nuvio.composeapp.generated.resources.clip_action_save
@@ -49,6 +53,16 @@ import nuvio.composeapp.generated.resources.clip_settings_group_description_off
 import nuvio.composeapp.generated.resources.clip_settings_group_description_on
 import nuvio.composeapp.generated.resources.clip_settings_group_example_format
 import nuvio.composeapp.generated.resources.clip_settings_group_title
+import nuvio.composeapp.generated.resources.clip_settings_mcp_copied
+import nuvio.composeapp.generated.resources.clip_settings_mcp_copy_description
+import nuvio.composeapp.generated.resources.clip_settings_mcp_copy_title
+import nuvio.composeapp.generated.resources.clip_settings_mcp_description_off
+import nuvio.composeapp.generated.resources.clip_settings_mcp_desktop_description
+import nuvio.composeapp.generated.resources.clip_settings_mcp_desktop_title
+import nuvio.composeapp.generated.resources.clip_settings_mcp_description_on_format
+import nuvio.composeapp.generated.resources.clip_settings_mcp_error_format
+import nuvio.composeapp.generated.resources.clip_settings_mcp_section
+import nuvio.composeapp.generated.resources.clip_settings_mcp_title
 import nuvio.composeapp.generated.resources.clip_settings_section
 import org.jetbrains.compose.resources.stringResource
 
@@ -160,6 +174,91 @@ internal fun ClipsSettingsSection(isTablet: Boolean) {
                 editingTemplate = null
             },
         )
+    }
+
+    McpSettingsSection(isTablet = isTablet)
+}
+
+/**
+ * The switch for the MCP server, and the one thing needed to use it.
+ *
+ * The setup command is copied rather than shown: it carries the access token,
+ * and a settings page is the kind of screen that ends up in a screenshot.
+ */
+@Composable
+private fun McpSettingsSection(isTablet: Boolean) {
+    if (!McpServerControl.isSupported) return
+
+    var enabled by remember { mutableStateOf(McpServerControl.isEnabled()) }
+    var error by remember { mutableStateOf(McpServerControl.lastError()) }
+    // Which of the two snippets was copied last, so only that row says so.
+    var copied by remember { mutableStateOf<String?>(null) }
+    val clipboardManager = LocalClipboardManager.current
+    val desktopConfig = remember { McpServerControl.desktopConfigSnippet() }
+
+    SettingsSection(
+        title = stringResource(Res.string.clip_settings_mcp_section),
+        isTablet = isTablet,
+    ) {
+        SettingsGroup(isTablet = isTablet) {
+            SettingsSwitchRow(
+                title = stringResource(Res.string.clip_settings_mcp_title),
+                description = when {
+                    !enabled -> stringResource(Res.string.clip_settings_mcp_description_off)
+                    error != null -> stringResource(Res.string.clip_settings_mcp_error_format, error.orEmpty())
+                    else -> stringResource(
+                        Res.string.clip_settings_mcp_description_on_format,
+                        McpServerControl.endpointUrl(),
+                    )
+                },
+                checked = enabled,
+                isTablet = isTablet,
+                onCheckedChange = { checked ->
+                    McpServerControl.setEnabled(checked)
+                    enabled = McpServerControl.isEnabled()
+                    error = McpServerControl.lastError()
+                    copied = null
+                },
+            )
+            if (enabled && error == null) {
+                SettingsGroupDivider(isTablet = isTablet)
+                SettingsNavigationRow(
+                    title = stringResource(Res.string.clip_settings_mcp_copy_title),
+                    description = stringResource(
+                        if (copied == "code") {
+                            Res.string.clip_settings_mcp_copied
+                        } else {
+                            Res.string.clip_settings_mcp_copy_description
+                        },
+                    ),
+                    icon = Icons.Rounded.ContentCopy,
+                    isTablet = isTablet,
+                    onClick = {
+                        clipboardManager.setText(AnnotatedString(McpServerControl.setupCommand()))
+                        copied = "code"
+                    },
+                )
+                if (desktopConfig != null) {
+                    SettingsGroupDivider(isTablet = isTablet)
+                    SettingsNavigationRow(
+                        title = stringResource(Res.string.clip_settings_mcp_desktop_title),
+                        description = stringResource(
+                            if (copied == "desktop") {
+                                Res.string.clip_settings_mcp_copied
+                            } else {
+                                Res.string.clip_settings_mcp_desktop_description
+                            },
+                        ),
+                        icon = Icons.Rounded.ContentCopy,
+                        isTablet = isTablet,
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(desktopConfig))
+                            copied = "desktop"
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 

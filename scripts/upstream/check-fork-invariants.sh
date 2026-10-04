@@ -48,6 +48,15 @@ check "data directory is StreamCut/" \
 check "sign-out keeps clips, downloads and the staged ffmpeg" \
   composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt 'wipeAccountFiles\(rootDir\)' \
   "DesktopStorage.wipe() must delete only top-level settings files (wipeAccountFiles): upstream's Files.walk wipe deletes exported clips and the ffmpeg the exporter uses"
+check "sign-out keeps the MCP access token" \
+  composeApp/src/desktopMain/kotlin/com/nuvio/app/core/storage/DesktopStorage.kt 'MACHINE_STORES = .*"streamcut_mcp"' \
+  "DesktopStorage.MACHINE_STORES must list streamcut_mcp: the token is written into the assistant's own configuration"
+check "MCP server starts with the app" composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt 'McpServerControl\.startIfEnabled\(\)' \
+  "main() in Main.kt must call McpServerControl.startIfEnabled(), or the AI assistants setting does nothing after a restart"
+check "launcher answers --mcp-stdio before opening a window" composeApp/src/desktopMain/kotlin/com/nuvio/app/Main.kt 'McpStdioBridge\.Flag in args' \
+  "main() in Main.kt must hand off to McpStdioBridge first thing: Claude Desktop and Cowork start the app with --mcp-stdio and need a pipe, not a second window"
+check "packaged runtime includes the HTTP server module" composeApp/build.gradle.kts '"jdk\.httpserver"' \
+  "nativeDistributions modules(...) must keep jdk.httpserver: the MCP server is built on it and a jlinked app without it fails at the toggle"
 
 echo "Updates and links"
 check "updater reads julianbou/streamcut" \
