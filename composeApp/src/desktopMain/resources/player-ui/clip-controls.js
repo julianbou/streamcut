@@ -478,9 +478,10 @@ const clipRangesSummary = clipRangesPanel.querySelector("#clipRangesSummary");
 /** "20:07.5 – 22:42.7" -- the name a range goes by everywhere. */
 const clipRangeLabel = range => `${formatClipTime(range.inMs)} – ${formatClipTime(range.outMs)}`;
 
-/** A length as people say it: "23.9s" under a minute, "2:35.2" above. */
+/** A length as people say it: "23.9s" under a minute, "2:35.2" above.
+    Floored to the tenth like formatClipTime, so it never disagrees with LEN. */
 const clipLengthLabel = ms => {
-  const tenths = Math.round(Math.max(0, ms) / 100);
+  const tenths = Math.floor(Math.max(0, Number(ms) || 0) / 100);
   const seconds = Math.floor(tenths / 10);
   if (seconds < 60) return `${seconds}.${tenths % 10}s`;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}.${tenths % 10}`;

@@ -306,8 +306,9 @@ private fun ClipHoverAction(label: String, onClick: () -> Unit, color: Color = R
 internal fun clipRangeLabel(entry: ClipEntry): String =
     "${formatClipClockLabel(entry.startMs)} \u2013 ${formatClipClockLabel(entry.endMs)}"
 
+/** Floored to the tenth, the same rule as the player's LEN readout. */
 internal fun formatClipLength(durationMs: Long): String {
-    val tenths = (durationMs.coerceAtLeast(0L) + 50) / 100
+    val tenths = durationMs.coerceAtLeast(0L) / 100
     return if (tenths >= 600) {
         val totalSeconds = tenths / 10
         "${totalSeconds / 60}:${(totalSeconds % 60).toString().padStart(2, '0')}"

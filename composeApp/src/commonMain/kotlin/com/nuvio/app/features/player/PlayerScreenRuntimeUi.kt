@@ -1139,8 +1139,9 @@ private fun PlayerScreenRuntime.clipLibraryIdAt(value: Double): String {
 private fun formatClipRangeLabel(startMs: Long, endMs: Long): String =
     "${formatClipClock(startMs)} - ${formatClipClock(endMs)}"
 
+/** `3.7s`, floored to the tenth like the trim row's LEN readout. */
 private fun formatClipDurationLabel(durationMs: Long): String {
-    val tenths = (durationMs.coerceAtLeast(0L) + 50) / 100
+    val tenths = durationMs.coerceAtLeast(0L) / 100
     return "${tenths / 10}.${tenths % 10}s"
 }
 

@@ -58,9 +58,10 @@ const clipSaveStems = ranges => {
   });
 };
 
-/** `4.6s`, or `1:12.4` past a minute. A length, not a position. */
+/** `4.6s`, or `1:12.4` past a minute. A length, not a position. Floored to the
+    tenth like formatClipTime, so it never disagrees with LEN. */
 const clipSaveLength = ms => {
-  const tenths = Math.max(0, Math.round((Number(ms) || 0) / 100));
+  const tenths = Math.max(0, Math.floor((Number(ms) || 0) / 100));
   const seconds = Math.floor(tenths / 10);
   if (seconds < 60) return `${seconds}.${tenths % 10}s`;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}.${tenths % 10}`;
