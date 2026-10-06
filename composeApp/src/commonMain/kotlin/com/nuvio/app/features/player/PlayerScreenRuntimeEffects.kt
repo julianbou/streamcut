@@ -1,5 +1,13 @@
 package com.nuvio.app.features.player
 
+import com.nuvio.app.core.storage.ProfileScopedKey
+import com.nuvio.app.core.i18n.localizedSeasonEpisodeCode
+import com.nuvio.app.core.ui.NuvioToastController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.features.shuffle.EpisodeShuffleRepository
+import com.nuvio.app.features.shuffle.ShuffleSurface
+import com.nuvio.app.features.shuffle.watchedShuffleEpisodes
+import com.nuvio.app.features.shuffle.shuffleEpisodeProgress
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -75,11 +83,13 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         }
     }
 
-    LaunchedEffect(activeSourceUrl, activeSourceAudioUrl, activeSourceHeaders, activeSourceResponseHeaders) {
+    LaunchedEffect(activePlaybackKey, activeSourceUrl, activeSourceAudioUrl, activeSourceHeaders, activeSourceResponseHeaders) {
         errorMessage = null
         playerController = null
         playerControllerSourceUrl = null
         playbackSnapshot = PlayerPlaybackSnapshot()
+        playbackSnapshotKey = null
+        cancelNextEpisodeAutoPlay()
         isScrubbingTimeline = false
         scrubbingPositionMs = null
         liveGestureFeedback = null
@@ -282,19 +292,20 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         playbackSnapshot.isLoading,
         preferredAudioSelectionApplied,
         preferredSubtitleSelectionApplied,
+        trackPreferenceRestoreApplied,
         addonSubtitles,
         isLoadingAddonSubtitles,
     ) {
         if (playerController == null || playbackSnapshot.isLoading) {
             return@LaunchedEffect
         }
-        if (preferredAudioSelectionApplied && preferredSubtitleSelectionApplied) {
+        if (trackPreferenceRestoreApplied && preferredAudioSelectionApplied && preferredSubtitleSelectionApplied) {
             return@LaunchedEffect
         }
 
         repeat(10) {
             refreshTracks()
-            if (preferredAudioSelectionApplied && preferredSubtitleSelectionApplied) {
+            if (trackPreferenceRestoreApplied && preferredAudioSelectionApplied && preferredSubtitleSelectionApplied) {
                 return@LaunchedEffect
             }
             delay(300)
@@ -365,8 +376,10 @@ internal fun PlayerScreenRuntime.BindPlayerRuntimeEffects() {
         P2pStreamLease.retain(p2pLeaseToken)
         PlayerStreamsRepository.pauseSearchForPlayback()
         onDispose {
+            args.launchId?.let { launchId -> PlayerLaunchStore.update(launchId) { currentLaunch(it) } }
             playerController?.clearNowPlayingInfo()
             P2pStreamLease.release(p2pLeaseToken)
+            cancelNextEpisodePreload()
             PlayerStreamsRepository.clearAll()
         }
     }
@@ -459,6 +472,17 @@ private fun PlayerScreenRuntime.BindPlayerUiVisibilityEffects() {
 
 @Composable
 private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
+    val shuffleProfile by remember {
+        EpisodeShuffleRepository.ensureLoaded()
+        EpisodeShuffleRepository.uiState
+    }.collectAsStateWithLifecycle()
+    val shuffleSettings = remember(shuffleProfile, profileId, parentMetaId, parentMetaType) {
+        val profile = if (profileId == ProfileScopedKey.ScopeId) shuffleProfile
+            else EpisodeShuffleRepository.readProfile(profileId)
+        profile.settings(parentMetaId, parentMetaType)
+            .let { if (AppFeaturePolicy.viewingChromeEnabled) it else it.copy(enabled = false) }
+    }
+
     LaunchedEffect(activeVideoId, activeSeasonNumber, activeEpisodeNumber, parentMetaId, parentMetaType) {
         parentalWarnings = emptyList()
         showParentalGuide = false
@@ -498,8 +522,7 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         playerNotificationMessage = ""
         showNextEpisodeCard = false
         nextEpisodeCardDismissed = false
-        nextEpisodeAutoPlayJob?.cancel()
-        nextEpisodeAutoPlaySearching = false
+        cancelNextEpisodeAutoPlay()
 
         if (!playerSettingsUiState.skipIntroEnabled) return@LaunchedEffect
 
@@ -617,26 +640,22 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
                 val durationMs = playbackSnapshot.durationMs
                 val rawMs = current.internalSkipAction(skipIntervals, durationMs)?.targetMs ?: return@LaunchedEffect
                 val seekPositionMs = if (durationMs > 0L) rawMs.coerceAtMost(durationMs - 1) else rawMs
+                val notification = current.autoSkipNotificationMessage(seekPositionMs)
                 if (!controller.trySeekTo(seekPositionMs)) return@LaunchedEffect
                 autoSkippedIntervalKeys.add(intervalKey)
                 autoSkippedIntervals.add(current)
                 scheduleProgressSyncAfterSeek()
                 skipIntervalDismissed = true
-                playerNotificationMessage = getString(
-                    when (segmentType) {
-                        AutoSkipSegmentType.INTRO -> Res.string.player_auto_skip_intro_notification
-                        AutoSkipSegmentType.RECAP -> Res.string.player_auto_skip_recap_notification
-                        AutoSkipSegmentType.OUTRO, AutoSkipSegmentType.MOVIE_CREDITS -> Res.string.player_auto_skip_outro_notification
-                    },
-                    formatPlaybackTime(seekPositionMs),
-                )
-                playerNotificationToken += 1L
+                notification?.let { NuvioToastController.show(it, AUTO_SKIP_NOTIFICATION_DURATION_MS) }
             }
         }
     }
 
     LaunchedEffect(
         playerMetaVideos,
+        shuffleSettings,
+        profileId,
+        parentMetaId,
         activeSeasonNumber,
         activeEpisodeNumber,
         watchProgressUiState.entries,
@@ -648,11 +667,21 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         }
         val curSeason = activeSeasonNumber ?: return@LaunchedEffect
         val curEpisode = activeEpisodeNumber ?: return@LaunchedEffect
-        val nextVideo = PlayerNextEpisodeRules.resolveNextEpisode(
-            videos = playerMetaVideos,
-            currentSeason = curSeason,
-            currentEpisode = curEpisode,
-        )
+        val nextVideo = if (shuffleSettings.enabled) {
+            EpisodeShuffleRepository.shuffle.select(
+                profileId, parentMetaId, playerMetaVideos, shuffleSettings.includeWatched,
+                watchedShuffleEpisodes(parentMetaId, parentMetaType, playerMetaVideos, watchedUiState.watchedKeys),
+                shuffleEpisodeProgress(parentMetaId, watchProgressUiState.entries),
+                ShuffleSurface.PLAYBACK, current = curSeason to curEpisode,
+            )
+        } else {
+            EpisodeShuffleRepository.shuffle.clearSelection(profileId, parentMetaId, ShuffleSurface.PLAYBACK)
+            PlayerNextEpisodeRules.resolveNextEpisode(
+                videos = playerMetaVideos,
+                currentSeason = curSeason,
+                currentEpisode = curEpisode,
+            )
+        }
         val nextSeason = nextVideo?.season
         val nextEpisode = nextVideo?.episode
         nextEpisodeInfo = if (nextVideo != null && nextSeason != null && nextEpisode != null) {
@@ -690,14 +719,28 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
         } else null
     }
 
+    LaunchedEffect(playbackSnapshot.isEnded) {
+        if (playbackSnapshot.isEnded && nextEpisodeCardDismissed &&
+            playerSettingsUiState.streamAutoPlayNextEpisodeEnabled &&
+            nextEpisodeInfo?.hasAired == true
+        ) {
+            nextEpisodeCardDismissed = false
+        }
+    }
+
     LaunchedEffect(
-        playbackSnapshot.positionMs,
-        playbackSnapshot.durationMs,
+        activePlaybackKey,
+        playbackSnapshot,
+        playbackSnapshotKey,
+        initialSeekApplied,
+        isScrubbingTimeline,
+        errorMessage,
         nextEpisodeInfo,
         skipIntervals,
         playerSettingsUiState.nextEpisodeThresholdMode,
         playerSettingsUiState.nextEpisodeThresholdPercent,
         playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
+        playerSettingsUiState.streamAutoPlayNextEpisodeEnabled,
         nextEpisodeCardDismissed,
     ) {
         // Rolling into the next episode throws away the in/out draft, so a clipper
@@ -706,40 +749,19 @@ private fun PlayerScreenRuntime.BindPlayerMetadataAndSkipEffects() {
             showNextEpisodeCard = false
             return@LaunchedEffect
         }
-        if (nextEpisodeInfo == null || playbackSnapshot.durationMs <= 0L) {
-            showNextEpisodeCard = false
-            return@LaunchedEffect
+        val shouldShow = nextEpisodeInfo != null && !nextEpisodeCardDismissed && isAtNextEpisodeThreshold()
+        if (nextEpisodeAutoPlayAutomatic &&
+            (!shouldShow || !playerSettingsUiState.streamAutoPlayNextEpisodeEnabled)
+        ) {
+            cancelNextEpisodeAutoPlay()
         }
-        val shouldShow = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
-            positionMs = playbackSnapshot.positionMs,
-            durationMs = playbackSnapshot.durationMs,
-            skipIntervals = skipIntervals,
-            thresholdMode = playerSettingsUiState.nextEpisodeThresholdMode,
-            thresholdPercent = playerSettingsUiState.nextEpisodeThresholdPercent,
-            thresholdMinutesBeforeEnd = playerSettingsUiState.nextEpisodeThresholdMinutesBeforeEnd,
-        )
-        if (shouldShow && !showNextEpisodeCard && !nextEpisodeCardDismissed) {
+        if (shouldShow && !showNextEpisodeCard) {
             showNextEpisodeCard = true
             if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
-                playNextEpisode()
+                playNextEpisode(automatic = true)
             }
         } else if (!shouldShow) {
             showNextEpisodeCard = false
-        }
-    }
-
-    LaunchedEffect(playbackSnapshot.isEnded, nextEpisodeInfo, nextEpisodeCardDismissed) {
-        if (!AppFeaturePolicy.viewingChromeEnabled) return@LaunchedEffect
-        if (
-            playbackSnapshot.isEnded &&
-            nextEpisodeInfo != null &&
-            !showNextEpisodeCard &&
-            !nextEpisodeCardDismissed
-        ) {
-            showNextEpisodeCard = true
-            if (playerSettingsUiState.streamAutoPlayNextEpisodeEnabled && nextEpisodeInfo?.hasAired == true) {
-                playNextEpisode()
-            }
         }
     }
 }
@@ -767,9 +789,7 @@ private fun buildNowPlayingSubtitle(
     if (!isEpisode) return null
 
     val episodeParts = buildList {
-        if (seasonNumber != null && episodeNumber != null) {
-            add("S${seasonNumber}E${episodeNumber}")
-        }
+        localizedSeasonEpisodeCode(seasonNumber, episodeNumber)?.let { add(it) }
         episodeTitle?.takeIf { it.isNotBlank() }?.let { add(it) }
     }
 

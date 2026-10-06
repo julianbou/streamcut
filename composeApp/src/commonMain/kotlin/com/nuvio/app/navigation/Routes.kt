@@ -1,6 +1,7 @@
 package com.nuvio.app.navigation
 
 import androidx.navigation3.runtime.NavKey
+import com.nuvio.app.core.build.AppFeaturePolicy
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -80,7 +81,11 @@ data class MetaScreenSettingsRoute(override val title: String = "") : SettingsDe
 data class ContinueWatchingSettingsRoute(override val title: String = "") : SettingsDestinationRoute
 
 @Serializable
-data class DownloadsSettingsRoute(override val title: String = "") : SettingsDestinationRoute
+data class DownloadsRoute(override val title: String = "") : AppRoute {
+    // The clipper build reaches Downloads from Settings: its Library tab holds clips.
+    override val preferredTabName: String
+        get() = if (AppFeaturePolicy.viewingChromeEnabled) "Library" else "Settings"
+}
 
 @Serializable
 data class DownloadShowRoute(

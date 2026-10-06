@@ -142,8 +142,8 @@ fun SettingsScreen(
     onContinueWatchingClick: () -> Unit = {},
     onAddonsClick: () -> Unit = {},
     onPluginsClick: () -> Unit = {},
-    onDownloadsClick: () -> Unit = {},
     onAccountClick: () -> Unit = {},
+    onDownloadsClick: () -> Unit = {},
     onSupportersContributorsClick: () -> Unit = {},
     onLicensesAttributionsClick: () -> Unit = {},
     onCheckForUpdatesClick: (() -> Unit)? = null,
@@ -468,8 +468,8 @@ fun SettingsScreen(
                 onContinueWatchingClick = openContinueWatching,
                 onAddonsClick = openAddons,
                 onPluginsClick = openPlugins,
-                onDownloadsClick = onDownloadsClick,
                 onAccountClick = openAccount,
+                onDownloadsClick = onDownloadsClick,
                 onSupportersContributorsClick = openSupportersContributors,
                 onLicensesAttributionsClick = openLicensesAttributions,
                 onCheckForUpdatesClick = onCheckForUpdatesClick,
@@ -546,8 +546,8 @@ private fun MobileSettingsScreen(
     onContinueWatchingClick: () -> Unit = {},
     onAddonsClick: () -> Unit = {},
     onPluginsClick: () -> Unit = {},
-    onDownloadsClick: () -> Unit = {},
     onAccountClick: () -> Unit = {},
+    onDownloadsClick: () -> Unit = {},
     onSupportersContributorsClick: () -> Unit = {},
     onLicensesAttributionsClick: () -> Unit = {},
     onCheckForUpdatesClick: (() -> Unit)? = null,
@@ -599,11 +599,6 @@ private fun MobileSettingsScreen(
                     SettingsPage.MetaScreen -> onMetaScreenClick()
                     else -> onPageChange(target.page)
                 }
-                SettingsSearchTarget.Downloads -> {
-                    if (AppFeaturePolicy.downloadsEnabled) {
-                        onDownloadsClick()
-                    }
-                }
                 SettingsSearchTarget.Collections -> onCollectionsClick()
                 SettingsSearchTarget.CheckForUpdates -> onCheckForUpdatesClick?.invoke()
             }
@@ -652,7 +647,6 @@ private fun MobileSettingsScreen(
                             settingsSearchEntries(
                                 isTablet = false,
                                 pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                                downloadsEnabled = AppFeaturePolicy.downloadsEnabled,
                                 notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
                                 externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
                                 supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
@@ -683,9 +677,9 @@ private fun MobileSettingsScreen(
                             onLicensesAttributionsClick = onLicensesAttributionsClick,
                             onCheckForUpdatesClick = onCheckForUpdatesClick,
                             onTestUpdateBannerClick = onTestUpdateBannerClick,
-                            onDownloadsClick = onDownloadsClick,
                             onAccountClick = onAccountClick,
-                            showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
+                            onDownloadsClick = onDownloadsClick,
+                            showDownloadsEntry = AppFeaturePolicy.downloadsEnabled && !AppFeaturePolicy.viewingChromeEnabled,
                             showNotificationsEntry = AppFeaturePolicy.notificationsEnabled,
                             showTrackingEntry = AppFeaturePolicy.viewingChromeEnabled,
                             showSupportersContributorsPage = AppFeaturePolicy.supportersContributorsPageEnabled,
@@ -1014,7 +1008,6 @@ private fun TabletSettingsScreen(
                     settingsSearchEntries(
                         isTablet = true,
                         pluginsEnabled = AppFeaturePolicy.pluginsEnabled,
-                        downloadsEnabled = AppFeaturePolicy.downloadsEnabled && AppFeaturePolicy.viewingChromeEnabled,
                         notificationsEnabled = AppFeaturePolicy.notificationsEnabled,
                         externalPlayerSupported = AppFeaturePolicy.externalPlayerSupported,
                         supportersContributorsPageEnabled = AppFeaturePolicy.supportersContributorsPageEnabled,
@@ -1030,11 +1023,6 @@ private fun TabletSettingsScreen(
                         is SettingsSearchTarget.Page -> {
                             if (target.page.isEnabledByPolicy()) {
                                 openInlinePage(target.page)
-                            }
-                        }
-                        SettingsSearchTarget.Downloads -> {
-                            if (AppFeaturePolicy.downloadsEnabled) {
-                                onDownloadsClick()
                             }
                         }
                         SettingsSearchTarget.Collections -> onCollectionsClick()
@@ -1208,9 +1196,9 @@ private fun TabletSettingsScreen(
                                         onLicensesAttributionsClick = { openInlinePage(SettingsPage.LicensesAttributions) },
                                         onCheckForUpdatesClick = onCheckForUpdatesClick,
                                         onTestUpdateBannerClick = onTestUpdateBannerClick,
-                                        onDownloadsClick = onDownloadsClick,
                                         onAccountClick = { openInlinePage(SettingsPage.Account) },
-                                        showDownloadsEntry = AppFeaturePolicy.downloadsEnabled,
+                                        onDownloadsClick = onDownloadsClick,
+                                        showDownloadsEntry = AppFeaturePolicy.downloadsEnabled && !AppFeaturePolicy.viewingChromeEnabled,
                                         showNotificationsEntry = AppFeaturePolicy.notificationsEnabled,
                                         showTrackingEntry = AppFeaturePolicy.viewingChromeEnabled,
                                         showAccountSection = activeCategory == SettingsCategory.Account,

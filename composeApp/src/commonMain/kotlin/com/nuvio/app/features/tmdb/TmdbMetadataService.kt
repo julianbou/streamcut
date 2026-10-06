@@ -693,7 +693,7 @@ object TmdbMetadataService {
             ?: return meta
 
         val needsEpisodes = (
-            settings.useEpisodes || settings.useReleaseDates || settings.useSeasonPosters
+            settings.useEpisodes || settings.useSeasonPosters
         ) && tmdbType == "tv"
         val (enrichment, episodeMap) = coroutineScope {
             val enrichmentDeferred = async {
@@ -827,13 +827,6 @@ object TmdbMetadataService {
             )
         }
 
-        if (enrichment != null && settings.useReleaseDates) {
-            updated = updated.copy(
-                releaseInfo = enrichment.releaseInfo ?: updated.releaseInfo,
-                lastAirDate = enrichment.lastAirDate ?: updated.lastAirDate,
-            )
-        }
-
         if (enrichment != null && settings.useCredits) {
             updated = updated.copy(
                 director = enrichment.director.ifEmpty { updated.director },
@@ -871,11 +864,7 @@ object TmdbMetadataService {
                             } else {
                                 video.overview
                             },
-                            released = if (settings.useReleaseDates) {
-                                enrichmentForEpisode.airDate ?: video.released
-                            } else {
-                                video.released
-                            },
+                            released = video.released,
                             thumbnail = if (settings.useEpisodes) {
                                 enrichmentForEpisode.thumbnail ?: video.thumbnail
                             } else {
@@ -898,10 +887,17 @@ object TmdbMetadataService {
         }
 
         if (enrichment != null && settings.useMoreLikeThis) {
-            updated = updated.copy(
-                moreLikeThis = enrichment.moreLikeThis,
-                moreLikeThisSource = MoreLikeThisSource.TMDB.takeIf { enrichment.moreLikeThis.isNotEmpty() },
-            )
+            val userMoreLikeThisSource = run {
+                com.nuvio.app.features.tracking.TrackingSettingsRepository.ensureLoaded()
+                com.nuvio.app.features.tracking.TrackingSettingsRepository.uiState.value.moreLikeThisSource
+            }
+            val tmdbIsPreferredSource = userMoreLikeThisSource == com.nuvio.app.features.trakt.MoreLikeThisSourcePreference.TMDB
+            if (tmdbIsPreferredSource || updated.moreLikeThis.isEmpty()) {
+                updated = updated.copy(
+                    moreLikeThis = enrichment.moreLikeThis,
+                    moreLikeThisSource = MoreLikeThisSource.TMDB.takeIf { enrichment.moreLikeThis.isNotEmpty() },
+                )
+            }
         }
 
         if (enrichment != null && settings.useCollections) {
@@ -1783,7 +1779,7 @@ private fun Double.formatRating(): String =
 private fun Int.formatRuntime(): String = "${this}m"
 
 private fun List<TmdbMovieReleaseDateCountry>.selectMovieAgeRating(normalizedLanguage: String): String? {
-    val preferredRegions = preferredRegions(normalizedLanguage)
+    val preferredRegions = preferredAgeRatingRegions(normalizedLanguage)
     val byRegion = associateBy { it.iso31661?.uppercase() }
     preferredRegions.forEach { region ->
         val rating = byRegion[region]
@@ -1800,22 +1796,13 @@ private fun List<TmdbMovieReleaseDateCountry>.selectMovieAgeRating(normalizedLan
 }
 
 private fun List<TmdbTvContentRating>.selectTvAgeRating(normalizedLanguage: String): String? {
-    val preferredRegions = preferredRegions(normalizedLanguage)
+    val preferredRegions = preferredAgeRatingRegions(normalizedLanguage)
     val byRegion = associateBy { it.iso31661?.uppercase() }
     preferredRegions.forEach { region ->
         val rating = byRegion[region]?.rating?.trim()
         if (!rating.isNullOrBlank()) return rating
     }
     return mapNotNull { it.rating?.trim() }.firstOrNull(String::isNotBlank)
-}
-
-private fun preferredRegions(normalizedLanguage: String): List<String> {
-    val directRegion = normalizedLanguage.substringAfter("-", "").uppercase().takeIf { it.length == 2 }
-    return buildList {
-        if (!directRegion.isNullOrBlank()) add(directRegion)
-        add("US")
-        add("GB")
-    }.distinct()
 }
 
 private fun TmdbCompany.toMetaCompany(): MetaCompany? {

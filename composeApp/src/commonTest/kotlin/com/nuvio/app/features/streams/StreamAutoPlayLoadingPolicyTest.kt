@@ -28,10 +28,16 @@ class StreamAutoPlayLoadingPolicyTest {
     fun `manual selection and invalid regex do not start autoplay loading`() {
         val initial = StreamsUiState()
         assertFalse(initial.shouldShowAutoPlayLoading("new", autoPlaySettings, true))
-        assertFalse(initial.shouldShowAutoPlayLoading("new", PlayerSettingsUiState(), false))
+        // StreamCut: reuse-last-link defaults to on in the clipper build and counts
+        // as autoplay, so the cases that mean "nothing is automatic" say so.
+        assertFalse(initial.shouldShowAutoPlayLoading("new", PlayerSettingsUiState(streamReuseLastLinkEnabled = false), false))
         assertFalse(initial.shouldShowAutoPlayLoading(
             "new",
-            PlayerSettingsUiState(streamAutoPlayMode = StreamAutoPlayMode.REGEX_MATCH, streamAutoPlayRegex = "["),
+            PlayerSettingsUiState(
+                streamAutoPlayMode = StreamAutoPlayMode.REGEX_MATCH,
+                streamAutoPlayRegex = "[",
+                streamReuseLastLinkEnabled = false,
+            ),
             false,
         ))
     }
@@ -70,7 +76,7 @@ class StreamAutoPlayLoadingPolicyTest {
 
         settings.forEach { playerSettings ->
             assertTrue(state.shouldShowAutoPlayLoading("new", playerSettings, false))
-            assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", false))
+            assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", playerSettings, false))
         }
     }
 
@@ -83,22 +89,41 @@ class StreamAutoPlayLoadingPolicyTest {
             showDirectAutoPlayOverlay = true,
         )
 
-        assertTrue(state.shouldUseLandscapeAutoPlayLoading("new", false))
-        assertFalse(state.shouldUseLandscapeAutoPlayLoading("other", false))
-        assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", true))
-        assertFalse(state.copy(autoPlayDecided = false).shouldUseLandscapeAutoPlayLoading("new", false))
-        assertFalse(state.copy(showDirectAutoPlayOverlay = false).shouldUseLandscapeAutoPlayLoading("new", false))
+        assertTrue(state.shouldUseLandscapeAutoPlayLoading("new", autoPlaySettings, false))
+        assertFalse(state.shouldUseLandscapeAutoPlayLoading("other", autoPlaySettings, false))
+        assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", autoPlaySettings, true))
+        assertFalse(state.copy(autoPlayDecided = false).shouldUseLandscapeAutoPlayLoading("new", autoPlaySettings, false))
+        assertFalse(state.copy(showDirectAutoPlayOverlay = false).shouldUseLandscapeAutoPlayLoading("new", autoPlaySettings, false))
+    }
+
+    @Test
+    fun `manual binge group reuse waits for playback before rotating`() {
+        val settings = PlayerSettingsUiState(streamAutoPlayReuseBingeGroup = true)
+        val state = StreamsUiState(
+            requestToken = "new",
+            autoPlayDecided = true,
+            isDirectAutoPlayFlow = true,
+            showDirectAutoPlayOverlay = true,
+        )
+
+        assertTrue(state.shouldShowAutoPlayLoading("new", settings, false))
+        assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", settings, false))
+        val stream = StreamItem(url = "https://example.com/episode.mp4", addonName = "Test", addonId = "test")
+        assertFalse(
+            state.copy(autoPlayStream = stream)
+                .shouldUseLandscapeAutoPlayLoading("new", settings, false),
+        )
     }
 
     @Test
     fun `stream picker and external preparation overlays do not rotate`() {
         val state = StreamsUiState(requestToken = "new", autoPlayDecided = true)
 
-        assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", false))
-        assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", true))
+        assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", autoPlaySettings, false))
+        assertFalse(state.shouldUseLandscapeAutoPlayLoading("new", autoPlaySettings, true))
         assertFalse(
             state.copy(showDirectAutoPlayOverlay = true)
-                .shouldUseLandscapeAutoPlayLoading("new", false),
+                .shouldUseLandscapeAutoPlayLoading("new", autoPlaySettings, false),
         )
     }
 

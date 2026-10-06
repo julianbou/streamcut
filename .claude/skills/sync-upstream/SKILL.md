@@ -84,6 +84,23 @@ away upstream's side loses fixes silently; only owned paths get that treatment.
   avatars or the profile picker is removed or rewritten against the fixed scope.
   Storage keys keep the `_1` suffix (`ProfileScopedKey.ScopeId = 1`): never drop it,
   it would strand every install's library and settings.
+- **A deletion next to a gate does not conflict.** When upstream deletes lines StreamCut
+  only wrapped in an `if`, git often takes the deletion silently (0.1.27 dropped the
+  Settings > Downloads row that way). After the merge, diff every file the triage said
+  StreamCut keeps against main, not just the ones git listed.
+- **Downloads** (moved upstream into Library on 2026-09-26): on desktop the Library tab
+  is Clips, so the entry stays in Settings. Keep `onDownloadsClick` / `showDownloadsEntry`
+  through `SettingsScreen` and `SettingsRootPage`, `DownloadsRoute.preferredTabName`
+  as Settings and `downloadsHomeTab` in `MainAppContent` when viewing chrome is off.
+  The settings search entry was not restored.
+- **Episode shuffle** (0.1.27): gated at its source. `MetaDetailsScreen` and
+  `PlayerScreenRuntimeEffects` read the settings with `enabled` forced off and
+  `showShuffleButton` requires `viewingChromeEnabled`, so new shuffle surfaces
+  upstream adds follow without their own gate.
+- **Dialogs**: upstream's `DialogSurface` (`core/ui/Dialog.kt`) is the one dialog shell;
+  the riso bloom lives there. `NuvioStatusModal` has a single `destructive` flag, upstream's.
+- **macOS volume** (`player_bridge.mm`): upstream's `applyVolumeSplit` replaced the fork's
+  own fix for the same lag. The fork's only additions in that file are the exact-seek ones.
 - **Viewing chrome**: new upstream UI that serves watching (next-episode, skip intro,
   continue watching rows, trailers, ratings chrome, pause overlays, hero banners)
   goes behind `AppFeaturePolicy.viewingChromeEnabled` on desktop. Gate, don't delete:
@@ -123,7 +140,12 @@ away upstream's side loses fixes silently; only owned paths get that treatment.
   off, riso selection ink in the sidebar, and the top bar as the desktop default
   (`DesktopNavigationLayout.Default`).
 - **Tests that fail on this machine regardless of the merge**: date and label tests
-  that expect English (the Mac runs in Spanish) and `WatchedItemsStoreTest`. Compare
+  that expect English (the Mac runs in Spanish) and `WatchedItemsStoreTest`. Rerun with
+  `JAVA_TOOL_OPTIONS="-Duser.language=en -Duser.country=US"` to drop the locale ones.
+  Since 0.1.27 upstream ships tests its own code fails, identical to upstream in test
+  and code under test: `HomeHeroSectionTest` (660 vs 640), `WatchProgressIdentityTest`
+  (legacy payload, short duration) and `CollectionCardRemoteImageTest`. Leave them
+  as upstream wrote them. Compare
   against main before blaming the merge. `NativePlayerControllerTeardownTest` needs the
   LFS runtime: `git lfs pull` in the worktree first.
 
