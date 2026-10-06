@@ -112,6 +112,8 @@ check "Clips tab wears scissors in the clipper top bar" \
 check "Windows build bundles ffmpeg" .github/workflows/windows-build.yml 'nuvio\.windows\.ffmpeg\.dir'
 check "macOS app bundles ffmpeg" composeApp/build.gradle.kts 'from\(prepareMacosFfmpeg\)' \
   "prepareMacosPlayerAppResources in composeApp/build.gradle.kts must copy prepareMacosFfmpeg into ffmpeg/: macOS has no usable ffmpeg"
+check "macOS app bundles only its own TorrServer" composeApp/build.gradle.kts 'sourceRoot\.resolve\(platformDir\.get\(\)\)' \
+  "PrepareMacosTorrServerResourcesTask in composeApp/build.gradle.kts must copy only platformDir: upstream's copy-everything puts the Intel and Linux binaries (~45 MB) in every DMG"
 
 if git check-ignore -q scripts/upstream/new-file-probe.sh; then
   fail "new files under scripts/ are not ignored" ".gitignore: upstream's scripts/* needs StreamCut's !scripts/upstream/ and !scripts/*.sh exceptions"

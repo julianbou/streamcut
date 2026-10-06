@@ -397,16 +397,23 @@ abstract class PrepareMacosTorrServerResourcesTask @Inject constructor(
     @get:Input
     abstract val signingIdentity: Property<String>
 
+    // The one platform folder the app being built can run. Copying them all put
+    // the Intel and Linux binaries into the Apple Silicon DMG: ~45 MB of dead weight.
+    @get:Input
+    abstract val platformDir: Property<String>
+
     @TaskAction
     fun prepare() {
         val sourceRoot = sourceDir.get().asFile
         val outputRoot = outputDir.get().asFile
         val resourceRoot = outputRoot.resolve("torrserver")
+        val platformRoot = sourceRoot.resolve(platformDir.get())
+        check(platformRoot.isDirectory) { "No TorrServer binary for ${platformDir.get()} under $sourceRoot." }
 
         outputRoot.deleteRecursively()
         resourceRoot.mkdirs()
 
-        sourceRoot.walkTopDown()
+        platformRoot.walkTopDown()
             .filter(File::isFile)
             .forEach { sourceFile ->
                 val relativePath = sourceFile.relativeTo(sourceRoot)
@@ -832,6 +839,10 @@ val macosPlayerBridgeOutput = layout.buildDirectory.file("native/macos/$macosPla
 val macosPlayerRuntimeOutput = layout.buildDirectory.dir("native/macos-runtime/$macosPlayerBridgeArch")
 val macosPlayerAppResourcesRoot = layout.buildDirectory.dir("generated/macos-player-app-resources")
 val macosDmgArchName = macosPlayerBridgeArch
+prepareMacosTorrServerResources.configure {
+    // Folder names follow P2pStreamingEngine's resourceDir, which says amd64 for Intel.
+    platformDir.set(if (macosPlayerBridgeArch == "arm64") "macos-arm64" else "macos-amd64")
+}
 val isMacosDmgNotarizationRequested = requestedGradleTasks.any { taskName ->
     taskName == "notarizedmg" || taskName == "notarizereleasedmg"
 }
