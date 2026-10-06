@@ -22,6 +22,7 @@ import com.nuvio.app.core.branding.ForkBranding
 import com.nuvio.app.core.deeplink.handleAppUrl
 import com.nuvio.app.core.diagnostics.SentryInitializer
 import com.nuvio.app.core.ui.NuvioTheme
+import com.nuvio.app.core.ui.ProvideDesktopWindowInsets
 import com.nuvio.app.features.discordrpc.DiscordPresenceManager
 import com.nuvio.app.features.mcp.McpServerControl
 import com.nuvio.app.features.mcp.McpStdioBridge
@@ -223,7 +224,9 @@ fun main(args: Array<String>) {
             }
 
             if (smokePlayerUrl == null) {
-                App()
+                ProvideDesktopWindowInsets(isFullscreen = windowState.placement == WindowPlacement.Fullscreen) {
+                    App()
+                }
             } else {
                 // The player surface reads LocalNuvioPlatformDensity, which only
                 // NuvioTheme provides — the bare smoke harness must supply it too.

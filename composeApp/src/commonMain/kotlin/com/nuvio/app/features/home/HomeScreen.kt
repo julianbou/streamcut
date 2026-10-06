@@ -516,10 +516,12 @@ fun HomeScreen(
         )
     }
 
-    val customPosterPattern by com.nuvio.app.core.poster.CustomPosterUrlRepository.let { repo ->
+    val cwPosterPattern by com.nuvio.app.core.poster.CustomPosterUrlRepository.let { repo ->
         repo.ensureLoaded()
-        repo.pattern
-    }.collectAsStateWithLifecycle()
+        kotlinx.coroutines.flow.combine(repo.pattern, repo.enabledScreens) { pattern, screens ->
+            if (com.nuvio.app.core.poster.CustomPosterScreen.CONTINUE_WATCHING in screens) pattern else ""
+        }
+    }.collectAsStateWithLifecycle(initialValue = com.nuvio.app.core.poster.CustomPosterUrlRepository.patternForScreen(com.nuvio.app.core.poster.CustomPosterScreen.CONTINUE_WATCHING))
 
     val allContinueWatchingItems = remember(
         visibleContinueWatchingEntries,
@@ -528,7 +530,7 @@ fun HomeScreen(
         nextUpSuppressedSeriesIds,
         continueWatchingPreferences.sortMode,
         cloudLibraryUiState,
-        customPosterPattern,
+        cwPosterPattern,
     ) {
         buildHomeContinueWatchingItems(
             visibleEntries = visibleContinueWatchingEntries,
@@ -539,15 +541,25 @@ fun HomeScreen(
             todayIsoDate = CurrentDateProvider.todayIsoDate(),
             cloudLibraryUiState = cloudLibraryUiState,
         ).let { items ->
-            items.withCustomPosterUrls(customPosterPattern)
+            items.withCustomPosterUrls(cwPosterPattern)
         }
     }
+    val shuffleCandidates = remember(completedSeriesCandidates, continueWatchingPreferences.dismissedNextUpKeys) {
+        completedSeriesCandidates.filter { candidate ->
+            nextUpDismissKey(candidate.content.id, candidate.seasonNumber, candidate.episodeNumber) !in
+                continueWatchingPreferences.dismissedNextUpKeys
+        }
+    }
+    val shuffledContinueWatchingItems = rememberShuffleHomeItems(
+        activeProfileId, allContinueWatchingItems, shuffleCandidates,
+        watchProgressUiState.entries, watchedUiState.watchedKeys, visibleContinueWatchingEntries,
+    ).withCustomPosterUrls(cwPosterPattern)
     val (continueWatchingItems, upcomingItems) = remember(
-        allContinueWatchingItems,
+        shuffledContinueWatchingItems,
         continueWatchingPreferences.sortMode,
     ) {
         splitUpcomingItems(
-            items = allContinueWatchingItems,
+            items = shuffledContinueWatchingItems,
             mode = continueWatchingPreferences.sortMode,
         )
     }
@@ -1942,7 +1954,7 @@ internal fun buildHomeInProgressCacheSnapshot(
     }
 }
 
-private fun CompletedSeriesCandidate.toContinueWatchingSeed(meta: com.nuvio.app.features.details.MetaDetails) =
+internal fun CompletedSeriesCandidate.toContinueWatchingSeed(meta: com.nuvio.app.features.details.MetaDetails) =
     WatchProgressEntry(
         contentType = content.type,
         parentMetaId = content.id,

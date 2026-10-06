@@ -67,9 +67,13 @@ internal fun LazyListScope.settingsRootContent(
     onLicensesAttributionsClick: () -> Unit,
     onCheckForUpdatesClick: (() -> Unit)? = null,
     onTestUpdateBannerClick: (() -> Unit)? = null,
-    onDownloadsClick: () -> Unit,
     onAccountClick: () -> Unit,
-    showDownloadsEntry: Boolean = true,
+    /**
+     * Upstream moved Downloads into the Library screen. The clipper build shows
+     * Clips there instead, so on desktop the entry stays here.
+     */
+    onDownloadsClick: () -> Unit = {},
+    showDownloadsEntry: Boolean = false,
     showNotificationsEntry: Boolean = true,
     /**
      * Watch tracking (Trakt, Simkl). Off in the clipper build: it syncs what you

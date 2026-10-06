@@ -109,6 +109,7 @@ import nuvio.composeapp.generated.resources.settings_poster_card_width
 import nuvio.composeapp.generated.resources.settings_poster_custom
 import nuvio.composeapp.generated.resources.settings_poster_description
 import nuvio.composeapp.generated.resources.settings_poster_hide_labels
+import nuvio.composeapp.generated.resources.settings_poster_always_show_landscape_clearlogo
 import nuvio.composeapp.generated.resources.settings_poster_landscape_mode
 import nuvio.composeapp.generated.resources.settings_poster_live_preview
 import nuvio.composeapp.generated.resources.settings_poster_option_with_value
@@ -132,6 +133,13 @@ import nuvio.composeapp.generated.resources.settings_custom_poster_placeholder
 import nuvio.composeapp.generated.resources.settings_custom_poster_active
 import nuvio.composeapp.generated.resources.settings_custom_poster_save
 import nuvio.composeapp.generated.resources.settings_custom_poster_clear
+import nuvio.composeapp.generated.resources.settings_custom_poster_apply_to
+import nuvio.composeapp.generated.resources.settings_custom_poster_screen_home
+import nuvio.composeapp.generated.resources.settings_custom_poster_screen_continue_watching
+import nuvio.composeapp.generated.resources.settings_custom_poster_screen_collections
+import nuvio.composeapp.generated.resources.settings_custom_poster_screen_library
+import nuvio.composeapp.generated.resources.settings_custom_poster_screen_search
+import nuvio.composeapp.generated.resources.settings_custom_poster_screen_details
 import org.jetbrains.compose.resources.stringResource
 
 internal fun LazyListScope.posterCustomizationSettingsContent(
@@ -156,10 +164,12 @@ internal fun LazyListScope.posterCustomizationSettingsContent(
                     cornerRadiusDp = uiState.cornerRadiusDp,
                     catalogLandscapeModeEnabled = uiState.catalogLandscapeModeEnabled,
                     hideLabelsEnabled = uiState.hideLabelsEnabled,
+                    alwaysShowLandscapeClearlogo = uiState.alwaysShowLandscapeClearlogo,
                     onWidthSelected = PosterCardStyleRepository::setWidthDp,
                     onCornerRadiusSelected = PosterCardStyleRepository::setCornerRadiusDp,
                     onCatalogLandscapeModeChange = PosterCardStyleRepository::setCatalogLandscapeModeEnabled,
                     onHideLabelsChange = PosterCardStyleRepository::setHideLabelsEnabled,
+                    onAlwaysShowLandscapeClearlogoChange = PosterCardStyleRepository::setAlwaysShowLandscapeClearlogo,
                 )
             }
         }
@@ -229,6 +239,31 @@ internal fun LazyListScope.posterCustomizationSettingsContent(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(Res.string.settings_custom_poster_apply_to),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        val enabledScreens by CustomPosterUrlRepository.enabledScreens.collectAsState()
+                        val screenEntries = listOf(
+                            com.nuvio.app.core.poster.CustomPosterScreen.HOME to stringResource(Res.string.settings_custom_poster_screen_home),
+                            com.nuvio.app.core.poster.CustomPosterScreen.CONTINUE_WATCHING to stringResource(Res.string.settings_custom_poster_screen_continue_watching),
+                            com.nuvio.app.core.poster.CustomPosterScreen.COLLECTIONS to stringResource(Res.string.settings_custom_poster_screen_collections),
+                            com.nuvio.app.core.poster.CustomPosterScreen.LIBRARY to stringResource(Res.string.settings_custom_poster_screen_library),
+                            com.nuvio.app.core.poster.CustomPosterScreen.SEARCH to stringResource(Res.string.settings_custom_poster_screen_search),
+                            com.nuvio.app.core.poster.CustomPosterScreen.DETAILS to stringResource(Res.string.settings_custom_poster_screen_details),
+                        )
+                        screenEntries.forEach { (screen, label) ->
+                            PosterToggleRow(
+                                title = label,
+                                checked = screen in enabledScreens,
+                                onCheckedChange = { enabled ->
+                                    CustomPosterUrlRepository.setScreenEnabled(screen, enabled)
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -690,10 +725,12 @@ private fun PosterCardStyleControls(
     cornerRadiusDp: Int,
     catalogLandscapeModeEnabled: Boolean,
     hideLabelsEnabled: Boolean,
+    alwaysShowLandscapeClearlogo: Boolean,
     onWidthSelected: (Int) -> Unit,
     onCornerRadiusSelected: (Int) -> Unit,
     onCatalogLandscapeModeChange: (Boolean) -> Unit,
     onHideLabelsChange: (Boolean) -> Unit,
+    onAlwaysShowLandscapeClearlogoChange: (Boolean) -> Unit,
 ) {
     val widthOptions = listOf(
         PresetOption(stringResource(Res.string.settings_poster_width_compact), 104),
@@ -746,6 +783,11 @@ private fun PosterCardStyleControls(
             title = stringResource(Res.string.settings_poster_hide_labels),
             checked = hideLabelsEnabled,
             onCheckedChange = onHideLabelsChange,
+        )
+        PosterToggleRow(
+            title = stringResource(Res.string.settings_poster_always_show_landscape_clearlogo),
+            checked = alwaysShowLandscapeClearlogo,
+            onCheckedChange = onAlwaysShowLandscapeClearlogoChange,
         )
     }
 }

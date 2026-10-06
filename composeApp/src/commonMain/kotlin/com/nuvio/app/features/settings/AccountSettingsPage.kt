@@ -158,8 +158,8 @@ private fun AccountSettingsBody(
         message = stringResource(Res.string.settings_account_delete_confirm_message),
         isVisible = showDeleteConfirm,
         isBusy = isDeletingAccount,
+        destructive = true,
         confirmText = stringResource(Res.string.settings_account_delete_account),
-        isDestructive = true,
         dismissText = stringResource(Res.string.action_cancel),
         onConfirm = {
             if (isDeletingAccount) return@NuvioStatusModal

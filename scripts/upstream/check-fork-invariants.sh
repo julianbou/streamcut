@@ -109,6 +109,22 @@ check "Clips tab wears scissors in the clipper build" \
   composeApp/src/commonMain/kotlin/com/nuvio/app/AppShellComponents.kt 'Icons\.Rounded\.ContentCut'
 check "Clips tab wears scissors in the clipper top bar" \
   composeApp/src/commonMain/kotlin/com/nuvio/app/MainTabsDestination.kt 'Icons\.Rounded\.ContentCut'
+check "episode shuffle stays hidden in the clipper build" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsScreen.kt 'showShuffleButton = AppFeaturePolicy\.viewingChromeEnabled &&' \
+  "MetaDetailsScreen.kt: showShuffleButton must require AppFeaturePolicy.viewingChromeEnabled (it feeds every shuffle surface on the details screen)"
+check "next episode is never preloaded in the clipper build" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerNextEpisodeAutoPlay.kt 'if \(AppFeaturePolicy\.viewingChromeEnabled &&'
+check "details screen hides watched/library actions in the clipper build" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/features/details/components/DetailActionButtons.kt 'viewingChromeEnabled\) emptyList\(\) else buildList'
+check "Downloads stays in Settings in the clipper build" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsScreen.kt 'showDownloadsEntry = AppFeaturePolicy\.downloadsEnabled && !AppFeaturePolicy\.viewingChromeEnabled' \
+  "Upstream moved Downloads into Library, which the clipper build replaces with Clips: SettingsScreen.kt must still pass showDownloadsEntry and onDownloadsClick to settingsRootContent"
+check "Settings still draws the Downloads row" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/features/settings/SettingsRootPage.kt 'onClick = onDownloadsClick'
+check "Downloads opens under the Settings tab in the clipper build" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/navigation/Routes.kt 'viewingChromeEnabled\) "Library" else "Settings"'
+check "dialogs carry the riso bloom" \
+  composeApp/src/commonMain/kotlin/com/nuvio/app/core/ui/Dialog.kt 'risoBlooms\(DialogBlooms\)'
 check "Windows build bundles ffmpeg" .github/workflows/windows-build.yml 'nuvio\.windows\.ffmpeg\.dir'
 check "macOS app bundles ffmpeg" composeApp/build.gradle.kts 'from\(prepareMacosFfmpeg\)' \
   "prepareMacosPlayerAppResources in composeApp/build.gradle.kts must copy prepareMacosFfmpeg into ffmpeg/: macOS has no usable ffmpeg"
