@@ -53,6 +53,12 @@ data class ManagedAddon(
     val enabled: Boolean = true,
     val isRefreshing: Boolean = false,
     val errorMessage: String? = null,
+    /**
+     * Preloaded on a trial account (supabase/patch-trial-accounts.sql): used
+     * like any other addon, but never listed, edited or pushed back. Hidden
+     * addons always sit after the visible ones in [AddonsUiState.addons].
+     */
+    val hidden: Boolean = false,
 ) {
     val isActive: Boolean
         get() = enabled && manifest != null

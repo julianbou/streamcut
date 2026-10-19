@@ -52,6 +52,8 @@
     <string name="addons_appstore_install_button">Agregar complemento</string>
     <string name="store_empty_unavailable_title">Aún no hay nada aquí</string>
     <string name="store_empty_unavailable_message">Tus complementos actuales aún no tienen nada que mostrar aquí.</string>
+    <string name="addons_hidden_title">Incluidos con tu cuenta</string>
+    <string name="addons_hidden_subtitle">Esta cuenta trae %1$d complemento(s) ya instalado(s). Cargan catálogos y streams, pero no se muestran aquí. También puedes agregar los tuyos arriba.</string>
     <string name="addons_empty_subtitle">Agrega una URL de manifiesto para empezar a cargar catálogos, metadatos, streams o subtítulos en StreamCut.</string>
     <string name="addons_empty_title">Aún no hay complementos instalados.</string>
     <string name="addons_error_enter_url">Introduce una URL de complemento.</string>
@@ -2335,4 +2337,5 @@ Utilizas esta función bajo tu propia responsabilidad. P2P se puede desactivar e
     <string name="movie_status_rumored">Rumoreada</string>
     <string name="movie_status_in_production">En producción</string>
     <string name="movie_status_post_production">Posproducción</string>
+    <string name="trial_ended">Tu prueba terminó. Escribinos si querés seguir usando StreamCut.</string>
 </resources>

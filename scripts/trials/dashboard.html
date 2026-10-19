@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StreamCut trials</title>
+<!--
+  Usage dashboard for StreamCut trial accounts. Open this file in a browser,
+  enter the project URL and anon key (Supabase -> Project Settings -> API; both
+  are public values) and sign in with an account listed in public.app_admins.
+  Everything goes through the admin_* functions in
+  supabase/patch-trial-accounts.sql, which refuse non-admins.
+-->
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #fff; --ink: #1b1b1b; --muted: #6b6b6b;
+    --line: #e4e2dc; --accent: #b93a12; --on-accent: #fff; --ok: #2f7d4f; --warn: #8a5a0f; --bad: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414; --panel: #1d1d1d; --ink: #ececec; --muted: #9a9a9a;
+      --line: #2e2e2e; --accent: #ff7a45; --on-accent: #141414; --ok: #5cc98a; --warn: #e3b341; --bad: #f97066;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  form { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; }
+  label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  input { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+  button { font: inherit; cursor: pointer; border-radius: 6px; padding: 7px 12px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  button.danger { color: var(--bad); }
+  .bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.row { cursor: pointer; }
+  tr.row:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  tr.sel td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .muted { color: var(--muted); }
+  .err { color: var(--bad); margin-top: 8px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Cuentas de prueba</h1>
+  <p class="sub">Uso de las cuentas de prueba de StreamCut.</p>
+
+  <section class="panel" id="login">
+    <form id="login-form">
+      <label>URL del proyecto <input id="url" placeholder="https://xxxx.supabase.co" required></label>
+      <label>Anon key <input id="anon" required></label>
+      <label>Email admin <input id="email" type="email" required autocomplete="username"></label>
+      <label>Contraseña <input id="password" type="password" required autocomplete="current-password"></label>
+      <button class="primary" type="submit">Entrar</button>
+    </form>
+    <div class="err" id="login-err"></div>
+  </section>
+
+  <section id="app" hidden>
+    <div class="panel">
+      <div class="bar">
+        <strong id="summary"></strong>
+        <div class="actions">
+          <button id="refresh">Actualizar</button>
+          <button id="logout">Salir</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Quién</th><th>Estado</th><th>Último uso</th>
+            <th class="num">Aperturas</th><th class="num">Streams</th><th class="num">Clips</th>
+            <th class="num">Streams 7d</th><th class="num">Clips 7d</th><th>Vence</th>
+          </tr></thead>
+          <tbody id="trials"></tbody>
+        </table>
+      </div>
+      <div class="err" id="app-err"></div>
+    </div>
+
+    <div class="panel" id="detail" hidden>
+      <div class="bar">
+        <strong id="detail-title"></strong>
+        <div class="actions">
+          <button id="extend">+30 días</button>
+          <button id="restore">Reactivar</button>
+          <button id="revoke" class="danger">Revocar</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cuándo</th><th>Qué</th><th>Detalle</th></tr></thead>
+          <tbody id="events"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+let client = null;
+let trials = [];
+let selected = null;
+
+$('url').value = store.get('trials.url');
+$('anon').value = store.get('trials.anon');
+
+const KIND = { app_open: 'Abrió la app', stream_play: 'Reprodujo', clip_export: 'Exportó un clip' };
+const fmt = (iso) => iso ? new Date(iso).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+const ago = (iso) => {
+  if (!iso) return 'nunca';
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 60) return `hace ${m} min`;
+  if (m < 60 * 48) return `hace ${Math.round(m / 60)} h`;
+  return `hace ${Math.round(m / 1440)} días`;
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function status(t) {
+  if (t.revoked_at) return '<span class="pill bad">revocada</span>';
+  if (t.expires_at && new Date(t.expires_at) < new Date()) return '<span class="pill warn">vencida</span>';
+  return '<span class="pill ok">activa</span>';
+}
+
+function describe(e) {
+  const d = e.detail || {};
+  if (e.kind === 'stream_play') {
+    const ep = d.season != null ? ` T${d.season}E${d.episode}` : '';
+    return `${esc(d.title)}${ep} <span class="muted">· ${esc(d.provider)}</span>`;
+  }
+  if (e.kind === 'clip_export') return `${esc(d.title)} <span class="muted">· ${d.seconds}s</span>`;
+  return '';
+}
+
+async function rpc(name, args) {
+  const { data, error } = await client.rpc(name, args);
+  if (error) throw error;
+  return data;
+}
+
+async function loadTrials() {
+  $('app-err').textContent = '';
+  try {
+    trials = await rpc('admin_trial_overview');
+  } catch (e) {
+    $('app-err').textContent = e.message;
+    return;
+  }
+  const active = trials.filter((t) => !t.revoked_at && (!t.expires_at || new Date(t.expires_at) > new Date()));
+  const used = trials.filter((t) => t.plays_7d > 0 || t.clips_7d > 0);
+  $('summary').textContent = `${trials.length} cuentas · ${active.length} activas · ${used.length} usadas esta semana`;
+  $('trials').innerHTML = trials.map((t) => `
+    <tr class="row ${selected === t.user_id ? 'sel' : ''}" data-id="${t.user_id}">
+      <td><strong>${esc(t.label)}</strong><br><span class="muted">${esc(t.email)}</span></td>
+      <td>${status(t)}</td>
+      <td title="${fmt(t.last_seen)}">${ago(t.last_seen)}</td>
+      <td class="num">${t.opens}</td><td class="num">${t.plays}</td><td class="num">${t.clips}</td>
+      <td class="num">${t.plays_7d}</td><td class="num">${t.clips_7d}</td>
+      <td>${t.expires_at ? fmt(t.expires_at) : 'nunca'}</td>
+    </tr>`).join('') || '<tr><td colspan="9" class="muted">Todavía no hay cuentas de prueba.</td></tr>';
+  document.querySelectorAll('tr.row').forEach((tr) => tr.onclick = () => select(tr.dataset.id));
+  if (selected) select(selected);
+}
+
+async function select(id) {
+  selected = id;
+  const t = trials.find((x) => x.user_id === id);
+  if (!t) return;
+  document.querySelectorAll('tr.row').forEach((tr) => tr.classList.toggle('sel', tr.dataset.id === id));
+  $('detail').hidden = false;
+  $('detail-title').textContent = t.label;
+  $('revoke').hidden = !!t.revoked_at;
+  $('restore').hidden = !t.revoked_at;
+  const events = await rpc('admin_trial_events', { p_user_id: id, p_limit: 300 }).catch((e) => {
+    $('app-err').textContent = e.message; return [];
+  });
+  $('events').innerHTML = events.map((e) => `
+    <tr><td>${fmt(e.created_at)}</td><td>${KIND[e.kind] || esc(e.kind)}</td><td>${describe(e)}</td></tr>`).join('')
+    || '<tr><td colspan="3" class="muted">Sin actividad.</td></tr>';
+}
+
+async function setTrial(expiresAt, revoked) {
+  try {
+    await rpc('admin_set_trial', { p_user_id: selected, p_expires_at: expiresAt, p_revoked: revoked });
+  } catch (e) {
+    $('app-err').textContent = e.message;
+  }
+  await loadTrials();
+}
+
+$('extend').onclick = () => {
+  const t = trials.find((x) => x.user_id === selected);
+  const from = t.expires_at && new Date(t.expires_at) > new Date() ? new Date(t.expires_at) : new Date();
+  setTrial(new Date(from.getTime() + 30 * 86400000).toISOString(), !!t.revoked_at);
+};
+$('revoke').onclick = () => {
+  const t = trials.find((x) => x.user_id === selected);
+  if (confirm(`¿Revocar la cuenta de ${t.label}? Se le borran los addons y se le cierra la sesión.`)) {
+    setTrial(t.expires_at, true);
+  }
+};
+$('restore').onclick = () => {
+  const t = trials.find((x) => x.user_id === selected);
+  alert('Reactivar no devuelve los addons: corré create_trial.py de nuevo o cargalos desde Supabase.');
+  setTrial(t.expires_at, false);
+};
+
+$('login-form').onsubmit = async (ev) => {
+  ev.preventDefault();
+  $('login-err').textContent = '';
+  const url = $('url').value.trim().replace(/\/$/, '');
+  const anon = $('anon').value.trim();
+  store.set('trials.url', url);
+  store.set('trials.anon', anon);
+  client = supabase.createClient(url, anon);
+  const { error } = await client.auth.signInWithPassword({ email: $('email').value, password: $('password').value });
+  if (error) { $('login-err').textContent = error.message; return; }
+  $('password').value = '';
+  $('login').hidden = true;
+  $('app').hidden = false;
+  loadTrials();
+};
+$('refresh').onclick = loadTrials;
+$('logout').onclick = async () => {
+  await client.auth.signOut();
+  $('app').hidden = true;
+  $('login').hidden = false;
+};
+</script>
+</body>
+</html>

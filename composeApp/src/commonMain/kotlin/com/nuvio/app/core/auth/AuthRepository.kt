@@ -3,6 +3,7 @@ package com.nuvio.app.core.auth
 import co.touchlab.kermit.Logger
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.storage.LocalAccountDataCleaner
+import com.nuvio.app.core.trial.TrialAccess
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.exception.AuthRestException
 import io.github.jan.supabase.auth.providers.builtin.Email
@@ -95,6 +96,7 @@ object AuthRepository {
                             email = user?.email,
                             isAnonymous = false,
                         )
+                        TrialAccess.onSignedIn(userId)
                     }
                     is SessionStatus.NotAuthenticated -> {
                         _state.value = AuthState.Unauthenticated
@@ -177,6 +179,7 @@ object AuthRepository {
         val anonymousClear = runCatching { AuthStorage.clearAnonymousUserId() }
         runCatching { AuthStorage.clearHasSignedIn() }
         validatedRemoteUserId = null
+        TrialAccess.onSignedOut()
         val remoteSignOut = if (wasAnonymous) {
             Result.success(Unit)
         } else {
@@ -275,6 +278,11 @@ object AuthRepository {
     }.onFailure { e ->
         log.e(e) { "Account deletion failed" }
         _error.value = e.message ?: getString(Res.string.auth_account_deletion_failed)
+    }
+
+    /** Shows [message] on the sign-in screen, e.g. why the account was signed out. */
+    fun showError(message: String) {
+        _error.value = message
     }
 
     fun clearError() {

@@ -1,6 +1,7 @@
 package com.nuvio.app.features.player
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 
 @Composable
@@ -44,6 +45,16 @@ internal fun PlayerScreen(
     contentLanguage: String? = null,
     launchId: Long? = null,
 ) {
+    LaunchedEffect(sourceUrl) {
+        com.nuvio.app.core.trial.TrialAccess.logStreamPlay(
+            title = title,
+            contentType = contentType,
+            videoId = videoId,
+            providerName = providerName,
+            seasonNumber = seasonNumber,
+            episodeNumber = episodeNumber,
+        )
+    }
     PlayerScreenContent(
         PlayerScreenArgs(
             profileId = profileId,

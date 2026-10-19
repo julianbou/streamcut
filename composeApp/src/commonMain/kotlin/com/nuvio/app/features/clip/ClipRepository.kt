@@ -243,6 +243,10 @@ object ClipRepository {
                     // Recorded from the captured job rather than from the list:
                     // the file is on disk either way, even if the notice was
                     // dismissed while it encoded.
+                    com.nuvio.app.core.trial.TrialAccess.logClipExport(
+                        title = job.title,
+                        durationMs = job.endMs - job.startMs,
+                    )
                     ClipLibrary.record(
                         ClipEntry(
                             id = id,

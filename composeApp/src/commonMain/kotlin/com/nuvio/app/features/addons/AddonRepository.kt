@@ -36,6 +36,7 @@ private data class AddonRow(
     val name: String? = null,
     val enabled: Boolean = true,
     @SerialName("sort_order") val sortOrder: Int = 0,
+    val hidden: Boolean = false,
 )
 
 @Serializable
@@ -129,7 +130,9 @@ object AddonRepository {
                 }
             }
 
-            val urls = rowsByUrl.keys.toList()
+            // Hidden (trial) addons go last, so the visible ones keep the
+            // same indices in the full list as in the addons screen.
+            val urls = rowsByUrl.values.sortedBy { it.hidden }.map { it.url }
             log.i { "pullFromServer() — server returned ${rows.size} addons" }
             urls.forEachIndexed { i, u -> log.d { "  server[$i]: $u" } }
 
@@ -141,7 +144,7 @@ object AddonRepository {
                         manifestUrl = url,
                         userSetName = row?.name?.takeIf { it.isNotBlank() },
                         enabled = row?.enabled,
-                    )
+                    ).copy(hidden = row?.hidden == true)
                 },
             )
             persist()
@@ -193,13 +196,14 @@ object AddonRepository {
         }
 
         _uiState.update { current ->
+            val (hidden, visible) = current.addons.partition { it.hidden }
             current.copy(
-                addons = current.addons + ManagedAddon(
+                addons = visible + ManagedAddon(
                     manifestUrl = manifestUrl,
                     manifest = manifest,
                     isRefreshing = false,
                     errorMessage = null,
-                ),
+                ) + hidden,
             )
         }
         persist()
@@ -211,7 +215,7 @@ object AddonRepository {
         log.i { "removeAddon() — $manifestUrl" }
         var changed = false
         _uiState.update { current ->
-            val updatedAddons = current.addons.filterNot { it.manifestUrl == manifestUrl }
+            val updatedAddons = current.addons.filterNot { it.manifestUrl == manifestUrl && !it.hidden }
             changed = updatedAddons.size != current.addons.size
             if (changed) current.copy(addons = updatedAddons) else current
         }
@@ -220,10 +224,11 @@ object AddonRepository {
         pushToServer()
     }
 
+    /** Indices are into the visible addons, as the addons screen lists them. */
     fun moveAddon(fromIndex: Int, toIndex: Int) {
         var changed = false
         _uiState.update { current ->
-            val addons = current.addons
+            val (hidden, addons) = current.addons.partition { it.hidden }
             if (
                 fromIndex !in addons.indices ||
                 toIndex !in addons.indices ||
@@ -236,7 +241,7 @@ object AddonRepository {
             val movingAddon = reordered.removeAt(fromIndex)
             reordered.add(toIndex, movingAddon)
             changed = true
-            current.copy(addons = reordered)
+            current.copy(addons = reordered + hidden)
         }
         if (!changed) return
         persist()
@@ -249,7 +254,7 @@ object AddonRepository {
         _uiState.update { current ->
             current.copy(
                 addons = current.addons.map { addon ->
-                    if (addon.manifestUrl != manifestUrl || addon.enabled == enabled) {
+                    if (addon.manifestUrl != manifestUrl || addon.hidden || addon.enabled == enabled) {
                         addon
                     } else {
                         changed = true
@@ -335,6 +340,7 @@ object AddonRepository {
     private fun pushToServer() {
         val profileId = currentProfileId
         val addons = _uiState.value.addons
+            .filterNot { it.hidden }
             .distinctBy { it.manifestUrl }
             .mapIndexed { index, addon ->
                 AddonPushItem(
@@ -387,8 +393,12 @@ object AddonRepository {
         }
     }
 
+    /**
+     * Hidden addons stay off the device: they come back with every pull while
+     * the trial lasts, and a revoked trial leaves nothing behind to reuse.
+     */
     private fun persist() {
-        val addons = _uiState.value.addons
+        val addons = _uiState.value.addons.filterNot { it.hidden }
         AddonStorage.saveInstalledAddonUrls(
             currentProfileId,
             dedupeManifestUrls(addons.map { it.manifestUrl }),

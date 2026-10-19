@@ -36,6 +36,7 @@ scripts/*
 !scripts/sign-ios-device-app.py
 # StreamCut: upstream ignores new files under scripts/; keep ours visible.
 !scripts/upstream/
+!scripts/trials/
 !scripts/*.sh
 !scripts/*.py
 iosApp/Configuration/DeviceSigning.local.json

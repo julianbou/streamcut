@@ -56,6 +56,8 @@
     <string name="addons_appstore_install_button">Add Addon</string>
     <string name="store_empty_unavailable_title">Nothing here yet</string>
     <string name="store_empty_unavailable_message">Your current addons don’t have anything to show here.</string>
+    <string name="addons_hidden_title">Included with your account</string>
+    <string name="addons_hidden_subtitle">This account comes with %1$d addon(s) already installed. They load catalogs and streams but are not shown here. You can still add your own above.</string>
     <string name="addons_empty_subtitle">Add a manifest URL to start loading catalogs, metadata, streams or subtitles into StreamCut.</string>
     <string name="addons_empty_title">No addons installed yet.</string>
     <string name="addons_error_enter_url">Enter an addon URL.</string>
@@ -2481,4 +2483,5 @@
     <string name="movie_status_rumored">Rumored</string>
     <string name="movie_status_in_production">In Production</string>
     <string name="movie_status_post_production">Post Production</string>
+    <string name="trial_ended">Your trial has ended. Write to us if you want to keep using StreamCut.</string>
 </resources>

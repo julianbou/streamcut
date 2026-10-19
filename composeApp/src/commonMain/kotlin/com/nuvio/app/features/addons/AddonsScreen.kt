@@ -98,7 +98,11 @@ internal fun AddonsSettingsPageContent(
     val enterAddonUrlMessage = stringResource(Res.string.addons_error_enter_url)
     val usePersonalMediaCopy = AppFeaturePolicy.personalMediaAddonCopyEnabled
 
-    val overview = remember(uiState.addons) { uiState.addons.toOverview() }
+    // A trial account's preloaded addons are hidden: they serve search and
+    // streams like any other, but are never listed, reordered or removed here.
+    val visibleAddons = remember(uiState.addons) { uiState.addons.filterNot { it.hidden } }
+    val hiddenAddonCount = uiState.addons.size - visibleAddons.size
+    val overview = remember(visibleAddons) { visibleAddons.toOverview() }
 
     Column(
         modifier = modifier,
@@ -142,11 +146,14 @@ internal fun AddonsSettingsPageContent(
         )
 
         SectionHeader(stringResource(Res.string.addons_section_installed))
-        if (uiState.addons.isEmpty()) {
-            EmptyStateCard(usePersonalMediaCopy = usePersonalMediaCopy)
+        if (hiddenAddonCount > 0) {
+            HiddenAddonsCard(count = hiddenAddonCount)
+        }
+        if (visibleAddons.isEmpty()) {
+            if (hiddenAddonCount == 0) EmptyStateCard(usePersonalMediaCopy = usePersonalMediaCopy)
         } else {
-            val lastIndex = uiState.addons.lastIndex
-            uiState.addons.forEachIndexed { index, addon ->
+            val lastIndex = visibleAddons.lastIndex
+            visibleAddons.forEachIndexed { index, addon ->
                 val manifest = addon.manifest
                 val behaviorHints = manifest?.behaviorHints
                 val showConfigureAction = behaviorHints?.configurable == true || behaviorHints?.configurationRequired == true
@@ -407,6 +414,24 @@ private fun EmptyStateCard(
                     Res.string.addons_empty_subtitle
                 },
             ),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Says a trial account's preloaded addons exist, without naming or listing them. */
+@Composable
+private fun HiddenAddonsCard(count: Int) {
+    NuvioSurfaceCard {
+        Text(
+            text = stringResource(Res.string.addons_hidden_title),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(Res.string.addons_hidden_subtitle, count),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
