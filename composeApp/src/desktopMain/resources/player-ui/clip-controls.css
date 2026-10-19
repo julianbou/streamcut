@@ -1027,6 +1027,13 @@ body.clipper-mode .clip-action.primary {
   border-color: transparent;
   color: #000;
 }
+/* The stock hover above outranks the base primary hover, and turned Export
+   dark exactly when the pointer reached it. Primary keeps its ink; the lift
+   comes from the base rule's brightness. */
+body.clipper-mode .clip-action.primary:hover:not(:disabled) {
+  background: var(--theme-accent);
+  color: #000;
+}
 body.clipper-mode .clip-action.toggled-on {
   border-color: var(--theme-accent);
   color: var(--theme-accent);
