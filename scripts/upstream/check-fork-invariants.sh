@@ -114,6 +114,10 @@ check "macOS app bundles ffmpeg" composeApp/build.gradle.kts 'from\(prepareMacos
   "prepareMacosPlayerAppResources in composeApp/build.gradle.kts must copy prepareMacosFfmpeg into ffmpeg/: macOS has no usable ffmpeg"
 check "macOS app bundles only its own TorrServer" composeApp/build.gradle.kts 'sourceRoot\.resolve\(platformDir\.get\(\)\)' \
   "PrepareMacosTorrServerResourcesTask in composeApp/build.gradle.kts must copy only platformDir: upstream's copy-everything puts the Intel and Linux binaries (~45 MB) in every DMG"
+check "packaged app carries only the Material icons it draws" composeApp/build.gradle.kts 'stripUnusedMaterialIcons\.map \{ it\.outputDir\.asFileTree \}' \
+  "createDistributable/createReleaseDistributable in composeApp/build.gradle.kts must package stripUnusedMaterialIcons' jar in place of material-icons-extended: the full jar is 36 MB of icons nothing draws"
+check "release build checks no drawn icon was stripped" composeApp/build.gradle.kts '^        failOnMissingPackagedIcons\(' \
+  "createReleaseDistributable's doLast in composeApp/build.gradle.kts must call failOnMissingPackagedIcons: without it a stripped icon is a crash on the screen that shows it"
 
 if git check-ignore -q scripts/upstream/new-file-probe.sh; then
   fail "new files under scripts/ are not ignored" ".gitignore: upstream's scripts/* needs StreamCut's !scripts/upstream/ and !scripts/*.sh exceptions"

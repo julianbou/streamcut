@@ -1,7 +1,9 @@
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputDirectory
@@ -22,6 +24,9 @@ import java.io.File
 import java.net.URI
 import java.security.MessageDigest
 import java.util.Properties
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 
 abstract class GenerateRuntimeConfigsTask : DefaultTask() {
@@ -442,6 +447,104 @@ abstract class PrepareMacosTorrServerResourcesTask @Inject constructor(
                     }
                 }
         }
+    }
+}
+
+/**
+ * What the packaged app says about Material icons, read straight from class
+ * files: an icon is a top-level `XKt` class reached by a static call, so its
+ * internal name sits verbatim in the constant pool of whatever draws it.
+ */
+object MaterialIconClasses {
+    const val EXTENDED_JAR_PREFIX = "material-icons-extended"
+    private const val PACKAGE_PREFIX = "androidx/compose/material/icons/"
+    private val reference = Regex("androidx/compose/material/icons/[A-Za-z0-9_/$]+")
+
+    fun isExtendedJar(file: File): Boolean =
+        file.isFile && file.extension == "jar" && file.name.startsWith(EXTENDED_JAR_PREFIX)
+
+    fun referencedBy(classBytes: ByteArray): Sequence<String> {
+        val text = String(classBytes, Charsets.ISO_8859_1)
+        if (PACKAGE_PREFIX !in text) return emptySequence()
+        return reference.findAll(text).map { it.value }
+    }
+
+    fun referencedBy(jar: File): Set<String> = ZipFile(jar).use { zip ->
+        zip.entries().asSequence()
+            .filter { it.name.endsWith(".class") }
+            .flatMap { entry -> referencedBy(zip.getInputStream(entry).use { it.readBytes() }) }
+            .toSet()
+    }
+
+    fun classesIn(jar: File): Set<String> = ZipFile(jar).use { zip ->
+        zip.entries().asSequence()
+            .map { it.name }
+            .filter { it.endsWith(".class") }
+            .map { it.removeSuffix(".class") }
+            .toSet()
+    }
+}
+
+/**
+ * Cuts material-icons-extended down to the icons the app draws.
+ *
+ * The jar holds every Material icon in five styles: 11,000 classes and 36 MB,
+ * of which the app reaches a few dozen. ProGuard would do this, but turning it
+ * on for the whole desktop app means keep rules for JNA, the player bridge,
+ * QuickJS and every serializer, and a missed one only shows at runtime. Icons
+ * need none of that -- no reflection, no service loading -- so this shrinks
+ * that one jar and leaves the rest of the classpath byte-for-byte alone.
+ *
+ * Nothing is listed by hand: an icon upstream starts using is kept because the
+ * compiled code now names it. failOnMissingPackagedIcons checks the result.
+ */
+abstract class StripUnusedMaterialIconsTask : DefaultTask() {
+    @get:Classpath
+    abstract val runtimeFiles: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun strip() {
+        val outputRoot = outputDir.get().asFile
+        outputRoot.deleteRecursively()
+        outputRoot.mkdirs()
+
+        val jars = runtimeFiles.files.filter { it.isFile && it.extension == "jar" }
+        val iconJars = jars.filter(MaterialIconClasses::isExtendedJar)
+        check(iconJars.size == 1) {
+            "Expected one ${MaterialIconClasses.EXTENDED_JAR_PREFIX} jar on the desktop runtime classpath, found ${iconJars.map { it.name }}."
+        }
+        val iconsJar = iconJars.single()
+        val available = MaterialIconClasses.classesIn(iconsJar)
+
+        val kept = jars.filter { it != iconsJar }
+            .flatMap(MaterialIconClasses::referencedBy)
+            .filterTo(mutableSetOf()) { it in available }
+
+        ZipFile(iconsJar).use { source ->
+            // An icon may be defined in terms of another one in the same jar.
+            val pending = ArrayDeque(kept)
+            while (pending.isNotEmpty()) {
+                val bytes = source.getInputStream(source.getEntry("${pending.removeFirst()}.class")).use { it.readBytes() }
+                MaterialIconClasses.referencedBy(bytes)
+                    .filter { it in available && kept.add(it) }
+                    .forEach(pending::addLast)
+            }
+
+            ZipOutputStream(outputRoot.resolve(iconsJar.name).outputStream().buffered()).use { target ->
+                source.entries().asSequence()
+                    .filter { !it.isDirectory }
+                    .filter { !it.name.endsWith(".class") || it.name.removeSuffix(".class") in kept }
+                    .forEach { entry ->
+                        target.putNextEntry(ZipEntry(entry.name).apply { time = entry.time })
+                        source.getInputStream(entry).use { it.copyTo(target) }
+                        target.closeEntry()
+                    }
+            }
+        }
+        logger.lifecycle("Kept ${kept.size} of ${available.size} classes in ${iconsJar.name}.")
     }
 }
 
@@ -1694,6 +1797,34 @@ fun failOnDuplicatedPackagedResources() {
 }
 
 /**
+ * Fails the build when the packaged app draws an icon that is not in it.
+ *
+ * stripUnusedMaterialIcons decides what to keep from the classpath it is
+ * given; this looks at the jars that were actually packaged, so it also
+ * catches the two disagreeing. A missing icon is otherwise a
+ * NoClassDefFoundError on whichever screen shows it first.
+ */
+fun failOnMissingPackagedIcons(appImage: File) {
+    val jars = appImage.walkTopDown().filter { it.isFile && it.extension == "jar" }.toList()
+    val packaged = jars.flatMapTo(mutableSetOf(), MaterialIconClasses::classesIn)
+    val missing = jars.flatMap(MaterialIconClasses::referencedBy)
+        .filter { it.endsWith("Kt") && it !in packaged }
+        .toSortedSet()
+    if (missing.isEmpty()) return
+
+    error(
+        buildString {
+            appendLine("The packaged app references ${missing.size} Material icon(s) it does not contain:")
+            appendLine()
+            missing.take(10).forEach { appendLine("  ${it.replace('/', '.')}") }
+            if (missing.size > 10) appendLine("  ... and ${missing.size - 10} more")
+            appendLine()
+            appendLine("stripUnusedMaterialIcons dropped a class that is in use; see StripUnusedMaterialIconsTask.")
+        }
+    )
+}
+
+/**
  * Fails the build when a native library in the app image links against
  * something outside the bundle and outside macOS itself.
  *
@@ -1858,6 +1989,28 @@ tasks.matching { it.name == "createReleaseDistributable" }.configureEach {
         )
         failOnExternalNativeDependencies(
             layout.buildDirectory.dir("compose/binaries/main-release/app").get().asFile,
+        )
+        failOnMissingPackagedIcons(
+            layout.buildDirectory.dir("compose/binaries/main-release/app").get().asFile,
+        )
+    }
+}
+
+val stripUnusedMaterialIcons = tasks.register<StripUnusedMaterialIconsTask>("stripUnusedMaterialIcons") {
+    runtimeFiles.from(tasks.named("desktopJar"), configurations.named("desktopRuntimeClasspath"))
+    outputDir.set(layout.buildDirectory.dir("generated/stripped-material-icons"))
+}
+
+// afterEvaluate, because that is where the Compose plugin fills in the files to
+// package; any earlier and there is nothing to swap the icons jar out of.
+afterEvaluate {
+    tasks.withType<AbstractJPackageTask>().matching {
+        it.name == "createDistributable" || it.name == "createReleaseDistributable"
+    }.configureEach {
+        val packaged = project.files(files.from.toList())
+        files.setFrom(
+            packaged.filter { !MaterialIconClasses.isExtendedJar(it) },
+            stripUnusedMaterialIcons.map { it.outputDir.asFileTree },
         )
     }
 }
