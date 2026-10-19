@@ -54,3 +54,7 @@ brag-output/
 
 # /brag launch-video renders (local output, regenerated per run)
 brag-output-*/
+
+# Local agent tooling: per-machine, not part of the app
+.impeccable/config.json
+.claude/agents/
