@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.storage.ProfileScopedKey
 import com.nuvio.app.core.sync.putSyncOriginClientId
+import com.nuvio.app.core.trial.LogRedaction
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.postgrest.rpc
@@ -129,6 +130,8 @@ object AddonRepository {
                     rowsByUrl[manifestUrl] = row.copy(url = manifestUrl)
                 }
             }
+
+            LogRedaction.hide(rowsByUrl.values.filter { it.hidden }.map { it.url })
 
             // Hidden (trial) addons go last, so the visible ones keep the
             // same indices in the full list as in the addons screen.
