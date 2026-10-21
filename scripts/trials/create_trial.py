@@ -31,6 +31,11 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 
+# Installed on every trial account after the ones passed with --addon.
+DEFAULT_ADDONS = [
+    "https://opensubtitles-v3.strem.io/manifest.json",  # OpenSubtitles v3: subtitles, needed for phrase search
+]
+
 
 def project_url() -> str:
     url = os.environ.get("SUPABASE_URL", "").strip()
@@ -108,23 +113,24 @@ def main():
         "notes": args.notes,
     }, prefer="return=minimal")
 
+    addons = list(dict.fromkeys(manifest_url(u) for u in args.addon + DEFAULT_ADDONS))
     request("POST", f"{base}/rest/v1/addons", key, [
         {
             "user_id": user_id,
             "profile_id": 1,
-            "url": manifest_url(url),
+            "url": url,
             "enabled": True,
             "sort_order": i,
             "hidden": True,
         }
-        for i, url in enumerate(args.addon)
+        for i, url in enumerate(addons)
     ], prefer="return=minimal")
 
     print(f"Trial account for {args.label}")
     print(f"  email:    {args.email}")
     print(f"  password: {password}")
     print(f"  expires:  {expires_at or 'never'}")
-    print(f"  addons:   {len(args.addon)} hidden")
+    print(f"  addons:   {len(addons)} hidden")
 
 
 if __name__ == "__main__":
