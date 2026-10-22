@@ -14,6 +14,8 @@
     Find the moment, mark in and out, export a shareable MP4.
   </p>
 
+  <img src=".github/assets/demo.gif" alt="StreamCut demo: finding a moment, marking in and out, and exporting a clip" width="720" />
+
 </div>
 
 ## ⚠️ Alpha — personal project, expect breakage
